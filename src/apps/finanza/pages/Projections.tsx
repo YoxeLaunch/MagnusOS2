@@ -9,6 +9,7 @@ import { sanitizeTransactions } from '../utils/dataQuality';
 
 import { MonteCarloRisk } from '../components/MonteCarloRisk';
 import { FinancialSankey } from '../components/FinancialSankey';
+import { FIRECalculator } from '../components/FIRECalculator';
 
 export const Projections: React.FC = () => {
     const { dailyTransactions } = useData();
@@ -221,13 +222,13 @@ export const Projections: React.FC = () => {
                         <div className="flex-1 h-3 bg-slate-100 dark:bg-white/10 rounded-full overflow-hidden">
                             <div
                                 className={`h-full transition-all duration-500 ease-out rounded-full ${modelConfidence.average >= 70 ? 'bg-emerald-500' :
-                                        modelConfidence.average >= 40 ? 'bg-amber-500' : 'bg-red-500'
+                                    modelConfidence.average >= 40 ? 'bg-amber-500' : 'bg-red-500'
                                     }`}
                                 style={{ width: `${Math.min(100, modelConfidence.average)}%` }}
                             />
                         </div>
                         <span className={`text-lg font-bold min-w-[60px] text-right ${modelConfidence.average >= 70 ? 'text-emerald-500' :
-                                modelConfidence.average >= 40 ? 'text-amber-500' : 'text-red-500'
+                            modelConfidence.average >= 40 ? 'text-amber-500' : 'text-red-500'
                             }`}>
                             {modelConfidence.average}%
                         </span>
@@ -377,6 +378,16 @@ export const Projections: React.FC = () => {
             <div className="grid grid-cols-1 space-y-8">
                 <MonteCarloRisk />
                 <FinancialSankey />
+            </div>
+
+            {/* FIRE & Health Radar Widgets */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <FIRECalculator
+                    avgAnnualIncome={projectionData.length > 0 ? projectionData.reduce((a, p) => a + p.ingresos, 0) / projectionData.length : 0}
+                    avgAnnualExpenses={projectionData.length > 0 ? projectionData.reduce((a, p) => a + p.gastos, 0) / projectionData.length : 0}
+                    savingsRate={savingsRate}
+                />
+                {/* HealthRadar will be added in Entregable B */}
             </div>
         </div>
     );
