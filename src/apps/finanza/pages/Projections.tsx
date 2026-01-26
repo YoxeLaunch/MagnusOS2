@@ -1,5 +1,5 @@
 
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Legend, LineChart, Line } from 'recharts';
 import { TrendingUp, ShieldCheck, Target, Award, Calendar, Info } from 'lucide-react';
 import { useData } from '../context/DataContext';
@@ -11,12 +11,18 @@ import { MonteCarloRisk } from '../components/MonteCarloRisk';
 import { FinancialSankey } from '../components/FinancialSankey';
 import { FIRECalculator } from '../components/FIRECalculator';
 import { HealthRadar } from '../components/HealthRadar';
+import { ScenarioSimulator } from '../components/ScenarioSimulator';
+import { CategoryCohort } from '../components/CategoryCohort';
+import { SpendingHeatmap } from '../components/SpendingHeatmap';
+import { ManualEventInput, ManualEvent } from '../components/ManualEventInput';
+import { RiskAlert } from '../components/RiskAlert';
 
 export const Projections: React.FC = () => {
     const { dailyTransactions } = useData();
+    const [manualEvents, setManualEvents] = useState<ManualEvent[]>([]);
 
     // Combined projection memo that returns both projection data and confidence info
-    const { projectionData, modelConfidence } = useMemo(() => {
+    const { projectionData, modelConfidence, trends } = useMemo(() => {
         // 0. Sanitize transactions (filter invalid dates, zeros, duplicates)
         const { clean: cleanTransactions, warnings } = sanitizeTransactions(dailyTransactions, {
             filterZeroAmounts: true,
@@ -86,6 +92,13 @@ export const Projections: React.FC = () => {
             let predIncome = incomeTrend ? incomeTrend.predict(cycle.end) : 4500;
             let predExpense = expenseTrend ? expenseTrend.predict(cycle.end) : 2800;
 
+            // Apply Manual Events
+            const monthEvents = manualEvents.filter(e => e.monthOffset === i);
+            monthEvents.forEach(e => {
+                if (e.type === 'income') predIncome += e.amount;
+                else predExpense += e.amount;
+            });
+
             projectedMonths.push({
                 name: cycle.label,
                 ingresos: Math.round(predIncome),
@@ -102,9 +115,13 @@ export const Projections: React.FC = () => {
                 expense: Math.round(expenseConfidence * 100),
                 average: Math.round(avgConfidence * 100),
                 method: method
+            },
+            trends: {
+                incomeSlope: incomeTrend?.slope ?? 0,
+                expenseSlope: expenseTrend?.slope ?? 0
             }
         };
-    }, [dailyTransactions]);
+    }, [dailyTransactions, manualEvents]);
 
     // ==================== PROFESSIONAL FINANCIAL METRICS ====================
 
@@ -213,6 +230,7 @@ export const Projections: React.FC = () => {
                                 Confianza del Modelo
                             </p>
                             <p className="text-xs text-slate-500 dark:text-slate-400">
+                                {modelConfidence.method === 'seasonal' && 'Modelo Estacional (Patrones históricos detectados)'}
                                 {modelConfidence.method === 'linear' && 'Regresión lineal (≥3 ciclos de datos)'}
                                 {modelConfidence.method === 'average' && 'Promedio simple (<3 ciclos de datos)'}
                                 {modelConfidence.method === 'none' && 'Sin datos suficientes'}
@@ -296,6 +314,15 @@ export const Projections: React.FC = () => {
                     NOTE: Budget vs Reality has been moved to Dashboard.tsx
                  */}
 
+
+            <RiskAlert
+                savingsRate={savingsRate}
+                cashRunway={cashRunway}
+                financialDiscipline={financialDiscipline}
+                incomeTrend={trends.incomeSlope}
+                expenseTrend={trends.expenseSlope}
+            />
+
             {/* Charts Grid */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
 
@@ -331,6 +358,11 @@ export const Projections: React.FC = () => {
                             </AreaChart>
                         </ResponsiveContainer>
                     </div>
+                </div>
+
+                {/* Category Cohort Analysis */}
+                <div className="lg:col-span-2">
+                    <CategoryCohort />
                 </div>
 
                 {/* Savings Rate Trend (Line) */}
@@ -378,6 +410,13 @@ export const Projections: React.FC = () => {
             {/* Advanced Analysis Section */}
             <div className="grid grid-cols-1 space-y-8">
                 <MonteCarloRisk />
+                <ScenarioSimulator />
+                <SpendingHeatmap />
+                <ManualEventInput
+                    events={manualEvents}
+                    onAddEvent={(e) => setManualEvents(prev => [...prev, e])}
+                    onRemoveEvent={(id) => setManualEvents(prev => prev.filter(e => e.id !== id))}
+                />
                 <FinancialSankey />
             </div>
 

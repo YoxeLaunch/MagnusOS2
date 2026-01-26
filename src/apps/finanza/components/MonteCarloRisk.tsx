@@ -1,8 +1,9 @@
-import React, { useMemo } from 'react';
-import { getCycleId, getCycleFromId } from '../utils/financialCycle';
-import { runMonteCarloSimulation, getOrCreateSeed, SimulationResult } from '../utils/monteCarlo';
+import React, { useEffect, useMemo } from 'react';
+import { getCycleId } from '../utils/financialCycle';
+import { getOrCreateSeed, SimulationResult } from '../utils/monteCarlo';
+import { useMonteCarloWorker } from '../hooks/useMonteCarloWorker';
 import { useData } from '../context/DataContext';
-import { AlertTriangle, CheckCircle, TrendingDown, HelpCircle } from 'lucide-react';
+import { AlertTriangle, CheckCircle, TrendingDown, HelpCircle, Loader2, Cpu } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine, CartesianGrid } from 'recharts';
 import { sanitizeTransactions, hashTransactions } from '../utils/dataQuality';
 
@@ -12,42 +13,38 @@ const ITERATIONS = 2000;
 
 export const MonteCarloRisk: React.FC = () => {
     const { dailyTransactions } = useData();
+    const { result: workerResult, isLoading, progress, isWorkerEnabled, runSimulation } = useMonteCarloWorker();
 
-    const simulationResult = useMemo(() => {
+    // Prepare data for simulation
+    const simulationInput = useMemo(() => {
         // 0. Sanitize transactions before simulation
         const { clean: cleanTransactions } = sanitizeTransactions(dailyTransactions, {
             filterZeroAmounts: true,
             filterFutureDates: true,
-            detectOutliers: false // Don't flag outliers, Monte Carlo already handles volatility
+            detectOutliers: false
         });
 
         if (cleanTransactions.length === 0) return null;
 
-        // 1. Generate cache key from data hash + seed + iterations
+        // Generate cache key from data hash + seed + iterations
         const dataHash = hashTransactions(cleanTransactions);
         const seed = getOrCreateSeed();
         const cacheKey = `${CACHE_PREFIX}${dataHash}_${seed}_${ITERATIONS}`;
 
-        // 2. Check sessionStorage cache
+        // Check sessionStorage cache first
         if (typeof window !== 'undefined' && window.sessionStorage) {
             try {
                 const cached = sessionStorage.getItem(cacheKey);
                 if (cached) {
                     const parsed = JSON.parse(cached) as SimulationResult;
-                    // Log cache hit in development
                     if (process.env.NODE_ENV === 'development') {
-                        console.log('[MonteCarloRisk] Cache HIT for key:', cacheKey);
+                        console.log('[MonteCarloRisk] Cache HIT');
                     }
-                    return parsed;
+                    return { cached: parsed, cacheKey };
                 }
             } catch {
                 // Ignore cache errors
             }
-        }
-
-        // 3. Cache MISS - compute simulation
-        if (process.env.NODE_ENV === 'development') {
-            console.log('[MonteCarloRisk] Cache MISS - computing simulation');
         }
 
         // Aggregate Transactions into Cycle Totals
@@ -64,7 +61,7 @@ export const MonteCarloRisk: React.FC = () => {
 
         const currentCycleId = getCycleId(new Date().toISOString().slice(0, 10));
 
-        // Use ONLY closed cycles for history used in simulation
+        // Use ONLY closed cycles for history
         const historyIncome = Object.entries(cycleTotals)
             .filter(([id]) => id !== currentCycleId)
             .map(([_, v]) => v.income);
@@ -73,27 +70,76 @@ export const MonteCarloRisk: React.FC = () => {
             .filter(([id]) => id !== currentCycleId)
             .map(([_, v]) => v.expense);
 
-        // Run Simulation with dataHash for reproducibility
-        const result = runMonteCarloSimulation(historyIncome, historyExpense, {
-            iterations: ITERATIONS,
-            dataHash: dataHash
-        });
-
-        // 4. Store in sessionStorage cache
-        if (typeof window !== 'undefined' && window.sessionStorage) {
-            try {
-                // Don't cache the full simulations array to save space
-                const cacheableResult = { ...result, simulations: [] };
-                sessionStorage.setItem(cacheKey, JSON.stringify(cacheableResult));
-            } catch {
-                // Ignore storage errors (quota exceeded, etc.)
-            }
-        }
-
-        return result;
+        return {
+            incomeHistory: historyIncome,
+            expenseHistory: historyExpense,
+            dataHash,
+            cacheKey
+        };
     }, [dailyTransactions]);
 
+    // Trigger simulation when input changes
+    useEffect(() => {
+        if (simulationInput && !('cached' in simulationInput)) {
+            runSimulation(
+                simulationInput.incomeHistory,
+                simulationInput.expenseHistory,
+                { iterations: ITERATIONS, dataHash: simulationInput.dataHash }
+            );
+        }
+    }, [simulationInput, runSimulation]);
+
+    // Cache results when worker completes
+    useEffect(() => {
+        if (workerResult && simulationInput && 'cacheKey' in simulationInput) {
+            if (typeof window !== 'undefined' && window.sessionStorage) {
+                try {
+                    const cacheableResult = { ...workerResult, simulations: [] };
+                    sessionStorage.setItem(simulationInput.cacheKey, JSON.stringify(cacheableResult));
+                } catch {
+                    // Ignore storage errors
+                }
+            }
+        }
+    }, [workerResult, simulationInput]);
+
+    // Use cached result or worker result
+    const simulationResult = simulationInput && 'cached' in simulationInput
+        ? simulationInput.cached
+        : workerResult;
+
+    // Loading state
+    if (isLoading) {
+        return (
+            <div className="bg-white/80 dark:bg-black/40 backdrop-blur-xl p-8 rounded-2xl border border-slate-200 dark:border-white/10 shadow-sm">
+                <div className="flex items-center justify-center gap-4 py-12">
+                    <Loader2 className="animate-spin text-violet-500" size={32} />
+                    <div>
+                        <p className="text-slate-700 dark:text-slate-200 font-medium">
+                            Ejecutando simulación Monte Carlo...
+                        </p>
+                        <div className="flex items-center gap-2 mt-2">
+                            <div className="flex-1 h-2 bg-slate-200 dark:bg-white/10 rounded-full overflow-hidden">
+                                <div
+                                    className="h-full bg-violet-500 transition-all duration-300"
+                                    style={{ width: `${progress}%` }}
+                                />
+                            </div>
+                            <span className="text-sm text-slate-500">{progress}%</span>
+                        </div>
+                        {isWorkerEnabled && (
+                            <p className="text-xs text-emerald-500 mt-2 flex items-center gap-1">
+                                <Cpu size={12} /> Ejecutando en segundo plano
+                            </p>
+                        )}
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
     if (!simulationResult) return null;
+
 
     const { p10, p50, p90, riskOfDeficit } = simulationResult;
 
