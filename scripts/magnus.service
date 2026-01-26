@@ -1,0 +1,21 @@
+[Unit]
+Description=Magnus-OS2 System (Node 20)
+After=network.target postgresql.service
+
+[Service]
+Type=simple
+User=osvaldo
+WorkingDirectory=/home/osvaldo/proyectos/sistema-m/Magnus-OS2
+# Usamos el binario de Node 20 absoluto
+ExecStart=/home/osvaldo/.nvm/versions/node/v20.20.0/bin/node server/index.js
+Restart=always
+RestartSec=10
+
+# Entorno
+Environment=NODE_ENV=production
+# Puerto unificado (Backend sirve Frontend estático)
+Environment=PORT=4000
+Environment=NODE_OPTIONS="--max-old-space-size=4096"
+
+[Install]
+WantedBy=multi-user.target

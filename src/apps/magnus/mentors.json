@@ -1,0 +1,11 @@
+[
+    {
+        "id": "1",
+        "name": "Brian Tracy",
+        "role": "Mentor de Productividad",
+        "image": "/mentors/brian-tracy.jpg",
+        "quotes": [
+            "El éxito es metas, todo lo demás es comentario."
+        ]
+    }
+]

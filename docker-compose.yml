@@ -1,0 +1,67 @@
+version: "3.9"
+
+services:
+  # ========================================
+  # PostgreSQL Database
+  # ========================================
+  postgres:
+    image: postgres:16-alpine
+    container_name: magnus_postgres
+    environment:
+      POSTGRES_DB: magnus
+      POSTGRES_USER: magnus
+      POSTGRES_PASSWORD: magnus
+    volumes:
+      - magnus_pgdata:/var/lib/postgresql/data
+    networks:
+      - magnus_net
+    ports:
+      - "5432:5432"
+    restart: always
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U magnus -d magnus" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ========================================
+  # Magnus-OS2 (All-in-One: Node 20)
+  # ========================================
+  magnus:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    container_name: magnus_os2_app
+    environment:
+      NODE_ENV: production
+      PORT: 4000
+      DATABASE_URL: postgresql://magnus:magnus@postgres:5432/magnus
+    networks:
+      - magnus_net
+    ports:
+      - "4000:4000"
+    volumes:
+      - ./server/data:/app/server/data # Persistencia de SQLite (para migración) y archivos locales
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: [ "CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:4000/api/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+# ========================================
+# Networks
+# ========================================
+networks:
+  magnus_net:
+    driver: bridge
+
+# ========================================
+# Volumes
+# ========================================
+volumes:
+  magnus_pgdata:
+    driver: local

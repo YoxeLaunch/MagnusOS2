@@ -1,0 +1,316 @@
+import React, { createContext, useContext, useState, useEffect } from 'react';
+import { AppData, Transaction, CurrencyState, DailyTransaction } from '../types';
+import { authService } from '../../../shared/services/auth';
+
+interface DataContextType {
+  data: AppData;
+  addTransaction: (t: Transaction) => void;
+  removeTransaction: (id: string) => void;
+  updateTransaction: (t: Transaction) => void;
+  currencies: CurrencyState;
+  refreshCurrencies: () => void;
+  updateCurrencyRate: (code: 'usd' | 'eur', newRate: number) => void;
+  isSimulating: boolean;
+  toggleSimulation: () => void;
+  dailyTransactions: DailyTransaction[];
+  addDailyTransaction: (t: Omit<DailyTransaction, 'id'>) => void;
+  removeDailyTransaction: (id: number) => void;
+  updateDailyTransaction: (t: DailyTransaction) => void;
+}
+
+
+
+const DataContext = createContext<DataContextType | undefined>(undefined);
+
+export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [data, setData] = useState<AppData>({
+    incomes: [],
+    expenses: [],
+    investments: [],
+    savingsGoal: 155000,
+    materialInvestment: 75000,
+  });
+
+  const [dailyTransactions, setDailyTransactions] = useState<DailyTransaction[]>([]);
+
+  const [isSimulating, setIsSimulating] = useState(false);
+
+  // Fetch data from API
+  const API_URL = `/api/transactions`;
+
+  // Get current user
+  const currentUser = authService.getCurrentUser();
+  const userId = currentUser?.username; // Use username as ID since it's unique in this system
+
+  useEffect(() => {
+    if (!userId) return; // Don't fetch if no user
+
+    fetch(`${API_URL}?userId=${userId}`)
+      .then(res => {
+        if (!res.ok) throw new Error(res.statusText);
+        return res.json();
+      })
+      .then((transactions: Transaction[]) => {
+        if (!Array.isArray(transactions)) {
+          console.error('Expected array of transactions, got:', transactions);
+          return;
+        }
+
+        // Parse deductions if they come as JSON string
+        const parsedTransactions = transactions.map(t => ({
+          ...t,
+          deductions: typeof t.deductions === 'string' ? JSON.parse(t.deductions) : t.deductions
+        }));
+
+        setData(prev => ({
+          ...prev,
+          incomes: parsedTransactions.filter(t => t.type === 'income'),
+          expenses: parsedTransactions.filter(t => t.type === 'expense'),
+          investments: parsedTransactions.filter(t => t.type === 'investment')
+        }));
+      })
+      .catch(err => console.error('Error fetching data:', err));
+
+    fetch(`/api/daily-transactions?userId=${userId}`)
+      .then(res => {
+        if (!res.ok) throw new Error(res.statusText);
+        return res.json();
+      })
+      .then(data => {
+        if (Array.isArray(data)) {
+          setDailyTransactions(data);
+        } else {
+          console.error('Expected array of daily transactions, got:', data);
+          setDailyTransactions([]);
+        }
+      })
+      .catch(err => {
+        console.error('Error fetching daily transactions:', err);
+        setDailyTransactions([]);
+      });
+  }, [userId]);
+
+  const [currencies, setCurrencies] = useState<CurrencyState>({
+    usd: { code: 'USD', name: 'Dólar Estadounidense', rate: 60.15, trend: 'neutral', change: 0 },
+    eur: { code: 'EUR', name: 'Euro', rate: 65.40, trend: 'neutral', change: 0 },
+    lastUpdated: new Date(),
+  });
+
+  // Simulator Logic Removed directly, kept empty useEffect for structure or removed entirely
+  useEffect(() => {
+    // Simulation disabled by default per user request
+  }, [isSimulating]);
+
+  const addTransaction = (t: Transaction) => {
+    if (!userId) {
+      alert("Error: No hay sesión activa");
+      return;
+    }
+    const transactionWithUser = { ...t, userId };
+    fetch(API_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(transactionWithUser)
+    })
+      .then(async res => {
+        if (!res.ok) {
+          const text = await res.text();
+          throw new Error(`Server error ${res.status}: ${text}`);
+        }
+        return res.json();
+      })
+      .then(savedTransaction => {
+        const parsedTransaction = {
+          ...savedTransaction,
+          deductions: typeof savedTransaction.deductions === 'string'
+            ? JSON.parse(savedTransaction.deductions)
+            : savedTransaction.deductions
+        };
+
+        setData(prev => {
+          if (parsedTransaction.type === 'income') return { ...prev, incomes: [...prev.incomes, parsedTransaction] };
+          if (parsedTransaction.type === 'investment') return { ...prev, investments: [...prev.investments, parsedTransaction] };
+          return { ...prev, expenses: [...prev.expenses, parsedTransaction] };
+        });
+        alert('¡Gasto guardado correctamente!');
+      })
+      .catch(err => {
+        console.error('Error adding transaction:', err);
+        // alert(\`Error al guardar: \${err.message}\`);
+      });
+  };
+
+  const removeTransaction = (id: string) => {
+    fetch(`${API_URL}/${id}`, {
+      method: 'DELETE'
+    })
+      .then(async res => {
+        if (!res.ok) throw new Error('Failed to delete');
+        setData(prev => ({
+          ...prev,
+          incomes: prev.incomes.filter(i => i.id !== id),
+          expenses: prev.expenses.filter(e => e.id !== id),
+          investments: prev.investments.filter(inv => inv.id !== id),
+        }));
+      })
+      .catch(err => alert(`Error al eliminar: ${err.message}`));
+  };
+
+  const updateTransaction = (t: Transaction) => {
+    fetch(`${API_URL}/${t.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(t)
+    })
+      .then(async res => {
+        if (!res.ok) throw new Error('Failed to update');
+        return res.json();
+      })
+      .then(updatedTransaction => {
+        const parsedTransaction = {
+          ...updatedTransaction,
+          deductions: typeof updatedTransaction.deductions === 'string'
+            ? JSON.parse(updatedTransaction.deductions)
+            : updatedTransaction.deductions
+        };
+
+        setData(prev => {
+          const isIncome = prev.incomes.some(i => i.id === parsedTransaction.id);
+          const isInvestment = prev.investments.some(inv => inv.id === parsedTransaction.id);
+          if (isIncome) {
+            return { ...prev, incomes: prev.incomes.map(i => i.id === parsedTransaction.id ? parsedTransaction : i) };
+          }
+          if (isInvestment) {
+            return { ...prev, investments: prev.investments.map(inv => inv.id === parsedTransaction.id ? parsedTransaction : inv) };
+          }
+          return { ...prev, expenses: prev.expenses.map(e => e.id === parsedTransaction.id ? parsedTransaction : e) };
+        });
+        alert('¡Gasto actualizado!');
+      })
+      .catch(err => alert(`Error al actualizar: ${err.message}`));
+  };
+
+  // Fetch global rates
+  const fetchGlobalRates = () => {
+    fetch(`/api/rates`)
+      .then(res => {
+        if (!res.ok) throw new Error(res.statusText);
+        return res.json();
+      })
+      .then(rates => {
+        // Validar que rates tenga los valores esperados
+        if (rates && typeof rates.usd === 'number' && typeof rates.eur === 'number') {
+          setCurrencies(prev => ({
+            ...prev,
+            usd: { ...prev.usd, rate: rates.usd },
+            eur: { ...prev.eur, rate: rates.eur },
+            lastUpdated: new Date()
+          }));
+        } else {
+          console.error('Invalid rates format:', rates);
+        }
+      })
+      .catch(err => {
+        console.error("Failed to fetch rates", err);
+        // No actualizar currencies si hay error - mantener valores por defecto
+      });
+  };
+
+  useEffect(() => {
+    fetchGlobalRates();
+    // Poll every minute for updates from Admin Panel
+    const interval = setInterval(fetchGlobalRates, 60000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const updateCurrencyRate = (code: 'usd' | 'eur', newRate: number) => {
+    // Optimistic update
+    setCurrencies(prev => ({
+      ...prev,
+      [code]: { ...prev[code], rate: newRate, lastUpdated: new Date() }
+    }));
+
+    // Sync with server
+    const payload = { [code]: newRate };
+    fetch(`/api/rates`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    }).catch(err => console.error("Failed to sync rate", err));
+  };
+
+  const refreshCurrencies = () => {
+    fetchGlobalRates();
+  };
+
+  const toggleSimulation = () => {
+    setIsSimulating(prev => !prev);
+  }
+
+  const addDailyTransaction = (t: Omit<DailyTransaction, 'id'>) => {
+    if (!userId) {
+      alert("Error: No hay sesión activa");
+      return;
+    }
+    const transactionWithUser = { ...t, userId };
+    fetch(`/api/daily-transactions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(transactionWithUser)
+    })
+      .then(res => res.json())
+      .then(saved => setDailyTransactions(prev => [...prev, saved]))
+      .catch(err => alert('Error al guardar diario: ' + err.message));
+  };
+
+  const removeDailyTransaction = (id: number) => {
+    fetch(`/api/daily-transactions/${id}`, {
+      method: 'DELETE'
+    })
+      .then(() => setDailyTransactions(prev => prev.filter(t => t.id !== id)))
+      .catch(err => alert('Error al eliminar diario: ' + err.message));
+  };
+
+  const updateDailyTransaction = (t: DailyTransaction) => {
+    fetch(`/api/daily-transactions/${t.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(t)
+    })
+      .then(async res => {
+        if (!res.ok) throw new Error('Failed to update');
+        return res.json();
+      })
+      .then(updated => {
+        setDailyTransactions(prev => prev.map(p => p.id === updated.id ? updated : p));
+        // alert('¡Transacción actualizada!');
+      })
+      .catch(err => alert('Error al actualizar diario: ' + err.message));
+  };
+
+  return (
+    <DataContext.Provider value={{
+      data,
+      addTransaction,
+      removeTransaction,
+      updateTransaction,
+      currencies,
+      refreshCurrencies,
+      updateCurrencyRate,
+      isSimulating,
+      toggleSimulation,
+      dailyTransactions,
+      addDailyTransaction,
+      removeDailyTransaction,
+      updateDailyTransaction
+    }}>
+      {children}
+    </DataContext.Provider>
+  );
+};
+
+export const useData = () => {
+  const context = useContext(DataContext);
+  if (!context) throw new Error('useData must be used within DataProvider');
+  return context;
+};

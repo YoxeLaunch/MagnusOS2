@@ -1,0 +1,152 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+
+  /* Map Variables - Light Mode */
+  --map-bg: #ffffff;
+  --map-border: #e2e8f0;
+  --map-fill-default: #cbd5e1;
+  --map-fill-hover: #94a3b8;
+  --map-stroke: #ffffff;
+  --widget-bg: rgba(255, 255, 255, 0.8);
+  --text-primary: #0f172a;
+  --text-secondary: #64748b;
+
+  /* Design System Variables */
+  --color-primary: hsl(220, 90%, 56%);
+  --color-secondary: hsl(340, 80%, 58%);
+
+  --color-bg-light: #F8F7F4;
+  --color-bg-dark: hsl(220, 15%, 12%);
+
+  --color-text-light: hsl(220, 10%, 20%);
+  --color-text-dark: hsl(0, 0%, 95%);
+
+  --color-success: hsl(140, 70%, 45%);
+  --color-error: hsl(0, 70%, 45%);
+
+  --color-card-light: #ffffff;
+  --color-card-dark: hsl(220, 15%, 16%);
+  --color-border-light: #e2e8f0;
+  --color-border-dark: #334155;
+
+  --bg-color: var(--color-bg-light);
+  --text-main: var(--color-text-light);
+  --card-bg: var(--color-card-light);
+  --border-color: var(--color-border-light);
+}
+
+
+/* Global Smooth Transitions - Disabled for performance with curtain effect */
+/* body { transition: ... } */
+
+/* Fade In Animation */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.6s ease-out forwards;
+}
+
+.dark {
+  /* ... existing map vars ... */
+  --map-bg: #050505;
+  /* ... */
+  --bg-color: var(--color-bg-dark);
+  --text-main: var(--color-text-dark);
+  --card-bg: var(--color-card-dark);
+  --border-color: var(--color-border-dark);
+}
+
+/* Magic Border Animation */
+@property --angle {
+  syntax: '<angle>';
+  initial-value: 0deg;
+  inherits: false;
+}
+
+@keyframes rotate {
+  to {
+    --angle: 360deg;
+  }
+}
+
+.hover-magic-border {
+  position: relative;
+  /* No isolation needed if we strictly mask, but good for z-index management */
+  isolation: isolate;
+}
+
+.hover-magic-border::before,
+.hover-magic-border::after {
+  content: "";
+  position: absolute;
+  inset: -4px;
+  /* Clearly outside the card */
+  z-index: -1;
+  background: conic-gradient(from var(--angle),
+      transparent 30%,
+      var(--border-color, #fbbf24) 100%);
+  border-radius: inherit;
+  opacity: 0;
+  transition: opacity 0.3s;
+  animation: rotate 4s linear infinite;
+  /* Slightly slower for elegance */
+
+  /* Create the hole in the center - strictly external */
+  padding: 4px;
+  -webkit-mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+}
+
+.hover-magic-border::after {
+  /* The "Lamp" Glow */
+  inset: -15px;
+  /* Thrown light distance */
+  padding: 15px;
+  /* Keep hollow */
+  filter: blur(20px);
+  /* Diffuse light */
+  opacity: 0;
+}
+
+.hover-magic-border:hover::before {
+  opacity: 1;
+  /* The Line is visible/bright */
+}
+
+/* Make the glow slightly subtler or same opacity */
+.hover-magic-border:hover::after {
+  opacity: 0.6;
+}
+
+/* Specific Border Colors */
+.border-gold {
+  --border-color: #fbbf24;
+  /* Theme Gold */
+}
+
+.border-blue {
+  --border-color: #3b82f6;
+  /* Blue 500 */
+}

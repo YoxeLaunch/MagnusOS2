@@ -1,0 +1,43 @@
+# ========================================
+# Stage 1: Build Frontend
+# ========================================
+FROM node:20-alpine AS builder
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci --legacy-peer-deps
+COPY . .
+# Build frontend to dist/
+RUN npm run build
+
+# ========================================
+# Stage 2: Production Runtime
+# ========================================
+FROM node:20-alpine
+WORKDIR /app
+
+# Install production dependencies only
+COPY package*.json ./
+RUN npm ci --only=production --legacy-peer-deps
+
+# Copy server code
+COPY server ./server
+
+# Copy built frontend from builder stage
+COPY --from=builder /app/dist ./dist
+
+# Create data directory
+RUN mkdir -p /app/server/data
+
+# Environment
+ENV NODE_ENV=production
+ENV PORT=4000
+
+# Expose unified port
+EXPOSE 4000
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
+    CMD wget --no-verbose --tries=1 --spider http://localhost:4000/api/health || exit 1
+
+# Start server
+CMD ["node", "server/index.js"]

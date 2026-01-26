@@ -1,0 +1,34 @@
+{
+    "common": {
+        "save": "Guardar",
+        "cancel": "Cancelar",
+        "edit": "Editar",
+        "delete": "Eliminar",
+        "export_csv": "Exportar CSV",
+        "actions": "Acciones",
+        "frequency": "Frecuencia",
+        "amount": "Monto",
+        "category": "Categoría",
+        "concept": "Concepto",
+        "date": "Fecha"
+    },
+    "cashflow": {
+        "title": "Control de Flujo de Caja",
+        "incomes": "Ingresos",
+        "expenses": "Gastos",
+        "new_income": "Nuevo Ingreso",
+        "new_expense": "Nuevo Gasto",
+        "total_monthly": "Total Mensual Est.",
+        "total_annual": "Total Anual Est.",
+        "annual_impact": "Impacto Anual",
+        "net_annual_income": "Ingreso Neto Anual",
+        "monthly_average": "Promedio Mensual",
+        "deductions": "Deducciones",
+        "major_category": "Mayor Categoría",
+        "projected_annual": "Proyección Anual",
+        "edit_income": "Editar Ingreso",
+        "edit_expense": "Editar Gasto",
+        "delete_income_confirm": "¿Estás seguro de eliminar este ingreso?",
+        "delete_expense_confirm": "¿Estás seguro de eliminar este gasto?"
+    }
+}
