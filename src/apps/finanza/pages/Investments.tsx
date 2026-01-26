@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useData } from '../context/DataContext';
 import { formatCurrency } from '../utils/calculations';
 import { Transaction } from '../types';
+import { AssetAllocation } from '../components/AssetAllocation';
 import {
     PiggyBank,
     Plus,
@@ -15,7 +16,9 @@ import {
     Building2,
     Landmark,
     Coins,
-    Target
+    Target,
+    ArrowUpRight,
+    ArrowDownRight
 } from 'lucide-react';
 
 // Categorías de inversión
@@ -37,18 +40,33 @@ export const Investments: React.FC = () => {
     const [formData, setFormData] = useState({
         name: '',
         amount: '',
+        currentValue: '',
         category: 'ahorro',
         frequency: 'Mensual' as Transaction['frequency'],
         currency: 'DOP' as Transaction['currency'],
         date: new Date().toISOString().split('T')[0],
     });
 
-    const totalInvested = data.investments.reduce((sum, inv) => sum + inv.amount, 0);
+    const calculateMetrics = useMemo(() => {
+        let invested = 0;
+        let current = 0;
+
+        data.investments.forEach(inv => {
+            invested += inv.amount;
+            current += (inv.currentValue ?? inv.amount);
+        });
+
+        const pnl = current - invested;
+        const pnlPercent = invested > 0 ? (pnl / invested) * 100 : 0;
+
+        return { invested, current, pnl, pnlPercent };
+    }, [data.investments]);
 
     const resetForm = () => {
         setFormData({
             name: '',
             amount: '',
+            currentValue: '',
             category: 'ahorro',
             frequency: 'Mensual',
             currency: 'DOP',
@@ -65,6 +83,7 @@ export const Investments: React.FC = () => {
             id: editingId || `inv-${Date.now()}`,
             name: formData.name,
             amount: parseFloat(formData.amount),
+            currentValue: formData.currentValue ? parseFloat(formData.currentValue) : undefined,
             category: formData.category,
             frequency: formData.frequency,
             currency: formData.currency,
@@ -86,6 +105,7 @@ export const Investments: React.FC = () => {
         setFormData({
             name: inv.name,
             amount: inv.amount.toString(),
+            currentValue: inv.currentValue?.toString() || '',
             category: inv.category,
             frequency: inv.frequency,
             currency: inv.currency,
@@ -132,21 +152,144 @@ export const Investments: React.FC = () => {
                 </div>
             </div>
 
-            {/* Summary Card */}
-            <div className="bg-gradient-to-br from-emerald-600 to-emerald-800 rounded-2xl p-6 text-white shadow-xl relative overflow-hidden">
-                <div className="absolute top-0 right-0 -mr-10 -mt-10 w-40 h-40 rounded-full bg-white opacity-10 blur-xl"></div>
-                <div className="relative z-10">
-                    <p className="text-emerald-100 text-sm font-medium uppercase tracking-wider mb-1">Total Invertido</p>
-                    <h3 className="text-4xl font-bold tracking-tight">{formatCurrency(totalInvested)}</h3>
-                    <p className="text-emerald-200 text-sm mt-2">{data.investments.length} inversiones activas</p>
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                {/* Left Column: Stats & Chart */}
+                <div className="space-y-6">
+                    {/* Summary Cards */}
+                    <div className="grid grid-cols-1 gap-4">
+                        <div className="bg-gradient-to-br from-emerald-600 to-emerald-800 rounded-2xl p-6 text-white shadow-xl relative overflow-hidden">
+                            <div className="absolute top-0 right-0 -mr-10 -mt-10 w-40 h-40 rounded-full bg-white opacity-10 blur-xl"></div>
+                            <div className="relative z-10">
+                                <p className="text-emerald-100 text-sm font-medium uppercase tracking-wider mb-1">Valor Actual</p>
+                                <h3 className="text-3xl font-bold tracking-tight">{formatCurrency(calculateMetrics.current)}</h3>
+
+                                <div className="mt-4 flex items-center gap-2">
+                                    <span className={`flex items-center text-sm font-bold bg-white/20 px-2 py-1 rounded-lg ${calculateMetrics.pnl >= 0 ? 'text-white' : 'text-red-200'}`}>
+                                        {calculateMetrics.pnl >= 0 ? <ArrowUpRight size={16} /> : <ArrowDownRight size={16} />}
+                                        {Math.abs(calculateMetrics.pnlPercent).toFixed(1)}%
+                                    </span>
+                                    <span className="text-sm text-emerald-100">
+                                        {calculateMetrics.pnl >= 0 ? '+' : ''}{formatCurrency(calculateMetrics.pnl)}
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="bg-white/80 dark:bg-black/40 backdrop-blur-xl rounded-2xl p-6 border border-gray-100 dark:border-white/10 flex justify-between items-center">
+                            <div>
+                                <p className="text-sm text-gray-500 dark:text-gray-400">Capital Invertido</p>
+                                <p className="text-xl font-bold text-gray-900 dark:text-white">{formatCurrency(calculateMetrics.invested)}</p>
+                            </div>
+                            <div className="text-right">
+                                <p className="text-sm text-gray-500 dark:text-gray-400">Activos</p>
+                                <p className="text-xl font-bold text-gray-900 dark:text-white">{data.investments.length}</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Asset Allocation Chart */}
+                    <div className="h-[400px]">
+                        <AssetAllocation investments={data.investments} />
+                    </div>
+                </div>
+
+                {/* Right Column: List */}
+                <div className="lg:col-span-2 space-y-4">
+                    <h3 className="text-lg font-bold text-gray-900 dark:text-white">Portafolio</h3>
+
+                    {data.investments.length === 0 ? (
+                        <div className="bg-white/80 dark:bg-black/40 backdrop-blur-xl rounded-xl p-12 border border-gray-200 dark:border-white/10 text-center">
+                            <PiggyBank size={48} className="mx-auto text-gray-300 dark:text-gray-600 mb-4" />
+                            <h4 className="text-lg font-medium text-gray-700 dark:text-gray-300 mb-2">Sin inversiones registradas</h4>
+                            <p className="text-gray-500 dark:text-gray-400 text-sm mb-4">
+                                Comienza a registrar tus inversiones para hacer seguimiento de tu patrimonio.
+                            </p>
+                            <button
+                                onClick={() => setIsAdding(true)}
+                                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 font-medium hover:bg-emerald-200 dark:hover:bg-emerald-900/50 transition-colors"
+                            >
+                                <Plus size={16} /> Añadir primera inversión
+                            </button>
+                        </div>
+                    ) : (
+                        <div className="grid gap-4">
+                            {data.investments.map(inv => {
+                                const CategoryIcon = getCategoryIcon(inv.category);
+                                const currentVal = inv.currentValue ?? inv.amount;
+                                const gain = currentVal - inv.amount;
+                                const gainPercent = inv.amount > 0 ? (gain / inv.amount) * 100 : 0;
+
+                                return (
+                                    <div
+                                        key={inv.id}
+                                        className="bg-white/80 dark:bg-black/40 backdrop-blur-xl rounded-xl p-4 border border-gray-200 dark:border-white/10 flex items-center justify-between group hover:shadow-lg hover:border-emerald-500/30 transition-all"
+                                    >
+                                        <div className="flex items-center gap-4">
+                                            <div className="w-12 h-12 rounded-xl bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center text-emerald-600 dark:text-emerald-400">
+                                                <CategoryIcon size={24} />
+                                            </div>
+                                            <div>
+                                                <h4 className="font-bold text-gray-900 dark:text-white">{inv.name}</h4>
+                                                <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
+                                                    <span className="px-2 py-0.5 rounded-full bg-gray-100 dark:bg-white/5 text-xs">
+                                                        {getCategoryLabel(inv.category)}
+                                                    </span>
+                                                    <span>•</span>
+                                                    <span>{inv.frequency}</span>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div className="flex items-center gap-6">
+                                            {/* P&L Mini View */}
+                                            <div className="text-right hidden sm:block">
+                                                <p className="text-xs text-gray-500">Valor Actual</p>
+                                                <p className="font-bold text-gray-900 dark:text-white">{formatCurrency(currentVal)}</p>
+                                                {inv.currentValue && (
+                                                    <p className={`text-xs ${gain >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                                                        {gain >= 0 ? '+' : ''}{gainPercent.toFixed(1)}%
+                                                    </p>
+                                                )}
+                                            </div>
+
+                                            <div className="text-right">
+                                                <p className="text-xs text-gray-500">Costo Base</p>
+                                                <p className="font-bold text-gray-700 dark:text-gray-300">
+                                                    {formatCurrency(inv.amount)}
+                                                </p>
+                                                <p className="text-xs text-gray-500">{inv.currency}</p>
+                                            </div>
+
+                                            <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                <button
+                                                    onClick={() => handleEdit(inv)}
+                                                    className="p-2 rounded-lg text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition-colors"
+                                                    title="Editar"
+                                                >
+                                                    <Edit2 size={18} />
+                                                </button>
+                                                <button
+                                                    onClick={() => handleDelete(inv.id)}
+                                                    className="p-2 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                                                    title="Eliminar"
+                                                >
+                                                    <Trash2 size={18} />
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    )}
                 </div>
             </div>
 
             {/* Add/Edit Form Modal */}
             {isAdding && (
                 <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-                    <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-lg border border-gray-200 dark:border-white/10">
-                        <div className="p-6 border-b border-gray-200 dark:border-white/10 flex justify-between items-center">
+                    <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-lg border border-gray-200 dark:border-white/10 max-h-[90vh] overflow-y-auto">
+                        <div className="p-6 border-b border-gray-200 dark:border-white/10 flex justify-between items-center sticky top-0 bg-white dark:bg-slate-800 z-10">
                             <h3 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
                                 <PiggyBank className="text-emerald-500" />
                                 {editingId ? 'Editar Inversión' : 'Nueva Inversión'}
@@ -170,10 +313,10 @@ export const Investments: React.FC = () => {
                                 />
                             </div>
 
-                            {/* Monto y Moneda */}
+                            {/* Monto y Valor Actual */}
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Monto</label>
+                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Costo (Inversión)</label>
                                     <div className="relative">
                                         <DollarSign size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
                                         <input
@@ -189,6 +332,26 @@ export const Investments: React.FC = () => {
                                     </div>
                                 </div>
                                 <div>
+                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                        Valor Actual <span className="text-xs text-gray-500">(Opcional)</span>
+                                    </label>
+                                    <div className="relative">
+                                        <TrendingUp size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                                        <input
+                                            type="number"
+                                            min="0"
+                                            step="0.01"
+                                            value={formData.currentValue}
+                                            onChange={(e) => setFormData(prev => ({ ...prev, currentValue: e.target.value }))}
+                                            className="w-full pl-9 pr-4 py-2 rounded-lg border border-gray-300 dark:border-white/10 bg-white dark:bg-black/20 text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none"
+                                            placeholder={formData.amount || "0.00"}
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
                                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Moneda</label>
                                     <select
                                         value={formData.currency}
@@ -199,6 +362,18 @@ export const Investments: React.FC = () => {
                                         <option value="USD">USD</option>
                                         <option value="EUR">EUR</option>
                                     </select>
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Fecha</label>
+                                    <div className="relative">
+                                        <Calendar size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                                        <input
+                                            type="date"
+                                            value={formData.date}
+                                            onChange={(e) => setFormData(prev => ({ ...prev, date: e.target.value }))}
+                                            className="w-full pl-9 pr-4 py-2 rounded-lg border border-gray-300 dark:border-white/10 bg-white dark:bg-black/20 text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none"
+                                        />
+                                    </div>
                                 </div>
                             </div>
 
@@ -214,8 +389,8 @@ export const Investments: React.FC = () => {
                                                 type="button"
                                                 onClick={() => setFormData(prev => ({ ...prev, category: cat.id }))}
                                                 className={`flex flex-col items-center gap-1 p-3 rounded-lg border transition-all ${formData.category === cat.id
-                                                        ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-500 text-emerald-700 dark:text-emerald-400'
-                                                        : 'border-gray-200 dark:border-white/10 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-white/5'
+                                                    ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-500 text-emerald-700 dark:text-emerald-400'
+                                                    : 'border-gray-200 dark:border-white/10 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-white/5'
                                                     }`}
                                             >
                                                 <Icon size={20} />
@@ -226,34 +401,18 @@ export const Investments: React.FC = () => {
                                 </div>
                             </div>
 
-                            {/* Frecuencia y Fecha */}
-                            <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Frecuencia</label>
-                                    <select
-                                        value={formData.frequency}
-                                        onChange={(e) => setFormData(prev => ({ ...prev, frequency: e.target.value as Transaction['frequency'] }))}
-                                        className="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-white/10 bg-white dark:bg-black/20 text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none"
-                                    >
-                                        <option value="Mensual">Mensual</option>
-                                        <option value="Trimestral">Trimestral</option>
-                                        <option value="Anual">Anual</option>
-                                        <option value="Fijo">Único</option>
-                                        <option value="Variable">Variable</option>
-                                    </select>
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Fecha</label>
-                                    <div className="relative">
-                                        <Calendar size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-                                        <input
-                                            type="date"
-                                            value={formData.date}
-                                            onChange={(e) => setFormData(prev => ({ ...prev, date: e.target.value }))}
-                                            className="w-full pl-9 pr-4 py-2 rounded-lg border border-gray-300 dark:border-white/10 bg-white dark:bg-black/20 text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none"
-                                        />
-                                    </div>
-                                </div>
+                            {/* Frecuencia (Opción menos relevante ahora que es Asset Tracking, pero mantenida) */}
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Frecuencia (Opcional)</label>
+                                <select
+                                    value={formData.frequency}
+                                    onChange={(e) => setFormData(prev => ({ ...prev, frequency: e.target.value as Transaction['frequency'] }))}
+                                    className="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-white/10 bg-white dark:bg-black/20 text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none"
+                                >
+                                    <option value="Mensual">Mensual (Flujo)</option>
+                                    <option value="Fijo">Único (Capital)</option>
+                                    <option value="Variable">Variable</option>
+                                </select>
                             </div>
 
                             {/* Actions */}
@@ -276,87 +435,6 @@ export const Investments: React.FC = () => {
                     </div>
                 </div>
             )}
-
-            {/* Investments List */}
-            <div className="space-y-4">
-                <h3 className="text-lg font-bold text-gray-900 dark:text-white">Mis Inversiones</h3>
-
-                {data.investments.length === 0 ? (
-                    <div className="bg-white/80 dark:bg-black/40 backdrop-blur-xl rounded-xl p-12 border border-gray-200 dark:border-white/10 text-center">
-                        <PiggyBank size={48} className="mx-auto text-gray-300 dark:text-gray-600 mb-4" />
-                        <h4 className="text-lg font-medium text-gray-700 dark:text-gray-300 mb-2">Sin inversiones registradas</h4>
-                        <p className="text-gray-500 dark:text-gray-400 text-sm mb-4">
-                            Comienza a registrar tus inversiones para hacer seguimiento de tu patrimonio.
-                        </p>
-                        <button
-                            onClick={() => setIsAdding(true)}
-                            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 font-medium hover:bg-emerald-200 dark:hover:bg-emerald-900/50 transition-colors"
-                        >
-                            <Plus size={16} /> Añadir primera inversión
-                        </button>
-                    </div>
-                ) : (
-                    <div className="grid gap-4">
-                        {data.investments.map(inv => {
-                            const CategoryIcon = getCategoryIcon(inv.category);
-                            return (
-                                <div
-                                    key={inv.id}
-                                    className="bg-white/80 dark:bg-black/40 backdrop-blur-xl rounded-xl p-4 border border-gray-200 dark:border-white/10 flex items-center justify-between group hover:shadow-lg hover:border-emerald-500/30 transition-all"
-                                >
-                                    <div className="flex items-center gap-4">
-                                        <div className="w-12 h-12 rounded-xl bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center text-emerald-600 dark:text-emerald-400">
-                                            <CategoryIcon size={24} />
-                                        </div>
-                                        <div>
-                                            <h4 className="font-bold text-gray-900 dark:text-white">{inv.name}</h4>
-                                            <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
-                                                <span className="px-2 py-0.5 rounded-full bg-gray-100 dark:bg-white/5 text-xs">
-                                                    {getCategoryLabel(inv.category)}
-                                                </span>
-                                                <span>•</span>
-                                                <span>{inv.frequency}</span>
-                                                {inv.date && (
-                                                    <>
-                                                        <span>•</span>
-                                                        <span>{new Date(inv.date).toLocaleDateString()}</span>
-                                                    </>
-                                                )}
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    <div className="flex items-center gap-4">
-                                        <div className="text-right">
-                                            <p className="text-xl font-bold text-gray-900 dark:text-white">
-                                                {formatCurrency(inv.amount)}
-                                            </p>
-                                            <p className="text-xs text-gray-500">{inv.currency}</p>
-                                        </div>
-
-                                        <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                            <button
-                                                onClick={() => handleEdit(inv)}
-                                                className="p-2 rounded-lg text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition-colors"
-                                                title="Editar"
-                                            >
-                                                <Edit2 size={18} />
-                                            </button>
-                                            <button
-                                                onClick={() => handleDelete(inv.id)}
-                                                className="p-2 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
-                                                title="Eliminar"
-                                            >
-                                                <Trash2 size={18} />
-                                            </button>
-                                        </div>
-                                    </div>
-                                </div>
-                            );
-                        })}
-                    </div>
-                )}
-            </div>
         </div>
     );
 };

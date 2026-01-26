@@ -13,6 +13,7 @@ export interface Transaction {
     currency: 'DOP' | 'USD' | 'EUR';
     date?: string; // ISO YYYY-MM-DD
     type: 'income' | 'expense' | 'investment';
+    currentValue?: number; // For tracking P&L on investments
     deductions?: {
         afp: number;
         sfs: number;

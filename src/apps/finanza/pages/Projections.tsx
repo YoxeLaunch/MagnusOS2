@@ -38,7 +38,11 @@ export const Projections: React.FC = () => {
 
         // Safety check for empty data after sanitization
         if (cleanTransactions.length === 0) {
-            return { projectionData: [], modelConfidence: { income: 0, expense: 0, average: 0, method: 'none' as const } };
+            return {
+                projectionData: [],
+                modelConfidence: { income: 0, expense: 0, average: 0, method: 'none' as const },
+                trends: { incomeSlope: 0, expenseSlope: 0 }
+            };
         }
 
         // 1. Aggregate Transactions into Cycle Totals
