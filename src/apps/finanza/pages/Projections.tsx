@@ -5,21 +5,40 @@ import { TrendingUp, ShieldCheck, Target, Award, Calendar, Info } from 'lucide-r
 import { useData } from '../context/DataContext';
 import { calculateTrend } from '../utils/prediction';
 import { getFinancialCycle, getCycleId, getCycleFromId } from '../utils/financialCycle';
+import { sanitizeTransactions } from '../utils/dataQuality';
 
 import { MonteCarloRisk } from '../components/MonteCarloRisk';
 import { FinancialSankey } from '../components/FinancialSankey';
+import { FIRECalculator } from '../components/FIRECalculator';
+import { HealthRadar } from '../components/HealthRadar';
 
 export const Projections: React.FC = () => {
     const { dailyTransactions } = useData();
 
-    const projectionData = useMemo(() => {
+    // Combined projection memo that returns both projection data and confidence info
+    const { projectionData, modelConfidence } = useMemo(() => {
+        // 0. Sanitize transactions (filter invalid dates, zeros, duplicates)
+        const { clean: cleanTransactions, warnings } = sanitizeTransactions(dailyTransactions, {
+            filterZeroAmounts: true,
+            filterFutureDates: true,
+            detectOutliers: true,
+            outlierZThreshold: 3
+        });
+
+        // Log warnings in development for debugging
+        if (warnings.length > 0 && process.env.NODE_ENV === 'development') {
+            console.warn('[Projections] Data quality warnings:', warnings);
+        }
+
+        // Safety check for empty data after sanitization
+        if (cleanTransactions.length === 0) {
+            return { projectionData: [], modelConfidence: { income: 0, expense: 0, average: 0, method: 'none' as const } };
+        }
+
         // 1. Aggregate Transactions into Cycle Totals
         const cycleTotals: Record<string, { income: number, expense: number, investment: number, date: Date }> = {};
 
-        // Safety check for undefined dailyTransactions
-        if (!dailyTransactions) return [];
-
-        dailyTransactions.forEach(t => {
+        cleanTransactions.forEach(t => {
             const cycleId = getCycleId(t.date);
             if (!cycleTotals[cycleId]) {
                 const cycle = getCycleFromId(cycleId);
@@ -43,22 +62,22 @@ export const Projections: React.FC = () => {
             .filter(([id]) => id !== currentCycleId)
             .map(([_, v]) => ({ date: v.date, value: v.expense }));
 
-        // 3. Calculate Trends
+        // 3. Calculate Trends AND extract confidence
         const incomeTrend = calculateTrend(incomePoints);
         const expenseTrend = calculateTrend(expensePoints);
-        // We assume investment trend is part of savings or static for now, strictly predicting income/expense lines
+
+        // Calculate model confidence (average of both trends, clamped to 0-1)
+        const incomeConfidence = incomeTrend?.confidence ?? 0;
+        const expenseConfidence = expenseTrend?.confidence ?? 0;
+        const avgConfidence = (incomeConfidence + expenseConfidence) / 2;
+        const method = incomeTrend?.method ?? expenseTrend?.method ?? 'none';
 
         // 4. Generate Projections for Next 12 Cycles
-        // Starting from NEXT cycle (or current if we want to predict rest of it, but simpler to project 12 months out)
-        // Let's project starting from current month + 1 to 2026
-
-        const lastCycleDate = new Date();
         const projectedMonths = [];
         const cyclesToProject = 12;
 
         for (let i = 1; i <= cyclesToProject; i++) {
             // Logic to get next cycle date
-            // Simple approach: Add i months to today roughly, then get cycle
             const futureDate = new Date();
             futureDate.setMonth(futureDate.getMonth() + i);
             const cycle = getFinancialCycle(futureDate);
@@ -67,21 +86,24 @@ export const Projections: React.FC = () => {
             let predIncome = incomeTrend ? incomeTrend.predict(cycle.end) : 4500;
             let predExpense = expenseTrend ? expenseTrend.predict(cycle.end) : 2800;
 
-            // Savings (Ahorro) = Income - Expense (Expense excludes investments now)
-            // Ideally we would predict investment behavior too, but for "Savings Rate" metrics
-            // we assume any surplus (Income - Expense) IS potential savings/investment.
-            // If the user explicitly invests, that is counted as savings.
-
             projectedMonths.push({
                 name: cycle.label,
                 ingresos: Math.round(predIncome),
-                gastos: Math.round(predExpense), // This projection is for "consumption expenses" now
-                ahorro: Math.round(predIncome - predExpense), // This now represents "Capacity to Save/Invest"
+                gastos: Math.round(predExpense),
+                ahorro: Math.round(predIncome - predExpense),
                 savingsRate: Math.max(0, Math.round(((predIncome - predExpense) / predIncome) * 100))
             });
         }
 
-        return projectedMonths;
+        return {
+            projectionData: projectedMonths,
+            modelConfidence: {
+                income: Math.round(incomeConfidence * 100),
+                expense: Math.round(expenseConfidence * 100),
+                average: Math.round(avgConfidence * 100),
+                method: method
+            }
+        };
     }, [dailyTransactions]);
 
     // ==================== PROFESSIONAL FINANCIAL METRICS ====================
@@ -178,6 +200,40 @@ export const Projections: React.FC = () => {
                 </div>
                 <div className="bg-primary/10 text-primary px-4 py-2 rounded-lg font-mono text-sm font-bold border border-primary/20">
                     MAGNUS AI PREDICTION
+                </div>
+            </div>
+
+            {/* Model Confidence Indicator */}
+            <div className="bg-white/80 dark:bg-black/40 backdrop-blur-xl px-6 py-4 rounded-2xl border border-slate-200 dark:border-white/10 shadow-sm">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <div className="flex items-center gap-3">
+                        <Info size={20} className="text-slate-400" />
+                        <div>
+                            <p className="text-sm font-medium text-slate-700 dark:text-slate-200">
+                                Confianza del Modelo
+                            </p>
+                            <p className="text-xs text-slate-500 dark:text-slate-400">
+                                {modelConfidence.method === 'linear' && 'Regresión lineal (≥3 ciclos de datos)'}
+                                {modelConfidence.method === 'average' && 'Promedio simple (<3 ciclos de datos)'}
+                                {modelConfidence.method === 'none' && 'Sin datos suficientes'}
+                            </p>
+                        </div>
+                    </div>
+                    <div className="flex items-center gap-4 flex-1 max-w-md">
+                        <div className="flex-1 h-3 bg-slate-100 dark:bg-white/10 rounded-full overflow-hidden">
+                            <div
+                                className={`h-full transition-all duration-500 ease-out rounded-full ${modelConfidence.average >= 70 ? 'bg-emerald-500' :
+                                    modelConfidence.average >= 40 ? 'bg-amber-500' : 'bg-red-500'
+                                    }`}
+                                style={{ width: `${Math.min(100, modelConfidence.average)}%` }}
+                            />
+                        </div>
+                        <span className={`text-lg font-bold min-w-[60px] text-right ${modelConfidence.average >= 70 ? 'text-emerald-500' :
+                            modelConfidence.average >= 40 ? 'text-amber-500' : 'text-red-500'
+                            }`}>
+                            {modelConfidence.average}%
+                        </span>
+                    </div>
                 </div>
             </div>
 
@@ -323,6 +379,21 @@ export const Projections: React.FC = () => {
             <div className="grid grid-cols-1 space-y-8">
                 <MonteCarloRisk />
                 <FinancialSankey />
+            </div>
+
+            {/* FIRE & Health Radar Widgets */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <FIRECalculator
+                    avgAnnualIncome={projectionData.length > 0 ? projectionData.reduce((a, p) => a + p.ingresos, 0) / projectionData.length : 0}
+                    avgAnnualExpenses={projectionData.length > 0 ? projectionData.reduce((a, p) => a + p.gastos, 0) / projectionData.length : 0}
+                    savingsRate={savingsRate}
+                />
+                <HealthRadar
+                    savingsRate={savingsRate}
+                    expenseStability={expenseStability}
+                    cashRunway={cashRunway}
+                    financialDiscipline={financialDiscipline}
+                />
             </div>
         </div>
     );
