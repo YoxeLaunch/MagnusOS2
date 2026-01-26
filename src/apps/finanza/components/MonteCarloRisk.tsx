@@ -4,17 +4,25 @@ import { runMonteCarloSimulation } from '../utils/monteCarlo';
 import { useData } from '../context/DataContext';
 import { AlertTriangle, CheckCircle, TrendingDown, HelpCircle } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine, CartesianGrid } from 'recharts';
+import { sanitizeTransactions } from '../utils/dataQuality';
 
 export const MonteCarloRisk: React.FC = () => {
     const { dailyTransactions } = useData();
 
     const simulationResult = useMemo(() => {
-        if (!dailyTransactions || dailyTransactions.length === 0) return null;
+        // 0. Sanitize transactions before simulation
+        const { clean: cleanTransactions } = sanitizeTransactions(dailyTransactions, {
+            filterZeroAmounts: true,
+            filterFutureDates: true,
+            detectOutliers: false // Don't flag outliers, Monte Carlo already handles volatility
+        });
 
-        // 1. Aggregate Transactions into Cycle Totals (Same logic as Projections, but generic)
+        if (cleanTransactions.length === 0) return null;
+
+        // 1. Aggregate Transactions into Cycle Totals
         const cycleTotals: Record<string, { income: number, expense: number }> = {};
 
-        dailyTransactions.forEach(t => {
+        cleanTransactions.forEach(t => {
             const cycleId = getCycleId(t.date);
             if (!cycleTotals[cycleId]) {
                 cycleTotals[cycleId] = { income: 0, expense: 0 };

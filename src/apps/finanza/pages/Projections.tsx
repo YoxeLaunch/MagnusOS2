@@ -5,6 +5,7 @@ import { TrendingUp, ShieldCheck, Target, Award, Calendar, Info } from 'lucide-r
 import { useData } from '../context/DataContext';
 import { calculateTrend } from '../utils/prediction';
 import { getFinancialCycle, getCycleId, getCycleFromId } from '../utils/financialCycle';
+import { sanitizeTransactions } from '../utils/dataQuality';
 
 import { MonteCarloRisk } from '../components/MonteCarloRisk';
 import { FinancialSankey } from '../components/FinancialSankey';
@@ -13,13 +14,26 @@ export const Projections: React.FC = () => {
     const { dailyTransactions } = useData();
 
     const projectionData = useMemo(() => {
+        // 0. Sanitize transactions (filter invalid dates, zeros, duplicates)
+        const { clean: cleanTransactions, warnings } = sanitizeTransactions(dailyTransactions, {
+            filterZeroAmounts: true,
+            filterFutureDates: true,
+            detectOutliers: true,
+            outlierZThreshold: 3
+        });
+
+        // Log warnings in development for debugging
+        if (warnings.length > 0 && process.env.NODE_ENV === 'development') {
+            console.warn('[Projections] Data quality warnings:', warnings);
+        }
+
+        // Safety check for empty data after sanitization
+        if (cleanTransactions.length === 0) return [];
+
         // 1. Aggregate Transactions into Cycle Totals
         const cycleTotals: Record<string, { income: number, expense: number, investment: number, date: Date }> = {};
 
-        // Safety check for undefined dailyTransactions
-        if (!dailyTransactions) return [];
-
-        dailyTransactions.forEach(t => {
+        cleanTransactions.forEach(t => {
             const cycleId = getCycleId(t.date);
             if (!cycleTotals[cycleId]) {
                 const cycle = getCycleFromId(cycleId);
