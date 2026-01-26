@@ -10,6 +10,7 @@ import { sanitizeTransactions } from '../utils/dataQuality';
 import { MonteCarloRisk } from '../components/MonteCarloRisk';
 import { FinancialSankey } from '../components/FinancialSankey';
 import { FIRECalculator } from '../components/FIRECalculator';
+import { HealthRadar } from '../components/HealthRadar';
 
 export const Projections: React.FC = () => {
     const { dailyTransactions } = useData();
@@ -387,7 +388,12 @@ export const Projections: React.FC = () => {
                     avgAnnualExpenses={projectionData.length > 0 ? projectionData.reduce((a, p) => a + p.gastos, 0) / projectionData.length : 0}
                     savingsRate={savingsRate}
                 />
-                {/* HealthRadar will be added in Entregable B */}
+                <HealthRadar
+                    savingsRate={savingsRate}
+                    expenseStability={expenseStability}
+                    cashRunway={cashRunway}
+                    financialDiscipline={financialDiscipline}
+                />
             </div>
         </div>
     );
