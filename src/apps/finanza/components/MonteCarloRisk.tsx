@@ -1,10 +1,14 @@
 import React, { useMemo } from 'react';
 import { getCycleId, getCycleFromId } from '../utils/financialCycle';
-import { runMonteCarloSimulation } from '../utils/monteCarlo';
+import { runMonteCarloSimulation, getOrCreateSeed, SimulationResult } from '../utils/monteCarlo';
 import { useData } from '../context/DataContext';
 import { AlertTriangle, CheckCircle, TrendingDown, HelpCircle } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine, CartesianGrid } from 'recharts';
-import { sanitizeTransactions } from '../utils/dataQuality';
+import { sanitizeTransactions, hashTransactions } from '../utils/dataQuality';
+
+// Cache configuration
+const CACHE_PREFIX = 'mc_cache_';
+const ITERATIONS = 2000;
 
 export const MonteCarloRisk: React.FC = () => {
     const { dailyTransactions } = useData();
@@ -19,7 +23,34 @@ export const MonteCarloRisk: React.FC = () => {
 
         if (cleanTransactions.length === 0) return null;
 
-        // 1. Aggregate Transactions into Cycle Totals
+        // 1. Generate cache key from data hash + seed + iterations
+        const dataHash = hashTransactions(cleanTransactions);
+        const seed = getOrCreateSeed();
+        const cacheKey = `${CACHE_PREFIX}${dataHash}_${seed}_${ITERATIONS}`;
+
+        // 2. Check sessionStorage cache
+        if (typeof window !== 'undefined' && window.sessionStorage) {
+            try {
+                const cached = sessionStorage.getItem(cacheKey);
+                if (cached) {
+                    const parsed = JSON.parse(cached) as SimulationResult;
+                    // Log cache hit in development
+                    if (process.env.NODE_ENV === 'development') {
+                        console.log('[MonteCarloRisk] Cache HIT for key:', cacheKey);
+                    }
+                    return parsed;
+                }
+            } catch {
+                // Ignore cache errors
+            }
+        }
+
+        // 3. Cache MISS - compute simulation
+        if (process.env.NODE_ENV === 'development') {
+            console.log('[MonteCarloRisk] Cache MISS - computing simulation');
+        }
+
+        // Aggregate Transactions into Cycle Totals
         const cycleTotals: Record<string, { income: number, expense: number }> = {};
 
         cleanTransactions.forEach(t => {
@@ -42,8 +73,24 @@ export const MonteCarloRisk: React.FC = () => {
             .filter(([id]) => id !== currentCycleId)
             .map(([_, v]) => v.expense);
 
-        // Run Sim
-        return runMonteCarloSimulation(historyIncome, historyExpense);
+        // Run Simulation with dataHash for reproducibility
+        const result = runMonteCarloSimulation(historyIncome, historyExpense, {
+            iterations: ITERATIONS,
+            dataHash: dataHash
+        });
+
+        // 4. Store in sessionStorage cache
+        if (typeof window !== 'undefined' && window.sessionStorage) {
+            try {
+                // Don't cache the full simulations array to save space
+                const cacheableResult = { ...result, simulations: [] };
+                sessionStorage.setItem(cacheKey, JSON.stringify(cacheableResult));
+            } catch {
+                // Ignore storage errors (quota exceeded, etc.)
+            }
+        }
+
+        return result;
     }, [dailyTransactions]);
 
     if (!simulationResult) return null;
