@@ -1,14 +1,15 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useData } from '../context/DataContext';
 import { useTime } from '../../../context/TimeContext';
 import { calculateTotalAnnual, formatCurrency, formatUSD } from '../utils/calculations';
+import { PortfolioHistory } from '../components/PortfolioHistory';
+import { AssetAllocation } from '../components/AssetAllocation';
+import { ErrorBoundary } from '../../../shared/components/ErrorBoundary';
 import {
     TrendingUp,
     PiggyBank,
     Hammer,
     Briefcase,
-    ShoppingBag,
-    Laptop,
     TrendingDown,
     RefreshCw,
     Calculator,
@@ -22,21 +23,31 @@ import {
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
-export const Wealth: React.FC = () => {
+const WealthContent: React.FC = () => {
     // Hooks
-    const { data, currencies, isSimulating, toggleSimulation, updateCurrencyRate } = useData();
+    const {
+        data,
+        currencies,
+        isSimulating,
+        toggleSimulation,
+        updateCurrencyRate,
+        wealthHistory = [], // Default to empty array to prevent crash
+        saveWealthSnapshot
+    } = useData();
     const { timeOffset } = useTime();
 
+    if (!data) return <div className="p-8 text-center">Cargando datos financieros...</div>;
+
     // Calculations
-    const totalIncome = calculateTotalAnnual(data.incomes);
-    const totalExpenses = calculateTotalAnnual(data.expenses);
+    const totalIncome = calculateTotalAnnual(data.incomes || []);
+    const totalExpenses = calculateTotalAnnual(data.expenses || []);
     const availableSavings = totalIncome - totalExpenses;
 
     // Investment Calculations
     const investmentMetrics = useMemo(() => {
         let invested = 0;
         let current = 0;
-        data.investments.forEach(inv => {
+        (data.investments || []).forEach(inv => {
             invested += inv.amount;
             current += (inv.currentValue ?? inv.amount);
         });
@@ -44,11 +55,32 @@ export const Wealth: React.FC = () => {
     }, [data.investments]);
 
     // Net Worth = Cash (Available Savings) + Investments (Current Value) + Material Assets
-    // Note: availableSavings is a "flow" (Annual), not a "balance". 
-    // Ideally we should have a "Current Cash Balance". For now, we assume Annual Savings = Cash Accumulation for this year.
-    const netWorth = availableSavings + investmentMetrics.current + data.materialInvestment;
+    const netWorth = availableSavings + investmentMetrics.current + (data.materialInvestment || 0);
 
-    const projectedNetWorth = netWorth; // Placeholder for future projection logic
+    // Snapshot Logic (Auto-save on mount if today's snapshot doesn't exist)
+    useEffect(() => {
+        const todayStr = new Date().toISOString().split('T')[0];
+        const alreadyHasSnapshot = wealthHistory.some(s => s.date === todayStr);
+
+        if (!alreadyHasSnapshot && netWorth > 0) {
+            // Create breakdown
+            const breakdown: Record<string, number> = {
+                cash: availableSavings,
+                investments: investmentMetrics.current,
+                material: data.materialInvestment || 0,
+                liabilities: 0
+            };
+
+            saveWealthSnapshot({
+                date: todayStr,
+                netWorth,
+                assets: netWorth,
+                liabilities: 0,
+                breakdown,
+                currency: 'DOP'
+            });
+        }
+    }, [wealthHistory, netWorth, availableSavings, investmentMetrics.current, data.materialInvestment, saveWealthSnapshot]);
 
     // Currencies State
     const [calcAmount, setCalcAmount] = useState<number>(1000);
@@ -77,300 +109,238 @@ export const Wealth: React.FC = () => {
     };
 
     return (
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 pb-24 space-y-12">
+        <div className="max-w-[1600px] mx-auto p-6 md:p-8 space-y-8 pb-32">
 
-            {/* --- SECTION 1: GLOBAL NET WORTH --- */}
-            <section>
-                <div className="md:flex md:items-center md:justify-between mb-8">
-                    <div className="flex-1 min-w-0">
-                        <h2 className="text-2xl font-bold leading-7 sm:text-3xl sm:truncate text-gray-900 dark:text-white flex items-center gap-3">
-                            <Wallet className="text-primary" /> Patrimonio Global (Net Worth)
-                        </h2>
-                        <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Visión unificada de Ahorro, Inversión y Divisas.</p>
-                    </div>
+            {/* HEADER */}
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div>
+                    <h2 className="text-3xl font-bold text-gray-900 dark:text-white flex items-center gap-3">
+                        <Wallet className="text-primary" size={32} />
+                        Patrimonio Integral
+                    </h2>
+                    <p className="mt-1 text-base text-gray-500 dark:text-gray-400 max-w-2xl">
+                        Visión 360° de tus activos, pasivos y la evolución de tu capital neto en tiempo real.
+                    </p>
                 </div>
-
-                <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4 mb-8">
-                    <Card
-                        label="Patrimonio Neto"
-                        value={netWorth}
-                        icon={Wallet}
-                        color="text-emerald-500"
-                        borderColor="border-emerald-500"
-                        highlight
-                    />
-                    <Card
-                        label="Flujo de Caja Anual"
-                        value={availableSavings}
-                        icon={PiggyBank}
-                        color="text-blue-500"
-                        borderColor="border-blue-500"
-                    />
-                    <Card
-                        label="Inversiones (Valor)"
-                        value={investmentMetrics.current}
-                        icon={TrendingUp}
-                        color="text-purple-500"
-                        borderColor="border-purple-500"
-                    />
-                    <Card
-                        label="Activos Materiales"
-                        value={data.materialInvestment}
-                        icon={Hammer}
-                        color="text-yellow-500"
-                        borderColor="border-yellow-500"
-                    />
+                <div className="text-right hidden md:block bg-white/50 dark:bg-white/5 p-4 rounded-2xl border border-gray-100 dark:border-white/10 backdrop-blur-sm">
+                    <p className="text-xs text-gray-400 uppercase tracking-wider font-bold">Patrimonio Neto Total</p>
+                    <p className="text-4xl font-extrabold text-gray-900 dark:text-white tracking-tight">
+                        {formatCurrency(netWorth)}
+                    </p>
+                    <p className="text-sm text-gray-500">
+                        ≃ {formatUSD(netWorth / currencies.usd.rate)} USD
+                    </p>
                 </div>
+            </div>
 
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                    {/* Detail 1: Cash Flow Breakdown */}
-                    <div className="bg-white/80 dark:bg-black/40 backdrop-blur-xl shadow-sm rounded-xl p-6 border border-gray-100 dark:border-white/10">
-                        <div className="flex items-center justify-between mb-6 pb-2 border-b border-gray-100 dark:border-white/5">
-                            <h3 className="text-lg font-bold text-gray-900 dark:text-white flex items-center">
-                                Flujo de Caja
+            {/* KPI CARDS ROW */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <KPICard
+                    label="Patrimonio Neto"
+                    value={netWorth}
+                    icon={Wallet}
+                    color="text-emerald-500"
+                    trend={+2.5}
+                />
+                <KPICard
+                    label="Flujo de Caja Anual"
+                    value={availableSavings}
+                    icon={PiggyBank}
+                    color="text-blue-500"
+                />
+                <KPICard
+                    label="Portafolio Inversiones"
+                    value={investmentMetrics.current}
+                    icon={TrendingUp}
+                    color="text-purple-500"
+                />
+                <KPICard
+                    label="Activos Físicos"
+                    value={data.materialInvestment}
+                    icon={Hammer}
+                    color="text-yellow-500"
+                />
+            </div>
+
+            {/* MAIN DASHBOARD GRID */}
+            <div className="grid grid-cols-1 xl:grid-cols-12 gap-6">
+
+                {/* LEFT COLUMN (MAIN HISTORY) - Span 8 */}
+                <div className="xl:col-span-8 space-y-6">
+                    {/* Portfolio History Chart */}
+                    <div className="bg-white/80 dark:bg-black/40 backdrop-blur-xl p-6 rounded-2xl border border-slate-200 dark:border-white/10 shadow-sm min-h-[500px] flex flex-col">
+                        <div className="flex justify-between items-center mb-6">
+                            <h3 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                                <TrendingUp size={20} className="text-primary" /> Evolución del Patrimonio
                             </h3>
-                            <Link to="/projections" className="text-xs text-primary hover:underline flex items-center">
-                                Ver Proyecciones <ArrowRight size={12} className="ml-1" />
-                            </Link>
+                            <div className="flex gap-2">
+                                {/* Time range toggles generally belong here, placeholder for now */}
+                                <span className="text-xs font-bold text-slate-400 bg-slate-100 dark:bg-white/5 px-2 py-1 rounded">YTD</span>
+                            </div>
                         </div>
-                        <div className="space-y-6">
-                            <div>
-                                <div className="flex justify-between items-center mb-1">
-                                    <span className="text-sm font-medium text-gray-600 dark:text-gray-400">Ingresos</span>
-                                    <span className="text-sm font-bold text-gray-900 dark:text-white text-green-600">{formatCurrency(totalIncome)}</span>
-                                </div>
-                                <div className="w-full bg-gray-200 dark:bg-white/10 rounded-full h-2">
-                                    <div className="bg-green-500 h-2 rounded-full" style={{ width: '100%' }}></div>
-                                </div>
-                            </div>
-                            <div>
-                                <div className="flex justify-between items-center mb-1">
-                                    <span className="text-sm font-medium text-gray-600 dark:text-gray-400">Gastos</span>
-                                    <span className="text-sm font-bold text-gray-900 dark:text-white text-red-500">{formatCurrency(totalExpenses)}</span>
-                                </div>
-                                <div className="w-full bg-gray-200 dark:bg-white/10 rounded-full h-2">
-                                    <div className="bg-red-500 h-2 rounded-full" style={{ width: `${Math.min((totalExpenses / totalIncome) * 100, 100)}%` }}></div>
-                                </div>
-                            </div>
 
-                            <div className="bg-gray-50 dark:bg-white/5 p-4 rounded-lg mt-4 space-y-3">
-                                <h4 className="text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">Salud Financiera</h4>
-                                <div className="flex justify-between text-sm"><span className="text-gray-600 dark:text-gray-300">Tasa de Ahorro</span><span className="font-bold text-primary">{(availableSavings / totalIncome * 100).toFixed(1)}%</span></div>
-                            </div>
+                        <div className="flex-1 min-h-0">
+                            <PortfolioHistory history={wealthHistory} />
                         </div>
                     </div>
 
-                    {/* Investment Details */}
-                    <div className="space-y-6 lg:col-span-2">
-                        <div className="bg-gradient-to-br from-blue-600 to-blue-800 rounded-xl p-8 text-white shadow-xl relative overflow-hidden flex flex-col justify-center h-full">
-                            <div className="absolute top-0 right-0 -mr-20 -mt-20 w-64 h-64 rounded-full bg-white opacity-10 blur-3xl"></div>
-                            <div className="relative z-10 grid md:grid-cols-2 gap-8 items-center">
-                                <div>
-                                    <h3 className="text-2xl font-bold mb-2 flex items-center">
-                                        <Briefcase className="mr-3" size={24} /> Composición
-                                    </h3>
-                                    <p className="text-blue-100 mb-6">Tu patrimonio se distribuye principalmente en ahorros líquidos e inversiones.</p>
-
-                                    <div className="space-y-3">
-                                        <div className="flex justify-between text-sm border-b border-blue-400/30 pb-2">
-                                            <span>Ahorros (Cash Flow)</span>
-                                            <span className="font-medium">{formatCurrency(availableSavings)}</span>
-                                        </div>
-                                        <div className="flex justify-between text-sm border-b border-blue-400/30 pb-2">
-                                            <span>Inversiones Activas</span>
-                                            <span className="font-medium">{formatCurrency(investmentMetrics.current)}</span>
-                                        </div>
-                                        <div className="flex justify-between text-sm border-b border-blue-400/30 pb-2">
-                                            <span>Activos Materiales</span>
-                                            <span className="font-medium">{formatCurrency(data.materialInvestment)}</span>
-                                        </div>
-                                    </div>
-                                </div>
-                                <div className="bg-white/10 rounded-xl p-6 backdrop-blur-sm border border-white/20">
-                                    <p className="text-xs uppercase tracking-widest text-blue-200 mb-2">Total Consolidado</p>
-                                    <div className="text-4xl font-bold text-white tracking-tight mb-2">
-                                        {formatCurrency(netWorth)}
-                                    </div>
-                                    <div className="text-sm text-blue-200">
-                                        ≃ {formatUSD(netWorth / currencies.usd.rate)} USD
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </section>
-
-            {/* --- SECTION 2: CURRENCIES --- */}
-            <section className="border-t border-slate-200 dark:border-white/10 pt-12">
-                <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
-                    <div>
-                        <h2 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-3">
-                            <RefreshCw className="text-emerald-500" /> Valoración de Divisas
-                        </h2>
-                        <p className="text-gray-500 dark:text-gray-400 mt-1 text-sm">Monitor de tasas de cambio y conversión en tiempo real.</p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                        {isSimulating && (
-                            <span className="px-3 py-1 rounded-full bg-green-500/10 text-green-500 text-xs font-bold border border-green-500/20 flex items-center gap-2 animate-pulse">
-                                Live Simulation Active
-                            </span>
-                        )}
-                        {!isSimulating && (
-                            <span className="px-3 py-1 rounded-full bg-yellow-500/10 text-yellow-500 text-xs font-bold border border-yellow-500/20">
-                                Modo Manual
-                            </span>
-                        )}
-                    </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-                    {/* USD Card */}
-                    <div className={`bg-white/80 dark:bg-black/40 backdrop-blur-xl rounded-xl p-6 shadow-sm border ${editingCurrency === 'usd' ? 'border-primary ring-1 ring-primary' : 'border-gray-200 dark:border-white/10'} relative overflow-hidden transition-all duration-300`}>
-                        <div className="flex justify-between items-start mb-4">
-                            <div>
-                                <p className="text-sm font-bold text-gray-500 dark:text-gray-400">Dólar Estadounidense</p>
-
-                                {editingCurrency === 'usd' ? (
-                                    <div className="mt-2 flex items-center gap-2">
-                                        <span className="text-xl font-bold text-gray-900 dark:text-white">RD$</span>
-                                        <input
-                                            type="number"
-                                            autoFocus
-                                            className="w-24 p-1 text-xl font-bold border-b-2 border-primary bg-transparent outline-none text-gray-900 dark:text-white"
-                                            value={tempRate}
-                                            onChange={(e) => setTempRate(e.target.value)}
-                                        />
-                                        <button onClick={saveRate} className="p-1 text-green-600 hover:bg-green-50 rounded"><Save size={18} /></button>
-                                        <button onClick={cancelEditing} className="p-1 text-red-500 hover:bg-red-50 rounded"><X size={18} /></button>
-                                    </div>
-                                ) : (
-                                    <div className="group flex items-center gap-2 mt-2">
-                                        <h3 className="text-4xl font-bold text-gray-900 dark:text-white transition-all">RD$ {currencies.usd.rate.toFixed(2)}</h3>
-                                        <button
-                                            onClick={() => startEditing('usd', currencies.usd.rate)}
-                                            className="opacity-0 group-hover:opacity-100 p-1.5 text-gray-400 hover:text-primary hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-all"
-                                        >
-                                            <Edit2 size={16} />
-                                        </button>
-                                    </div>
-                                )}
-                            </div>
-                            <div className="w-12 h-12 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center text-green-600 dark:text-green-400">
-                                <DollarSign size={24} />
-                            </div>
-                        </div>
-                        <div className="flex items-center justify-between">
-                            <div className="flex items-center space-x-2">
-                                <span className={`flex items-center text-sm font-bold px-2 py-1 rounded-md ${currencies.usd.trend === 'up' ? 'text-green-600 bg-green-50 dark:bg-green-900/20' : 'text-red-500 bg-red-50 dark:bg-red-900/20'}`}>
-                                    {currencies.usd.trend === 'up' ? <TrendingUp size={16} className="mr-1" /> : <TrendingDown size={16} className="mr-1" />}
-                                    {currencies.usd.change > 0 ? '+' : ''}{currencies.usd.change}%
-                                </span>
-                            </div>
-                            <div className="text-xs text-gray-400 flex items-center gap-1">
-                                <RefreshCw size={10} className={isSimulating ? "animate-spin-slow" : ""} />
-                                {new Date(currencies.lastUpdated.getTime() + timeOffset).toLocaleTimeString()}
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* EUR Card */}
-                    <div className={`bg-white/80 dark:bg-black/40 backdrop-blur-xl rounded-xl p-6 shadow-sm border ${editingCurrency === 'eur' ? 'border-primary ring-1 ring-primary' : 'border-gray-200 dark:border-white/10'} relative overflow-hidden transition-all duration-300`}>
-                        <div className="flex justify-between items-start mb-4">
-                            <div>
-                                <p className="text-sm font-bold text-gray-500 dark:text-gray-400">Euro</p>
-
-                                {editingCurrency === 'eur' ? (
-                                    <div className="mt-2 flex items-center gap-2">
-                                        <span className="text-xl font-bold text-gray-900 dark:text-white">RD$</span>
-                                        <input
-                                            type="number"
-                                            autoFocus
-                                            className="w-24 p-1 text-xl font-bold border-b-2 border-primary bg-transparent outline-none text-gray-900 dark:text-white"
-                                            value={tempRate}
-                                            onChange={(e) => setTempRate(e.target.value)}
-                                        />
-                                        <button onClick={saveRate} className="p-1 text-green-600 hover:bg-green-50 rounded"><Save size={18} /></button>
-                                        <button onClick={cancelEditing} className="p-1 text-red-500 hover:bg-red-50 rounded"><X size={18} /></button>
-                                    </div>
-                                ) : (
-                                    <div className="group flex items-center gap-2 mt-2">
-                                        <h3 className="text-4xl font-bold text-gray-900 dark:text-white transition-all">RD$ {currencies.eur.rate.toFixed(2)}</h3>
-                                        <button
-                                            onClick={() => startEditing('eur', currencies.eur.rate)}
-                                            className="opacity-0 group-hover:opacity-100 p-1.5 text-gray-400 hover:text-primary hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-all"
-                                        >
-                                            <Edit2 size={16} />
-                                        </button>
-                                    </div>
-                                )}
-                            </div>
-                            <div className="w-12 h-12 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center text-blue-600 dark:text-blue-400">
-                                <Euro size={24} />
-                            </div>
-                        </div>
-                        <div className="flex items-center justify-between">
-                            <div className="flex items-center space-x-2">
-                                <span className={`flex items-center text-sm font-bold px-2 py-1 rounded-md ${currencies.eur.trend === 'up' ? 'text-green-600 bg-green-50 dark:bg-green-900/20' : 'text-red-500 bg-red-50 dark:bg-red-900/20'}`}>
-                                    {currencies.eur.trend === 'up' ? <TrendingUp size={16} className="mr-1" /> : <TrendingDown size={16} className="mr-1" />}
-                                    {currencies.eur.change > 0 ? '+' : ''}{currencies.eur.change}%
-                                </span>
-                            </div>
-                            <div className="text-xs text-gray-400 flex items-center gap-1">
-                                <RefreshCw size={10} className={isSimulating ? "animate-spin-slow" : ""} />
-                                {new Date(currencies.lastUpdated.getTime() + timeOffset).toLocaleTimeString()}
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Converter */}
-                    <div className="bg-gradient-to-br from-primary to-primaryDark rounded-xl p-6 shadow-lg text-white">
-                        <h3 className="font-bold mb-4 flex items-center text-lg">
-                            <Calculator className="mr-2" size={20} />
-                            Conversor Rápido
+                    {/* Breakdown / Composition (Moved below history for uniform reading) */}
+                    <div className="bg-white/80 dark:bg-black/40 backdrop-blur-xl p-6 rounded-2xl border border-slate-200 dark:border-white/10 shadow-sm">
+                        <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-6 flex items-center gap-2">
+                            <Briefcase size={20} /> Detalle de Composición
                         </h3>
-                        <div className="space-y-4">
-                            <div className="bg-white/10 rounded-lg p-3 flex items-center border border-white/20">
-                                <span className="text-sm font-bold w-12 text-center opacity-80">RD$</span>
+                        <div className="space-y-6">
+                            <ProgressBar
+                                label="Caja y Ahorros"
+                                amount={availableSavings}
+                                total={netWorth}
+                                color="bg-blue-500"
+                            />
+                            <ProgressBar
+                                label="Inversiones Financieras"
+                                amount={investmentMetrics.current}
+                                total={netWorth}
+                                color="bg-purple-500"
+                            />
+                            <ProgressBar
+                                label="Activos Materiales"
+                                amount={data.materialInvestment}
+                                total={netWorth}
+                                color="bg-yellow-500"
+                            />
+                        </div>
+                    </div>
+                </div>
+
+                {/* RIGHT COLUMN (SIDEBAR) - Span 4 */}
+                <div className="xl:col-span-4 space-y-6">
+                    {/* Asset Allocation Pie */}
+                    <div className="bg-white/80 dark:bg-black/40 backdrop-blur-xl p-6 rounded-2xl border border-slate-200 dark:border-white/10 shadow-sm min-h-[400px] flex flex-col">
+                        <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-2">Distribución</h3>
+                        <div className="flex-1 min-h-0">
+                            <AssetAllocation investments={data.investments || []} />
+                        </div>
+                    </div>
+
+                    {/* Currency Monitor (Compact) */}
+                    <div className="bg-white/80 dark:bg-black/40 backdrop-blur-xl rounded-2xl p-6 shadow-sm border border-slate-200 dark:border-white/10">
+                        <div className="flex justify-between items-center mb-4">
+                            <h3 className="font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                                <RefreshCw size={18} /> Monitor de Divisas
+                            </h3>
+                            <span className="text-[10px] font-bold text-emerald-500 bg-emerald-500/10 px-2 py-1 rounded-full uppercase">Live</span>
+                        </div>
+
+                        <div className="space-y-3">
+                            <CurrencyRow
+                                code="USD"
+                                rate={currencies.usd.rate}
+                                trend={currencies.usd.trend}
+                                onClick={() => startEditing('usd', currencies.usd.rate)}
+                            />
+                            <CurrencyRow
+                                code="EUR"
+                                rate={currencies.eur.rate}
+                                trend={currencies.eur.trend}
+                                onClick={() => startEditing('eur', currencies.eur.rate)}
+                            />
+                        </div>
+
+                        {/* Quick Converter */}
+                        <div className="mt-6 pt-6 border-t border-gray-100 dark:border-white/10">
+                            <h4 className="text-xs font-bold uppercase text-gray-500 mb-3">Conversor Rápido</h4>
+                            <div className="flex items-center gap-2 bg-gray-50 dark:bg-white/5 p-2 rounded-lg border border-gray-200 dark:border-white/10">
+                                <span className="text-sm font-bold text-gray-500">RD$</span>
                                 <input
-                                    className="bg-transparent border-none text-white placeholder-white/50 w-full text-right font-bold text-xl focus:ring-0 p-0 outline-none"
-                                    placeholder="0"
                                     type="number"
                                     value={calcAmount}
-                                    onChange={(e) => setCalcAmount(Number(e.target.value))}
+                                    onChange={e => setCalcAmount(Number(e.target.value))}
+                                    className="bg-transparent w-full font-bold outline-none text-right"
                                 />
                             </div>
-                            <div className="bg-black/20 rounded-lg p-3 flex items-center border border-white/10">
-                                <span className="text-sm font-bold w-12 text-center opacity-80">USD</span>
-                                <div className="w-full text-right font-bold text-xl opacity-90">
-                                    {formatUSD(calcAmount / currencies.usd.rate)}
-                                </div>
+                            <div className="mt-2 flex justify-between text-sm">
+                                <span className="text-gray-500">USD: <span className="font-bold text-gray-900 dark:text-white">{formatUSD(calcAmount / currencies.usd.rate)}</span></span>
+                                <span className="text-gray-500">EUR: <span className="font-bold text-gray-900 dark:text-white">€{(calcAmount / currencies.eur.rate).toFixed(2)}</span></span>
                             </div>
-                            <div className="bg-black/20 rounded-lg p-3 flex items-center border border-white/10">
-                                <span className="text-sm font-bold w-12 text-center opacity-80">EUR</span>
-                                <div className="w-full text-right font-bold text-xl opacity-90">
-                                    € {(calcAmount / currencies.eur.rate).toFixed(2)}
-                                </div>
-                            </div>
-
                         </div>
                     </div>
                 </div>
-            </section>
+            </div>
+
+            {/* Editing Logic */}
+            {editingCurrency && (
+                <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center">
+                    <div className="bg-white dark:bg-gray-900 p-6 rounded-xl shadow-2xl w-80">
+                        <h3 className="font-bold text-lg mb-4">Editar Tasa {editingCurrency.toUpperCase()}</h3>
+                        <input
+                            type="number"
+                            autoFocus
+                            className="w-full p-2 text-xl font-bold border rounded mb-4 bg-transparent border-gray-300 dark:border-gray-700"
+                            value={tempRate}
+                            onChange={(e) => setTempRate(e.target.value)}
+                        />
+                        <div className="flex justify-end gap-2">
+                            <button onClick={cancelEditing} className="px-4 py-2 text-sm text-gray-500 hover:bg-gray-100 rounded">Cancelar</button>
+                            <button onClick={saveRate} className="px-4 py-2 text-sm bg-primary text-white rounded hover:bg-primaryDark">Guardar</button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };
 
-const Card = ({ label, value, icon: Icon, color, borderColor, highlight }: any) => (
-    <div className={`bg-white/80 dark:bg-black/40 backdrop-blur-xl overflow-hidden shadow-sm rounded-xl border-l-4 ${borderColor} p-6 border border-gray-100 dark:border-white/10 ${highlight ? 'ring-2 ring-emerald-500/20 shadow-emerald-500/10' : ''}`}>
-        <div className="flex items-center">
-            <div className="flex-shrink-0">
-                <Icon className={`${color}`} size={32} />
+export const Wealth: React.FC = () => (
+    <ErrorBoundary>
+        <WealthContent />
+    </ErrorBoundary>
+);
+
+// Sub-components for cleaner file
+const KPICard = ({ label, value, icon: Icon, color, trend }: any) => (
+    <div className="bg-white/80 dark:bg-black/40 backdrop-blur-xl p-5 rounded-2xl border border-slate-200 dark:border-white/10 shadow-sm flex flex-col justify-between h-full hover:border-blue-500/20 transition-all">
+        <div className="flex items-start justify-between mb-2">
+            <div className={`p-2 rounded-lg ${color} bg-opacity-10`}>
+                <Icon className={color} size={20} />
             </div>
-            <div className="ml-5 w-0 flex-1">
-                <dt className="text-sm font-medium text-gray-500 dark:text-gray-400 truncate">{label}</dt>
-                <dd className="text-xl font-bold text-gray-900 dark:text-white">{formatCurrency(value)}</dd>
+            {trend && (
+                <span className={`text-xs font-bold px-2 py-1 rounded-full ${trend > 0 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                    {trend > 0 ? '+' : ''}{trend}%
+                </span>
+            )}
+        </div>
+        <div>
+            <p className="text-xs text-gray-500 dark:text-gray-400 font-medium uppercase tracking-wide">{label}</p>
+            <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">{formatCurrency(value)}</p>
+        </div>
+    </div>
+);
+const ProgressBar = ({ label, amount, total, color }: any) => (
+    <div>
+        <div className="flex justify-between items-center mb-1 text-sm">
+            <span className="text-gray-600 dark:text-gray-300">{label}</span>
+            <span className="font-bold text-gray-900 dark:text-white">{formatCurrency(amount)} <span className="text-xs text-gray-400 font-normal">({((amount / total) * 100).toFixed(1)}%)</span></span>
+        </div>
+        <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+            <div className={`${color} h-2 rounded-full`} style={{ width: `${(amount / total) * 100}%` }}></div>
+        </div>
+    </div>
+);
+
+const CurrencyRow = ({ code, rate, trend, onClick }: any) => (
+    <div
+        onClick={onClick}
+        className="flex items-center justify-between p-3 rounded-lg hover:bg-gray-50 dark:hover:bg-white/5 cursor-pointer transition-colors border border-transparent hover:border-gray-200 dark:hover:border-white/10 group"
+    >
+        <div className="flex items-center gap-3">
+            <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs ${code === 'USD' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}`}>
+                {code === 'USD' ? '$' : '€'}
             </div>
+            <span className="font-medium text-gray-900 dark:text-white">{code === 'USD' ? 'Dólar' : 'Euro'}</span>
+        </div>
+        <div className="text-right">
+            <p className="font-bold text-gray-900 dark:text-white">RD$ {rate.toFixed(2)}</p>
+            {/* <span className="text-xs text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity">Click para editar</span> */}
         </div>
     </div>
 );
