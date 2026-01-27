@@ -18,7 +18,9 @@ import {
     Coins,
     Target,
     ArrowUpRight,
-    ArrowDownRight
+    ArrowDownRight,
+    PieChart,
+    Briefcase
 } from 'lucide-react';
 
 // Categorías de inversión
@@ -131,88 +133,109 @@ export const Investments: React.FC = () => {
     };
 
     return (
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 pb-24 space-y-8">
-            {/* Header */}
-            <div className="md:flex md:items-center md:justify-between">
-                <div className="flex-1 min-w-0">
-                    <h2 className="text-2xl font-bold leading-7 sm:text-3xl sm:truncate text-gray-900 dark:text-white flex items-center gap-3">
-                        <PiggyBank className="text-emerald-500" /> Inversiones
+        <div className="max-w-[1600px] mx-auto p-6 md:p-8 space-y-8 pb-32">
+
+            {/* HEADER */}
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div>
+                    <h2 className="text-3xl font-bold text-gray-900 dark:text-white flex items-center gap-3">
+                        <Briefcase className="text-emerald-500" size={32} />
+                        Portafolio de Inversiones
                     </h2>
-                    <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                        Gestiona tu dinero destinado a inversiones y ahorro a largo plazo.
+                    <p className="mt-1 text-base text-gray-500 dark:text-gray-400 max-w-2xl">
+                        Gestiona y monitorea el rendimiento de tus activos financieros a largo plazo.
                     </p>
                 </div>
-                <div className="mt-4 md:mt-0">
+                <div>
                     <button
                         onClick={() => setIsAdding(true)}
-                        className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-medium transition-colors shadow-lg shadow-emerald-500/20"
+                        className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold shadow-lg shadow-emerald-500/20 transition-all active:scale-95"
                     >
                         <Plus size={20} /> Nueva Inversión
                     </button>
                 </div>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                {/* Left Column: Stats & Chart */}
-                <div className="space-y-6">
-                    {/* Summary Cards */}
-                    <div className="grid grid-cols-1 gap-4">
-                        <div className="bg-gradient-to-br from-emerald-600 to-emerald-800 rounded-2xl p-6 text-white shadow-xl relative overflow-hidden">
-                            <div className="absolute top-0 right-0 -mr-10 -mt-10 w-40 h-40 rounded-full bg-white opacity-10 blur-xl"></div>
-                            <div className="relative z-10">
-                                <p className="text-emerald-100 text-sm font-medium uppercase tracking-wider mb-1">Valor Actual</p>
-                                <h3 className="text-3xl font-bold tracking-tight">{formatCurrency(calculateMetrics.current)}</h3>
-
-                                <div className="mt-4 flex items-center gap-2">
-                                    <span className={`flex items-center text-sm font-bold bg-white/20 px-2 py-1 rounded-lg ${calculateMetrics.pnl >= 0 ? 'text-white' : 'text-red-200'}`}>
-                                        {calculateMetrics.pnl >= 0 ? <ArrowUpRight size={16} /> : <ArrowDownRight size={16} />}
-                                        {Math.abs(calculateMetrics.pnlPercent).toFixed(1)}%
-                                    </span>
-                                    <span className="text-sm text-emerald-100">
-                                        {calculateMetrics.pnl >= 0 ? '+' : ''}{formatCurrency(calculateMetrics.pnl)}
-                                    </span>
-                                </div>
+            {/* KPI ROW */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+                {/* Total Value Logic */}
+                <div className="bg-gradient-to-br from-emerald-600 to-emerald-800 rounded-2xl p-6 text-white shadow-xl relative overflow-hidden group">
+                    <div className="absolute top-0 right-0 -mr-10 -mt-10 w-40 h-40 rounded-full bg-white opacity-10 blur-xl group-hover:scale-110 transition-transform duration-700"></div>
+                    <div className="relative z-10">
+                        <div className="flex justify-between items-start mb-2">
+                            <p className="text-emerald-100 text-xs font-bold uppercase tracking-wider">Valor de Mercado</p>
+                            <div className="p-2 bg-white/10 rounded-lg backdrop-blur-sm">
+                                <DollarSign size={20} className="text-white" />
                             </div>
                         </div>
+                        <h3 className="text-4xl font-extrabold tracking-tight mb-4">{formatCurrency(calculateMetrics.current)}</h3>
 
-                        <div className="bg-white/80 dark:bg-black/40 backdrop-blur-xl rounded-2xl p-6 border border-gray-100 dark:border-white/10 flex justify-between items-center">
-                            <div>
-                                <p className="text-sm text-gray-500 dark:text-gray-400">Capital Invertido</p>
-                                <p className="text-xl font-bold text-gray-900 dark:text-white">{formatCurrency(calculateMetrics.invested)}</p>
-                            </div>
-                            <div className="text-right">
-                                <p className="text-sm text-gray-500 dark:text-gray-400">Activos</p>
-                                <p className="text-xl font-bold text-gray-900 dark:text-white">{data.investments.length}</p>
-                            </div>
+                        <div className="flex items-center gap-2">
+                            <span className={`flex items-center text-xs font-bold bg-white/20 px-2 py-1 rounded-lg backdrop-blur-md border border-white/10 ${calculateMetrics.pnl >= 0 ? 'text-white' : 'text-red-200'}`}>
+                                {calculateMetrics.pnl >= 0 ? <ArrowUpRight size={14} /> : <ArrowDownRight size={14} />}
+                                {Math.abs(calculateMetrics.pnlPercent).toFixed(1)}% ROI
+                            </span>
+                            <span className="text-xs font-medium text-emerald-100 opacity-80">
+                                {calculateMetrics.pnl >= 0 ? '+' : ''}{formatCurrency(calculateMetrics.pnl)} (Ganancia Neta)
+                            </span>
                         </div>
-                    </div>
-
-                    {/* Asset Allocation Chart */}
-                    <div className="h-[400px]">
-                        <AssetAllocation investments={data.investments} />
                     </div>
                 </div>
 
-                {/* Right Column: List */}
-                <div className="lg:col-span-2 space-y-4">
-                    <h3 className="text-lg font-bold text-gray-900 dark:text-white">Portafolio</h3>
+                {/* Invested Capital */}
+                <KPIPlain
+                    label="Capital Invertido"
+                    value={calculateMetrics.invested}
+                    icon={PiggyBank}
+                    color="text-blue-500"
+                    desc="Monto total aportado sin contar rendimientos."
+                />
+
+                {/* Asset Count */}
+                <KPIPlain
+                    label="Total Activos"
+                    value={data.investments.length}
+                    icon={Briefcase}
+                    color="text-purple-500"
+                    desc="Número de instrumentos financieros activos."
+                    suffix=""
+                    isCurrency={false}
+                />
+            </div>
+
+            {/* MAIN DASHBOARD GRID */}
+            <div className="grid grid-cols-1 xl:grid-cols-12 gap-6">
+
+                {/* LEFT COLUMN: LIST (8 Span) */}
+                <div className="xl:col-span-8 space-y-6">
+                    <div className="flex items-center justify-between">
+                        <h3 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                            <Briefcase size={20} className="text-slate-400" />
+                            Activos en Cartera
+                        </h3>
+                        <span className="text-xs font-bold text-slate-400 bg-slate-100 dark:bg-white/5 px-3 py-1 rounded-full uppercase tracking-wider">
+                            {data.investments.length} Items Listed
+                        </span>
+                    </div>
 
                     {data.investments.length === 0 ? (
-                        <div className="bg-white/80 dark:bg-black/40 backdrop-blur-xl rounded-xl p-12 border border-gray-200 dark:border-white/10 text-center">
-                            <PiggyBank size={48} className="mx-auto text-gray-300 dark:text-gray-600 mb-4" />
-                            <h4 className="text-lg font-medium text-gray-700 dark:text-gray-300 mb-2">Sin inversiones registradas</h4>
-                            <p className="text-gray-500 dark:text-gray-400 text-sm mb-4">
-                                Comienza a registrar tus inversiones para hacer seguimiento de tu patrimonio.
+                        <div className="bg-white/80 dark:bg-black/40 backdrop-blur-xl rounded-2xl p-12 border border-dashed border-gray-300 dark:border-white/10 text-center">
+                            <div className="w-16 h-16 bg-gray-100 dark:bg-white/5 rounded-full flex items-center justify-center mx-auto mb-4">
+                                <PiggyBank size={32} className="text-gray-400" />
+                            </div>
+                            <h4 className="text-lg font-bold text-gray-700 dark:text-gray-300 mb-2">Tu portafolio está vacío</h4>
+                            <p className="text-gray-500 dark:text-gray-400 text-sm mb-6 max-w-md mx-auto">
+                                Comienza a registrar tus inversiones para visualizar tu crecimiento patrimonial y diversificación.
                             </p>
                             <button
                                 onClick={() => setIsAdding(true)}
-                                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 font-medium hover:bg-emerald-200 dark:hover:bg-emerald-900/50 transition-colors"
+                                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 font-bold hover:bg-emerald-200 dark:hover:bg-emerald-900/50 transition-colors"
                             >
                                 <Plus size={16} /> Añadir primera inversión
                             </button>
                         </div>
                     ) : (
-                        <div className="grid gap-4">
+                        <div className="grid grid-cols-1 gap-4">
                             {data.investments.map(inv => {
                                 const CategoryIcon = getCategoryIcon(inv.category);
                                 const currentVal = inv.currentValue ?? inv.amount;
@@ -222,58 +245,60 @@ export const Investments: React.FC = () => {
                                 return (
                                     <div
                                         key={inv.id}
-                                        className="bg-white/80 dark:bg-black/40 backdrop-blur-xl rounded-xl p-4 border border-gray-200 dark:border-white/10 flex items-center justify-between group hover:shadow-lg hover:border-emerald-500/30 transition-all"
+                                        className="bg-white/80 dark:bg-black/40 backdrop-blur-xl rounded-xl p-5 border border-gray-200 dark:border-white/10 flex flex-col md:flex-row md:items-center justify-between group hover:shadow-lg hover:border-emerald-500/30 transition-all relative overflow-hidden"
                                     >
-                                        <div className="flex items-center gap-4">
-                                            <div className="w-12 h-12 rounded-xl bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center text-emerald-600 dark:text-emerald-400">
+                                        <div className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-transparent via-emerald-500/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
+
+                                        <div className="flex items-center gap-4 mb-4 md:mb-0">
+                                            <div className="w-12 h-12 rounded-xl bg-gray-100 dark:bg-white/5 flex items-center justify-center text-gray-600 dark:text-gray-400 group-hover:bg-emerald-50 dark:group-hover:bg-emerald-900/20 group-hover:text-emerald-600 transition-colors">
                                                 <CategoryIcon size={24} />
                                             </div>
                                             <div>
-                                                <h4 className="font-bold text-gray-900 dark:text-white">{inv.name}</h4>
-                                                <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
-                                                    <span className="px-2 py-0.5 rounded-full bg-gray-100 dark:bg-white/5 text-xs">
+                                                <h4 className="font-bold text-gray-900 dark:text-white text-lg">{inv.name}</h4>
+                                                <div className="flex items-center gap-2 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">
+                                                    <span className="bg-gray-100 dark:bg-white/5 px-2 py-0.5 rounded text-[10px]">
                                                         {getCategoryLabel(inv.category)}
                                                     </span>
                                                     <span>•</span>
                                                     <span>{inv.frequency}</span>
+                                                    <span>•</span>
+                                                    <span>{inv.currency}</span>
                                                 </div>
                                             </div>
                                         </div>
 
-                                        <div className="flex items-center gap-6">
-                                            {/* P&L Mini View */}
-                                            <div className="text-right hidden sm:block">
-                                                <p className="text-xs text-gray-500">Valor Actual</p>
-                                                <p className="font-bold text-gray-900 dark:text-white">{formatCurrency(currentVal)}</p>
+                                        <div className="flex items-center justify-between md:justify-end gap-8 md:gap-12 w-full md:w-auto">
+                                            <div className="text-right">
+                                                <p className="text-[10px] font-bold text-gray-400 uppercase">Costo Base</p>
+                                                <p className="font-bold text-gray-600 dark:text-gray-300 font-mono">
+                                                    {formatCurrency(inv.amount)}
+                                                </p>
+                                            </div>
+
+                                            <div className="text-right">
+                                                <p className="text-[10px] font-bold text-gray-400 uppercase">Valor Actual</p>
+                                                <p className="font-extrabold text-gray-900 dark:text-white text-lg font-mono">{formatCurrency(currentVal)}</p>
                                                 {inv.currentValue && (
-                                                    <p className={`text-xs ${gain >= 0 ? 'text-green-500' : 'text-red-500'}`}>
-                                                        {gain >= 0 ? '+' : ''}{gainPercent.toFixed(1)}%
+                                                    <p className={`text-xs font-bold ${gain >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
+                                                        {gain >= 0 ? '+' : ''}{gainPercent.toFixed(1)}% ({gain >= 0 ? '+' : ''}{formatCurrency(gain)})
                                                     </p>
                                                 )}
                                             </div>
 
-                                            <div className="text-right">
-                                                <p className="text-xs text-gray-500">Costo Base</p>
-                                                <p className="font-bold text-gray-700 dark:text-gray-300">
-                                                    {formatCurrency(inv.amount)}
-                                                </p>
-                                                <p className="text-xs text-gray-500">{inv.currency}</p>
-                                            </div>
-
-                                            <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                            <div className="flex gap-1 md:opacity-0 group-hover:opacity-100 transition-opacity">
                                                 <button
                                                     onClick={() => handleEdit(inv)}
                                                     className="p-2 rounded-lg text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition-colors"
                                                     title="Editar"
                                                 >
-                                                    <Edit2 size={18} />
+                                                    <Edit2 size={16} />
                                                 </button>
                                                 <button
                                                     onClick={() => handleDelete(inv.id)}
-                                                    className="p-2 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                                                    className="p-2 rounded-lg text-gray-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/20 transition-colors"
                                                     title="Eliminar"
                                                 >
-                                                    <Trash2 size={18} />
+                                                    <Trash2 size={16} />
                                                 </button>
                                             </div>
                                         </div>
@@ -283,40 +308,71 @@ export const Investments: React.FC = () => {
                         </div>
                     )}
                 </div>
+
+                {/* RIGHT COLUMN: SIDEBAR (4 Span) */}
+                <div className="xl:col-span-4 space-y-6">
+                    {/* Asset Allocation Sidebar */}
+                    <div className="bg-white/80 dark:bg-black/40 backdrop-blur-xl rounded-2xl p-6 border border-gray-200 dark:border-white/10 shadow-sm flex flex-col min-h-[400px]">
+                        <div className="flex justify-between items-center mb-4">
+                            <h3 className="font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                                <PieChart size={18} /> Diversificación
+                            </h3>
+                        </div>
+                        <div className="flex-1">
+                            <AssetAllocation investments={data.investments} />
+                        </div>
+                        <p className="text-xs text-center text-gray-400 mt-4 leading-relaxed">
+                            Una cartera diversificada reduce el riesgo y estabiliza los retornos a largo plazo.
+                        </p>
+                    </div>
+
+                    {/* Quick Stats or Tips could go here */}
+                    <div className="bg-gradient-to-br from-indigo-50 to-blue-50 dark:from-indigo-900/20 dark:to-blue-900/20 rounded-2xl p-6 border border-indigo-100 dark:border-white/5">
+                        <h4 className="font-bold text-indigo-900 dark:text-indigo-100 mb-2 text-sm flex items-center gap-2">
+                            <Target size={16} /> Estrategia
+                        </h4>
+                        <p className="text-xs text-indigo-800/70 dark:text-indigo-200/70 leading-relaxed">
+                            Mantén tu asignación de activos alineada con tu horizonte temporal y tolerancia al riesgo. Rebalancea periódicamente.
+                        </p>
+                    </div>
+                </div>
+
             </div>
 
             {/* Add/Edit Form Modal */}
             {isAdding && (
-                <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-                    <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-lg border border-gray-200 dark:border-white/10 max-h-[90vh] overflow-y-auto">
-                        <div className="p-6 border-b border-gray-200 dark:border-white/10 flex justify-between items-center sticky top-0 bg-white dark:bg-slate-800 z-10">
+                <div className="fixed inset-0 bg-black/60 backdrop-blur-md z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
+                    <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-lg border border-gray-200 dark:border-white/10 max-h-[90vh] overflow-y-auto transform scale-100 opacity-100 transition-all">
+                        <div className="p-6 border-b border-gray-200 dark:border-white/10 flex justify-between items-center sticky top-0 bg-white dark:bg-slate-900 z-10">
                             <h3 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
-                                <PiggyBank className="text-emerald-500" />
+                                <div className="p-2 bg-emerald-100 dark:bg-emerald-900/30 rounded-lg text-emerald-600">
+                                    <PiggyBank size={20} />
+                                </div>
                                 {editingId ? 'Editar Inversión' : 'Nueva Inversión'}
                             </h3>
-                            <button onClick={resetForm} className="text-gray-400 hover:text-gray-600 dark:hover:text-white">
-                                <X size={20} />
+                            <button onClick={resetForm} className="text-gray-400 hover:text-gray-600 dark:hover:text-white transition-colors">
+                                <X size={24} />
                             </button>
                         </div>
 
-                        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+                        <form onSubmit={handleSubmit} className="p-6 space-y-5">
                             {/* Nombre */}
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Nombre</label>
+                                <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1.5">Nombre del Activo</label>
                                 <input
                                     type="text"
                                     required
                                     value={formData.name}
                                     onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
-                                    className="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-white/10 bg-white dark:bg-black/20 text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none"
-                                    placeholder="Ej: Fondo de emergencia, CDT..."
+                                    className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-black/40 text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none transition-all placeholder:text-gray-400"
+                                    placeholder="Ej: Fondo de emergencia, Acciones AAPL..."
                                 />
                             </div>
 
                             {/* Monto y Valor Actual */}
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Costo (Inversión)</label>
+                                    <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1.5">Costo Inicial</label>
                                     <div className="relative">
                                         <DollarSign size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
                                         <input
@@ -326,14 +382,14 @@ export const Investments: React.FC = () => {
                                             step="0.01"
                                             value={formData.amount}
                                             onChange={(e) => setFormData(prev => ({ ...prev, amount: e.target.value }))}
-                                            className="w-full pl-9 pr-4 py-2 rounded-lg border border-gray-300 dark:border-white/10 bg-white dark:bg-black/20 text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none"
+                                            className="w-full pl-9 pr-4 py-3 rounded-xl border border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-black/40 text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none transition-all font-mono"
                                             placeholder="0.00"
                                         />
                                     </div>
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                                        Valor Actual <span className="text-xs text-gray-500">(Opcional)</span>
+                                    <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1.5">
+                                        Valor Mercado <span className="text-[10px] lowercase font-normal opacity-70">(opcional)</span>
                                     </label>
                                     <div className="relative">
                                         <TrendingUp size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
@@ -343,7 +399,7 @@ export const Investments: React.FC = () => {
                                             step="0.01"
                                             value={formData.currentValue}
                                             onChange={(e) => setFormData(prev => ({ ...prev, currentValue: e.target.value }))}
-                                            className="w-full pl-9 pr-4 py-2 rounded-lg border border-gray-300 dark:border-white/10 bg-white dark:bg-black/20 text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none"
+                                            className="w-full pl-9 pr-4 py-3 rounded-xl border border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-black/40 text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none transition-all font-mono"
                                             placeholder={formData.amount || "0.00"}
                                         />
                                     </div>
@@ -352,26 +408,26 @@ export const Investments: React.FC = () => {
 
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Moneda</label>
+                                    <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1.5">Moneda</label>
                                     <select
                                         value={formData.currency}
                                         onChange={(e) => setFormData(prev => ({ ...prev, currency: e.target.value as Transaction['currency'] }))}
-                                        className="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-white/10 bg-white dark:bg-black/20 text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none"
+                                        className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-black/40 text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none transition-all appearance-none"
                                     >
-                                        <option value="DOP">DOP</option>
-                                        <option value="USD">USD</option>
-                                        <option value="EUR">EUR</option>
+                                        <option value="DOP">Peso Dominicano (DOP)</option>
+                                        <option value="USD">Dólar (USD)</option>
+                                        <option value="EUR">Euro (EUR)</option>
                                     </select>
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Fecha</label>
+                                    <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1.5">Fecha Inicio</label>
                                     <div className="relative">
                                         <Calendar size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
                                         <input
                                             type="date"
                                             value={formData.date}
                                             onChange={(e) => setFormData(prev => ({ ...prev, date: e.target.value }))}
-                                            className="w-full pl-9 pr-4 py-2 rounded-lg border border-gray-300 dark:border-white/10 bg-white dark:bg-black/20 text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none"
+                                            className="w-full pl-9 pr-4 py-3 rounded-xl border border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-black/40 text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none transition-all"
                                         />
                                     </div>
                                 </div>
@@ -379,56 +435,57 @@ export const Investments: React.FC = () => {
 
                             {/* Categoría */}
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Categoría</label>
-                                <div className="grid grid-cols-3 gap-2">
+                                <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">Categoría</label>
+                                <div className="grid grid-cols-3 gap-3">
                                     {INVESTMENT_CATEGORIES.map(cat => {
                                         const Icon = cat.icon;
+                                        const isSelected = formData.category === cat.id;
                                         return (
                                             <button
                                                 key={cat.id}
                                                 type="button"
                                                 onClick={() => setFormData(prev => ({ ...prev, category: cat.id }))}
-                                                className={`flex flex-col items-center gap-1 p-3 rounded-lg border transition-all ${formData.category === cat.id
-                                                    ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-500 text-emerald-700 dark:text-emerald-400'
-                                                    : 'border-gray-200 dark:border-white/10 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-white/5'
+                                                className={`flex flex-col items-center gap-1.5 p-3 rounded-xl border transition-all ${isSelected
+                                                    ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-500 text-emerald-700 dark:text-emerald-400 ring-1 ring-emerald-500/50'
+                                                    : 'border-gray-200 dark:border-white/10 text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-white/5'
                                                     }`}
                                             >
-                                                <Icon size={20} />
-                                                <span className="text-xs font-medium">{cat.label}</span>
+                                                <Icon size={20} className={isSelected ? 'text-emerald-600' : 'opacity-70'} />
+                                                <span className="text-[10px] font-bold uppercase">{cat.label}</span>
                                             </button>
                                         );
                                     })}
                                 </div>
                             </div>
 
-                            {/* Frecuencia (Opción menos relevante ahora que es Asset Tracking, pero mantenida) */}
+                            {/* Frecuencia */}
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Frecuencia (Opcional)</label>
+                                <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1.5">Tipo de Aporte</label>
                                 <select
                                     value={formData.frequency}
                                     onChange={(e) => setFormData(prev => ({ ...prev, frequency: e.target.value as Transaction['frequency'] }))}
-                                    className="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-white/10 bg-white dark:bg-black/20 text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none"
+                                    className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-black/40 text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none transition-all appearance-none"
                                 >
-                                    <option value="Mensual">Mensual (Flujo)</option>
-                                    <option value="Fijo">Único (Capital)</option>
-                                    <option value="Variable">Variable</option>
+                                    <option value="Mensual">Recurrente (Mensual)</option>
+                                    <option value="Fijo">Único (Capital Fijo)</option>
+                                    <option value="Variable">Variable (Irregular)</option>
                                 </select>
                             </div>
 
                             {/* Actions */}
-                            <div className="flex gap-3 pt-4">
+                            <div className="flex gap-4 pt-4 border-t border-gray-100 dark:border-white/5">
                                 <button
                                     type="button"
                                     onClick={resetForm}
-                                    className="flex-1 px-4 py-2 rounded-lg border border-gray-300 dark:border-white/10 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors"
+                                    className="flex-1 px-4 py-3 rounded-xl border border-gray-200 dark:border-white/10 text-gray-700 dark:text-gray-300 font-bold hover:bg-gray-50 dark:hover:bg-white/5 transition-colors"
                                 >
                                     Cancelar
                                 </button>
                                 <button
                                     type="submit"
-                                    className="flex-1 px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-medium transition-colors flex items-center justify-center gap-2"
+                                    className="flex-1 px-4 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold transition-transform active:scale-95 shadow-lg shadow-emerald-500/20 flex items-center justify-center gap-2"
                                 >
-                                    <Save size={18} /> {editingId ? 'Actualizar' : 'Guardar'}
+                                    <Save size={18} /> {editingId ? 'Actualizar Activo' : 'Guardar Activo'}
                                 </button>
                             </div>
                         </form>
@@ -438,3 +495,23 @@ export const Investments: React.FC = () => {
         </div>
     );
 };
+
+// Sub Component for standard KPIs
+const KPIPlain = ({ label, value, icon: Icon, color, desc, suffix = '', isCurrency = true }: any) => (
+    <div className="bg-white/80 dark:bg-black/40 backdrop-blur-xl p-6 rounded-2xl border border-slate-200 dark:border-white/10 shadow-sm flex flex-col justify-between h-full group hover:border-emerald-500/20 transition-all">
+        <div className="flex justify-between items-start mb-4">
+            <div>
+                <p className="text-xs font-bold text-slate-400 uppercase tracking-wide mb-1">{label}</p>
+                <h3 className="text-2xl font-extrabold text-slate-800 dark:text-white">
+                    {isCurrency ? formatCurrency(value) : value}{suffix}
+                </h3>
+            </div>
+            <div className={`p-3 rounded-xl ${color.replace('text-', 'bg-').replace('500', '100')} dark:bg-white/5`}>
+                <Icon size={24} className={color} />
+            </div>
+        </div>
+        <p className="text-xs text-slate-500 dark:text-gray-400 leading-relaxed">
+            {desc}
+        </p>
+    </div>
+);
