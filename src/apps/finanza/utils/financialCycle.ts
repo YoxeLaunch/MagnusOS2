@@ -64,13 +64,16 @@ export const getFinancialCycle = (referenceDate: Date): FinancialCycle => {
  * Checks if a transaction date falls within a cycle
  */
 export const isDateInCycle = (dateStr: string, cycle: FinancialCycle): boolean => {
-    const date = new Date(dateStr);
-    // Reset times to avoid timezone/hour issues
-    const d = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-    const start = new Date(cycle.start.getFullYear(), cycle.start.getMonth(), cycle.start.getDate());
-    const end = new Date(cycle.end.getFullYear(), cycle.end.getMonth(), cycle.end.getDate());
+    // Parse input date (YYYY-MM-DD) manually to avoid timezone issues
+    const [y, m, d] = dateStr.split('-').map(Number);
+    // Create UTC date for the transaction (00:00:00 UTC)
+    const transactionDate = new Date(Date.UTC(y, m - 1, d));
 
-    return d >= start && d <= end;
+    // Normalize cycle dates to UTC (00:00:00 UTC)
+    const start = new Date(Date.UTC(cycle.start.getFullYear(), cycle.start.getMonth(), cycle.start.getDate()));
+    const end = new Date(Date.UTC(cycle.end.getFullYear(), cycle.end.getMonth(), cycle.end.getDate()));
+
+    return transactionDate >= start && transactionDate <= end;
 };
 
 /**

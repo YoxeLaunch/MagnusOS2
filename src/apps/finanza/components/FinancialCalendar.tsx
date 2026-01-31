@@ -1,6 +1,7 @@
 import React from 'react';
 import { ChevronLeft, ChevronRight, Plus } from 'lucide-react';
 import { DailyTransaction } from '../types';
+import { getFinancialCycle } from '../utils/financialCycle';
 
 interface FinancialCalendarProps {
     currentDate: Date;
@@ -43,30 +44,52 @@ export const FinancialCalendar: React.FC<FinancialCalendarProps> = ({
 
         // Days
         for (let day = 1; day <= totalDays; day++) {
-            const dateStr = new Date(currentDate.getFullYear(), currentDate.getMonth(), day).toISOString().split('T')[0];
-            const isToday = new Date().toDateString() === new Date(currentDate.getFullYear(), currentDate.getMonth(), day).toDateString();
+            const date = new Date(currentDate.getFullYear(), currentDate.getMonth(), day);
+            const dateStr = date.toISOString().split('T')[0];
+            const isToday = new Date().toDateString() === date.toDateString();
             const data = transactionsByDate[dateStr];
             const hasData = !!data;
+
+            // Cycle Logic Visualization
+            const cycle = getFinancialCycle(date);
+            // Check if day belongs to NEXT cycle (e.g. we are in Jan, but day is Jan 28 -> Cycle Feb)
+            // Logic: If cycle label is different from current month name (and isn't the exception Dec->Jan)
+            const currentMonthName = currentDate.toLocaleDateString('es-ES', { month: 'long' });
+            const isNextCycle = cycle.label.toLowerCase() !== currentMonthName.toLowerCase() &&
+                !(currentDate.getMonth() === 11 && cycle.label === 'Enero'); // Exception for Dec
+
+            // Special styling for next cycle days (usually 26th+)
+            const cycleStyle = isNextCycle
+                ? 'bg-amber-50/50 dark:bg-amber-900/10 border-amber-100 dark:border-amber-900/20'
+                : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-white/5';
 
             days.push(
                 <div
                     key={day}
-                    onClick={() => onDateClick(new Date(currentDate.getFullYear(), currentDate.getMonth(), day))}
+                    onClick={() => onDateClick(date)}
                     className={`
                         min-h-[100px] p-2 rounded-xl border transition-all cursor-pointer relative group flex flex-col justify-between
                         ${isToday
-                            ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/10 ring-1 ring-blue-500'
-                            : 'border-slate-200 dark:border-white/5 bg-white dark:bg-slate-800 hover:border-slate-300 dark:hover:border-white/20 hover:shadow-md'
+                            ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/10 ring-1 ring-blue-500' // Today always highlighted
+                            : `${cycleStyle} hover:border-slate-300 dark:hover:border-white/20 hover:shadow-md`
                         }
                     `}
                 >
                     <div className="flex justify-between items-start">
-                        <span className={`
-                            text-sm font-bold w-6 h-6 flex items-center justify-center rounded-full
-                            ${isToday ? 'bg-blue-500 text-white' : 'text-slate-500 dark:text-slate-400'}
-                        `}>
-                            {day}
-                        </span>
+                        <div className="flex flex-col">
+                            <span className={`
+                                text-sm font-bold w-6 h-6 flex items-center justify-center rounded-full
+                                ${isToday ? 'bg-blue-500 text-white' : 'text-slate-500 dark:text-slate-400'}
+                            `}>
+                                {day}
+                            </span>
+                            {/* Cycle Label for start of next cycle */}
+                            {day === 26 && (
+                                <span className="text-[9px] font-bold text-amber-500 uppercase mt-1 leading-tight">
+                                    Inicio {cycle.label}
+                                </span>
+                            )}
+                        </div>
                         {hasData && (
                             <div className="flex gap-1">
                                 {data.income > 0 && <div className="w-1.5 h-1.5 rounded-full bg-green-500"></div>}
