@@ -72,11 +72,16 @@ export const DailyTransactionModal: React.FC<DailyTransactionModalProps> = ({ da
         };
 
         if (editingId) {
-            updateDailyTransaction({ ...payload, id: editingId });
+            updateDailyTransaction({ ...payload, id: editingId }, () => {
+                resetForm();
+                onClose();
+            });
         } else {
-            addDailyTransaction(payload);
+            addDailyTransaction(payload, () => {
+                resetForm();
+                onClose();
+            });
         }
-        resetForm();
     };
 
     return (

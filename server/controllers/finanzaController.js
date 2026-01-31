@@ -1,13 +1,4 @@
-import {
-    LedgerTransaction,
-    TransactionLine,
-    Category,
-    Account,
-    fromMinorUnits,
-    User,
-    sequelize
-} from '../models/index.js';
-import { CurrencyHistory } from '../models/index.js';
+import { DailyTransaction, CurrencyHistory } from '../models/index.js';
 
 // --- TRANSACTIONS (Budget/Recurring) ---
 export const getTransactions = async (req, res) => {
@@ -107,50 +98,20 @@ export const getDailyTransactions = async (req, res) => {
         const { userId } = req.query;
         if (!userId || userId === 'undefined') return res.json([]);
 
-        const transactions = await LedgerTransaction.findAll({
-            where: { user_id: userId },
-            include: [
-                {
-                    model: TransactionLine,
-                    as: 'lines',
-                    include: [
-                        { model: Category, as: 'category' },
-                        { model: Account, as: 'account' }
-                    ]
-                }
-            ],
-            order: [['date', 'DESC']]
+        const transactions = await DailyTransaction.findAll({
+            where: { userId },
+            order: [['date', 'DESC'], ['id', 'DESC']]
         });
 
-        const mapped = transactions.map(tx => {
-            // Logic:
-            // For an expense: Account Line is Negative (-100), Category Line is Positive (+100).
-            // Legacy Amount was positive 100 with type 'expense'.
-
-            const categoryLine = tx.lines.find(l => l.categoryId); // The "Why"
-            const accountLine = tx.lines.find(l => l.accountId);   // The "Where"
-
-            // If we can't find a category line (e.g. transfer), use the account line
-            const rawAmount = accountLine ? accountLine.amountMinor : 0n; // amountMinor is BIGINT (string or specialized obj in JS depending on pg driver)
-            // wait, fromMinorUnits likely handles bigints or numbers. 
-            // Sequelize returns BIGINT as string usually.
-
-            // To be safe, convert to number if it's string
-            const absAmount = fromMinorUnits(Math.abs(Number(rawAmount)));
-
-            return {
-                id: tx.id,
-                date: tx.date, // YYYY-MM-DD
-                concept: tx.payeeName || tx.memo || 'Transaction', // payee_name -> payeeName
-                amount: absAmount,
-                type: tx.type, // 'income' or 'expense'
-                category: categoryLine?.category?.name || 'Uncategorized',
-                currency: accountLine?.currency || 'DOP',
-                paymentMethod: accountLine?.account?.name || 'Cash', // Legacy 'paymentMethod' was usually Account Name
-                notes: tx.memo || '',
-                userId: tx.userId // user_id -> userId
-            };
-        });
+        const mapped = transactions.map(tx => ({
+            id: tx.id,
+            userId: tx.userId,
+            date: tx.date, // YYYY-MM-DD
+            amount: Number(tx.amount) || 0,
+            description: tx.description || 'Sin descripción',
+            type: tx.type,
+            category: tx.category || 'Varios'
+        }));
 
         res.json(mapped);
     } catch (error) {

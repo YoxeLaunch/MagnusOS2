@@ -2,6 +2,7 @@ import { sequelize, getDatabaseInfo } from '../config/database.js';
 import { Transaction, DailyTransaction } from './transaction.js';
 import { CurrencyHistory } from './currency.js';
 import { User } from './user.js';
+import { WealthSnapshot } from './wealthSnapshot.js';
 
 // New Ledger Models (P1)
 import { Account, toMinorUnits, fromMinorUnits } from './account.js';
@@ -17,6 +18,9 @@ Transaction.belongsTo(User, { foreignKey: 'userId', targetKey: 'username' });
 
 User.hasMany(DailyTransaction, { foreignKey: 'userId', sourceKey: 'username' });
 DailyTransaction.belongsTo(User, { foreignKey: 'userId', targetKey: 'username' });
+
+User.hasMany(WealthSnapshot, { foreignKey: 'userId', sourceKey: 'username' });
+WealthSnapshot.belongsTo(User, { foreignKey: 'userId', targetKey: 'username' });
 
 // ========================================
 // New Ledger Associations
@@ -114,6 +118,7 @@ export {
     DailyTransaction,
     CurrencyHistory,
     User,
+    WealthSnapshot,
 
     // New Ledger Models
     Account,

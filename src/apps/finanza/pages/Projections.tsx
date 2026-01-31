@@ -15,7 +15,6 @@ import { ScenarioSimulator } from '../components/ScenarioSimulator';
 import { CategoryCohort } from '../components/CategoryCohort';
 import { SpendingHeatmap } from '../components/SpendingHeatmap';
 import { ManualEventInput, ManualEvent } from '../components/ManualEventInput';
-import { RiskAlert } from '../components/RiskAlert';
 
 export const Projections: React.FC = () => {
     const { dailyTransactions } = useData();
@@ -212,122 +211,69 @@ export const Projections: React.FC = () => {
             {/* HEADER SECTION */}
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                 <div>
-                    <h1 className="text-3xl font-bold text-slate-900 dark:text-white flex items-center gap-3">
+                    <h1 className="text-3xl font-serif font-bold text-slate-900 dark:text-white flex items-center gap-3">
                         <Calendar className="text-primary" size={32} />
-                        Proyección Financiera 2026
+                        Proyecciones Financieras
                     </h1>
-                    <p className="text-slate-500 dark:text-slate-400 mt-1 max-w-2xl">
-                        Motor de predicción estocástica y determinista para visualizar tu futuro financiero.
+                    <p className="text-slate-500 dark:text-slate-400 mt-1 max-w-2xl font-sans">
+                        Motor de predicción basado en tus transacciones diarias.
                     </p>
                 </div>
-                <div className="flex items-center gap-3">
-                    <span className="bg-emerald-500/10 text-emerald-600 px-3 py-1 rounded-full text-xs font-bold border border-emerald-500/20 flex items-center gap-2">
-                        <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
-                        AI ACTIVE
-                    </span>
-                    <div className="bg-primary/10 text-primary px-4 py-2 rounded-lg font-mono text-sm font-bold border border-primary/20">
-                        CYCLE: 2024-Q3
-                    </div>
-                </div>
             </div>
 
-            {/* SECTION 1: RISK & HIGH LEVEL METRICS (The "Brain") */}
-            <div className="grid grid-cols-1 xl:grid-cols-12 gap-6">
-
-                {/* PRIMARY: Monte Carlo Engine */}
-                <div className="xl:col-span-8 space-y-6">
-                    {/* Risk Alert Banner */}
-                    <RiskAlert
-                        savingsRate={savingsRate}
-                        cashRunway={cashRunway}
-                        financialDiscipline={financialDiscipline}
-                        incomeTrend={trends.incomeSlope}
-                        expenseTrend={trends.expenseSlope}
-                    />
-
-                    {/* Monte Carlo Hero Card */}
-                    <div className="bg-white/80 dark:bg-black/40 backdrop-blur-xl p-0 rounded-2xl border border-slate-200 dark:border-white/10 shadow-sm overflow-hidden min-h-[500px]">
-                        <div className="p-6 border-b border-slate-100 dark:border-white/5">
-                            <h3 className="text-lg font-bold text-slate-800 dark:text-white flex items-center gap-2">
-                                <Target size={20} className="text-primary" />
-                                Simulación de Probabilidad (Monte Carlo)
-                            </h3>
-                            <p className="text-xs text-slate-500 mt-1">
-                                Proyección de 1,000 escenarios posibles basados en tu volatilidad histórica.
-                            </p>
-                        </div>
-                        <div className="p-2">
-                            <MonteCarloRisk />
-                        </div>
-                    </div>
-                </div>
-
-                {/* SIDE RAIL: KPIs & Confidence */}
-                <div className="xl:col-span-4 space-y-6">
-
-                    {/* Confidence Widget */}
-                    <div className="bg-white/80 dark:bg-black/40 backdrop-blur-xl p-6 rounded-2xl border border-slate-200 dark:border-white/10 shadow-sm">
-                        <div className="flex justify-between items-center mb-4">
-                            <h4 className="font-bold text-slate-700 dark:text-slate-200 text-sm uppercase tracking-wider">Confianza del Modelo</h4>
-                            <Info size={16} className="text-slate-400" />
-                        </div>
-
-                        <div className="flex items-center justify-between mb-2">
-                            <span className={`text-4xl font-extrabold ${modelConfidence.average >= 70 ? 'text-emerald-500' : modelConfidence.average >= 40 ? 'text-amber-500' : 'text-red-500'}`}>
-                                {modelConfidence.average}%
-                            </span>
-                            <div className="text-right">
-                                <span className="text-xs font-bold text-slate-900 dark:text-white block">
-                                    {modelConfidence.method === 'seasonal' && 'Estacional'}
-                                    {modelConfidence.method === 'linear' && 'Lineal'}
-                                    {modelConfidence.method === 'average' && 'Promedio'}
-                                    {modelConfidence.method === 'none' && 'Insuficiente'}
-                                </span>
-                                <span className="text-[10px] text-slate-400 uppercase">Algoritmo</span>
-                            </div>
-                        </div>
-
-                        <div className="w-full h-2 bg-slate-100 dark:bg-white/10 rounded-full overflow-hidden mb-4">
-                            <div
-                                className={`h-full rounded-full transition-all duration-1000 ${modelConfidence.average >= 70 ? 'bg-emerald-500' : modelConfidence.average >= 40 ? 'bg-amber-500' : 'bg-red-500'}`}
-                                style={{ width: `${modelConfidence.average}%` }}
-                            />
-                        </div>
-                        <p className="text-xs text-slate-500 dark:text-slate-400 leading-snug">
-                            Basado en la calidad y consistencia de tus datos históricos.
-                        </p>
-                    </div>
-
-                    {/* Compact KPI Stack */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-1 gap-4">
-                        <KPICompact title="Tasa de Ahorro" value={savingsRate} suffix="%" icon={TrendingUp} color="emerald" userValue="Healthy" />
-                        <KPICompact title="Pista de Efectivo" value={cashRunway} suffix=" mo" icon={Award} color="amber" userValue="Caution" />
-                        <KPICompact title="Disciplina" value={financialDiscipline} suffix="%" icon={ShieldCheck} color="blue" />
-                    </div>
-
-                    {/* Scenario Simulator Mini */}
-                    <div className="bg-indigo-900/5 dark:bg-indigo-500/10 border border-indigo-500/20 rounded-2xl p-4">
-                        <h4 className="font-bold text-indigo-700 dark:text-indigo-300 text-sm mb-2 flex items-center gap-2">
-                            <Target size={16} /> Simulador Rápido
-                        </h4>
-                        <p className="text-xs text-indigo-600/70 dark:text-indigo-400/70 mb-3">
-                            Ajusta parámetros globales para ver impacto en tiempo real.
-                        </p>
-                        <ScenarioSimulator />
-                    </div>
-                </div>
+            {/* SECTION 1: HIGH LEVEL METRICS (KPIs) */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                <KPI
+                    title="TASA DE AHORRO"
+                    score={savingsRate}
+                    subtitle="Saludable"
+                    icon={TrendingUp}
+                    color="text-emerald-500"
+                    bg="bg-emerald-500/10"
+                    desc="Porcentaje de tus ingresos totales que logras retener mes a mes."
+                />
+                <KPI
+                    title="PISTA DE EFECTIVO"
+                    score={cashRunway}
+                    isPercentage={false}
+                    suffix=" mo"
+                    subtitle="Estabilidad"
+                    icon={Award}
+                    color="text-amber-500"
+                    bg="bg-amber-500/10"
+                    desc="Meses que podrías sobrevivir con tus ahorros actuales sin ingresos."
+                />
+                <KPI
+                    title="DISCIPLINA (90D)"
+                    score={financialDiscipline}
+                    subtitle="Consistencia"
+                    icon={ShieldCheck}
+                    color="text-blue-500"
+                    bg="bg-blue-500/10"
+                    desc="Frecuencia y consistencia en el registro de tus transacciones."
+                />
+                <KPI
+                    title="PROYECCIÓN NETA"
+                    score={Math.round(projectionData.reduce((acc, c) => acc + c.ahorro, 0) / 1000)}
+                    isPercentage={false}
+                    suffix="k"
+                    subtitle="Capital Anual"
+                    icon={Target}
+                    color="text-purple-500"
+                    bg="bg-purple-500/10"
+                    desc="Ahorro total estimado para los próximos 12 ciclos financieros."
+                />
             </div>
 
-            {/* SECTION 2: DETERMINISTIC PROJECTION (Traditional View) */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* SECTION 2: CHARTS & VISUALIZATIONS */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
 
-                {/* Cash Flow Area Chart */}
-                <div className="lg:col-span-2 bg-white/80 dark:bg-black/40 backdrop-blur-xl p-6 rounded-2xl border border-slate-200 dark:border-white/10 shadow-sm relative group hover:border-blue-500/20 transition-all">
-                    <h3 className="text-lg font-bold text-slate-800 dark:text-white mb-6 flex items-center gap-2">
-                        <TrendingUp size={20} className="text-emerald-500" />
-                        Flujo de Caja Esperado
+                {/* Cash Flow Area Chart (2/3 width) */}
+                <div className="lg:col-span-2 bg-white/80 dark:bg-black/40 backdrop-blur-xl p-6 rounded-2xl border border-slate-200 dark:border-white/10 shadow-sm hover:border-blue-500/30 transition-all duration-300">
+                    <h3 className="text-lg font-serif font-bold text-slate-800 dark:text-white mb-6">
+                        Flujo de Caja Proyectado 2026
                     </h3>
-                    <div className="h-[300px]">
+                    <div className="h-[350px]">
                         <ResponsiveContainer width="100%" height="100%">
                             <AreaChart data={projectionData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
                                 <defs>
@@ -340,47 +286,58 @@ export const Projections: React.FC = () => {
                                         <stop offset="95%" stopColor="#EF4444" stopOpacity={0} />
                                     </linearGradient>
                                 </defs>
-                                <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.1} vertical={false} />
-                                <XAxis dataKey="name" stroke="#9CA3AF" fontSize={11} tickLine={false} axisLine={false} dy={10} />
-                                <YAxis stroke="#9CA3AF" fontSize={11} tickLine={false} axisLine={false} tickFormatter={(value) => `$${value / 1000}k`} />
+                                <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.1} />
+                                <XAxis dataKey="name" stroke="#9CA3AF" fontSize={12} tickLine={false} axisLine={false} />
+                                <YAxis stroke="#9CA3AF" fontSize={12} tickLine={false} axisLine={false} tickFormatter={(value) => `$${value} `} />
                                 <Tooltip
-                                    contentStyle={{ backgroundColor: 'rgba(17, 24, 39, 0.9)', borderColor: 'rgba(255,255,255,0.1)', borderRadius: '12px', backdropFilter: 'blur(4px)' }}
+                                    contentStyle={{ backgroundColor: 'rgba(17, 24, 39, 0.95)', borderColor: 'rgba(255,255,255,0.1)', borderRadius: '12px' }}
                                     itemStyle={{ fontSize: '12px' }}
                                 />
-                                <Legend wrapperStyle={{ paddingTop: '20px' }} />
-                                <Area type="monotone" dataKey="ingresos" name="Ingresos" stroke="#10B981" strokeWidth={3} fillOpacity={1} fill="url(#colorIngresos)" />
-                                <Area type="monotone" dataKey="gastos" name="Gastos" stroke="#EF4444" strokeWidth={3} fillOpacity={1} fill="url(#colorGastos)" />
+                                <Legend iconType="circle" />
+                                <Area type="monotone" dataKey="ingresos" name="Ingresos Proyectados" stroke="#10B981" strokeWidth={3} fillOpacity={1} fill="url(#colorIngresos)" />
+                                <Area type="monotone" dataKey="gastos" name="Gastos Estimados" stroke="#EF4444" strokeWidth={3} fillOpacity={1} fill="url(#colorGastos)" />
                             </AreaChart>
                         </ResponsiveContainer>
                     </div>
                 </div>
 
-                {/* KPI Charts Stack */}
-                <div className="space-y-6">
-                    {/* Savings Trend */}
-                    <div className="bg-white/80 dark:bg-black/40 backdrop-blur-xl p-6 rounded-2xl border border-slate-200 dark:border-white/10 shadow-sm h-[180px] flex flex-col">
-                        <h3 className="text-sm font-bold text-slate-700 dark:text-slate-300 mb-2">Tendencia de Ahorro</h3>
-                        <div className="flex-1 min-h-0">
+                {/* Savings Charts Stack (1/3 width) */}
+                <div className="lg:col-span-1 space-y-6">
+                    {/* Savings Rate Trend (Line) */}
+                    <div className="bg-white/80 dark:bg-black/40 backdrop-blur-xl p-6 rounded-2xl border border-slate-200 dark:border-white/10 shadow-sm hover:border-blue-500/30 transition-all duration-300">
+                        <h3 className="text-lg font-serif font-bold text-slate-800 dark:text-white mb-6">
+                            Curva de Tasa de Ahorro
+                        </h3>
+                        <div className="h-[200px]">
                             <ResponsiveContainer width="100%" height="100%">
                                 <LineChart data={projectionData}>
-                                    <CartesianGrid strokeDasharray="3 3" vertical={false} opacity={0.1} />
+                                    <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.1} />
                                     <XAxis dataKey="name" hide />
-                                    <Tooltip contentStyle={{ borderRadius: '12px' }} />
-                                    <Line type="monotone" dataKey="savingsRate" stroke="#8B5CF6" strokeWidth={3} dot={false} />
+                                    <YAxis domain={[0, 100]} hide />
+                                    <Tooltip
+                                        contentStyle={{ backgroundColor: 'rgba(17, 24, 39, 0.95)', borderColor: 'rgba(255,255,255,0.1)', borderRadius: '12px' }}
+                                    />
+                                    <Line type="monotone" dataKey="savingsRate" name="Tasa de Ahorro %" stroke="#8B5CF6" strokeWidth={3} dot={{ r: 4, fill: '#8B5CF6' }} activeDot={{ r: 8 }} />
                                 </LineChart>
                             </ResponsiveContainer>
                         </div>
                     </div>
 
-                    {/* Accumulation Bar */}
-                    <div className="bg-white/80 dark:bg-black/40 backdrop-blur-xl p-6 rounded-2xl border border-slate-200 dark:border-white/10 shadow-sm h-[180px] flex flex-col">
-                        <h3 className="text-sm font-bold text-slate-700 dark:text-slate-300 mb-2">Acumulación Estimada</h3>
-                        <div className="flex-1 min-h-0">
+                    {/* Savings Growth (Bar) */}
+                    <div className="bg-white/80 dark:bg-black/40 backdrop-blur-xl p-6 rounded-2xl border border-slate-200 dark:border-white/10 shadow-sm hover:border-blue-500/30 transition-all duration-300">
+                        <h3 className="text-lg font-serif font-bold text-slate-800 dark:text-white mb-6">
+                            Acumulación de Capital
+                        </h3>
+                        <div className="h-[200px]">
                             <ResponsiveContainer width="100%" height="100%">
                                 <BarChart data={projectionData}>
-                                    <CartesianGrid strokeDasharray="3 3" vertical={false} opacity={0.1} />
-                                    <Tooltip cursor={{ fill: 'transparent' }} contentStyle={{ borderRadius: '12px' }} />
-                                    <Bar dataKey="ahorro" fill="#F59E0B" radius={[4, 4, 0, 0]} />
+                                    <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.1} />
+                                    <XAxis dataKey="name" hide />
+                                    <Tooltip
+                                        cursor={{ fill: 'rgba(255,255,255,0.05)' }}
+                                        contentStyle={{ backgroundColor: 'rgba(17, 24, 39, 0.95)', borderColor: 'rgba(255,255,255,0.1)', borderRadius: '12px' }}
+                                    />
+                                    <Bar dataKey="ahorro" name="Ahorro Mensual" fill="#D4AF37" radius={[4, 4, 0, 0]} />
                                 </BarChart>
                             </ResponsiveContainer>
                         </div>
@@ -388,76 +345,65 @@ export const Projections: React.FC = () => {
                 </div>
             </div>
 
-            {/* SECTION 3: PLANNING & LONG TERM (FIRE / Health) */}
-            <div>
-                <h2 className="text-xl font-bold text-slate-900 dark:text-white mb-4 flex items-center gap-2">
-                    <ShieldCheck className="text-primary" />
-                    Salud a Largo Plazo
-                </h2>
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                    <FIRECalculator
-                        avgAnnualIncome={projectionData.length > 0 ? projectionData.reduce((a, p) => a + p.ingresos, 0) / projectionData.length : 0}
-                        avgAnnualExpenses={projectionData.length > 0 ? projectionData.reduce((a, p) => a + p.gastos, 0) / projectionData.length : 0}
-                        savingsRate={savingsRate}
-                    />
-                    <HealthRadar
-                        savingsRate={savingsRate}
-                        expenseStability={expenseStability}
-                        cashRunway={cashRunway}
-                        financialDiscipline={financialDiscipline}
-                    />
-                </div>
+            {/* Category Cohort Analysis - Independent Section */}
+            <div className="bg-white/80 dark:bg-black/40 backdrop-blur-xl p-6 rounded-2xl border border-slate-200 dark:border-white/10 shadow-sm">
+                <CategoryCohort />
             </div>
 
-            {/* SECTION 4: DETAILED BREAKDOWN (Collapsible or Bottom) */}
-            <div className="pt-8 border-t border-slate-200 dark:border-white/10">
-                <h2 className="text-lg font-bold text-slate-500 dark:text-slate-400 mb-6 uppercase tracking-wider text-sm">
-                    Análisis Detallado
-                </h2>
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                    <ManualEventInput
-                        events={manualEvents}
-                        onAddEvent={(e) => setManualEvents(prev => [...prev, e])}
-                        onRemoveEvent={(id) => setManualEvents(prev => prev.filter(e => e.id !== id))}
-                    />
-                    <div className="space-y-6">
-                        <CategoryCohort />
-                        <SpendingHeatmap />
-                    </div>
-                </div>
-                <div className="mt-8">
-                    <FinancialSankey />
-                </div>
+
+            {/* Advanced Analysis Section */}
+            <div className="grid grid-cols-1 space-y-8">
+                <MonteCarloRisk />
+                <ScenarioSimulator />
+                <SpendingHeatmap />
+                <ManualEventInput
+                    events={manualEvents}
+                    onAddEvent={(e) => setManualEvents(prev => [...prev, e])}
+                    onRemoveEvent={(id) => setManualEvents(prev => prev.filter(e => e.id !== id))}
+                />
+                <FinancialSankey />
             </div>
 
+            {/* FIRE & Health Radar Widgets */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <FIRECalculator
+                    avgAnnualIncome={projectionData.length > 0 ? projectionData.reduce((a, p) => a + p.ingresos, 0) / projectionData.length : 0}
+                    avgAnnualExpenses={projectionData.length > 0 ? projectionData.reduce((a, p) => a + p.gastos, 0) / projectionData.length : 0}
+                    savingsRate={savingsRate}
+                />
+                <HealthRadar
+                    savingsRate={savingsRate}
+                    expenseStability={expenseStability}
+                    cashRunway={cashRunway}
+                    financialDiscipline={financialDiscipline}
+                />
+            </div>
         </div>
     );
 };
 
-// --- SUB COMPONENTS (Local for layout polish) ---
-
-const KPICompact = ({ title, value, suffix, icon: Icon, color }: any) => {
-    const colorClasses: any = {
-        emerald: 'text-emerald-500 bg-emerald-500/10',
-        amber: 'text-amber-500 bg-amber-500/10',
-        blue: 'text-blue-500 bg-blue-500/10',
-        indigo: 'text-indigo-500 bg-indigo-500/10',
-        purple: 'text-purple-500 bg-purple-500/10'
-    };
-    const activeColor = colorClasses[color] || colorClasses['blue'];
-
-    return (
-        <div className="bg-white/80 dark:bg-black/40 backdrop-blur-xl p-4 rounded-xl border border-slate-200 dark:border-white/10 shadow-sm flex items-center justify-between">
-            <div>
-                <p className="text-xs font-bold text-slate-500 uppercase tracking-wide">{title}</p>
-                <p className="text-2xl font-extrabold text-slate-800 dark:text-white mt-1">
-                    {value}<span className="text-sm font-medium text-slate-400">{suffix}</span>
-                </p>
-            </div>
-            <div className={`p-3 rounded-xl ${activeColor}`}>
-                <Icon size={20} />
-            </div>
+// Reverting to the Layout with Standard KPI Component (Not Compact)
+const KPI = ({ title, score, icon: Icon, subtitle, color, bg, desc, isPercentage = true, suffix = '' }: any) => (
+    <div className="bg-white/80 dark:bg-black/40 backdrop-blur-xl p-6 rounded-2xl border border-slate-200 dark:border-white/10 shadow-sm relative overflow-hidden group hover:border-blue-600/50 transition-colors">
+        <div className={`absolute top-0 right-0 p-3 rounded-bl-2xl ${bg} ${color}`}>
+            <Icon size={24} />
         </div>
-    )
-}
-
+        <div className="relative z-10">
+            <p className="text-sm font-medium text-slate-500 dark:text-slate-400 mb-1">{title}</p>
+            <div className="flex items-baseline gap-2">
+                <h2 className={`text-4xl font-bold ${color}`}>
+                    {score}{isPercentage ? '%' : suffix}
+                </h2>
+            </div>
+            <h3 className="text-lg font-semibold text-slate-800 dark:text-white mt-4 mb-2">{subtitle}</h3>
+            <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed max-w-[90%]">
+                {desc}
+            </p>
+        </div>
+        {isPercentage && (
+            <div className="absolute bottom-0 left-0 w-full h-1 bg-slate-100 dark:bg-white/5">
+                <div className={`h-full ${color.replace('text-', 'bg-')} transition-all duration-1000 ease-out`} style={{ width: `${Math.min(100, score)}%` }}></div>
+            </div>
+        )}
+    </div>
+);

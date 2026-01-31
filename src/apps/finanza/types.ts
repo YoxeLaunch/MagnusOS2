@@ -24,6 +24,19 @@ export interface CurrencyRate {
   history?: CurrencyHistoryItem[];
 }
 
+export interface WealthSnapshot {
+  id: number;
+  userId: string;
+  date: string;
+  netWorth: number;
+  currency: string;
+  assets: number;
+  liabilities: number;
+  breakdown: Record<string, number>;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 export interface AppData {
   incomes: Transaction[];
   expenses: Transaction[];

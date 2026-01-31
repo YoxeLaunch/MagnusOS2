@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { AppData, Transaction, CurrencyState, DailyTransaction } from '../types';
+import { AppData, Transaction, CurrencyState, DailyTransaction, WealthSnapshot } from '../types';
 import { authService } from '../../../shared/services/auth';
 
 interface DataContextType {
@@ -13,9 +13,12 @@ interface DataContextType {
   isSimulating: boolean;
   toggleSimulation: () => void;
   dailyTransactions: DailyTransaction[];
-  addDailyTransaction: (t: Omit<DailyTransaction, 'id'>) => void;
+  addDailyTransaction: (t: Omit<DailyTransaction, 'id'>, onSuccess?: () => void) => void;
   removeDailyTransaction: (id: number) => void;
-  updateDailyTransaction: (t: DailyTransaction) => void;
+  updateDailyTransaction: (t: DailyTransaction, onSuccess?: () => void) => void;
+  wealthHistory: WealthSnapshot[];
+  saveWealthSnapshot: (snapshot: Partial<WealthSnapshot>) => Promise<void>;
+  refreshWealthHistory: () => void;
 }
 
 
@@ -88,7 +91,37 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         console.error('Error fetching daily transactions:', err);
         setDailyTransactions([]);
       });
+
+    // Fetch history
+    fetchWealthHistory(userId);
   }, [userId]);
+
+  const [wealthHistory, setWealthHistory] = useState<WealthSnapshot[]>([]);
+
+  const fetchWealthHistory = (uid: string) => {
+    fetch(`/api/wealth/history?userId=${uid}`)
+      .then(res => res.json())
+      .then(data => setWealthHistory(Array.isArray(data) ? data : []))
+      .catch(err => console.error("Failed to fetch wealth history", err));
+  };
+
+  const refreshWealthHistory = () => {
+    if (userId) fetchWealthHistory(userId);
+  };
+
+  const saveWealthSnapshot = async (snapshot: Partial<WealthSnapshot>) => {
+    if (!userId) return;
+    try {
+      await fetch('/api/wealth/snapshot', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...snapshot, userId })
+      });
+      refreshWealthHistory();
+    } catch (error) {
+      console.error("Failed to save snapshot", error);
+    }
+  };
 
   const [currencies, setCurrencies] = useState<CurrencyState>({
     usd: { code: 'USD', name: 'Dólar Estadounidense', rate: 60.15, trend: 'neutral', change: 0 },
@@ -247,7 +280,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setIsSimulating(prev => !prev);
   }
 
-  const addDailyTransaction = (t: Omit<DailyTransaction, 'id'>) => {
+  const addDailyTransaction = (t: Omit<DailyTransaction, 'id'>, onSuccess?: () => void) => {
     if (!userId) {
       alert("Error: No hay sesión activa");
       return;
@@ -258,8 +291,17 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(transactionWithUser)
     })
-      .then(res => res.json())
-      .then(saved => setDailyTransactions(prev => [...prev, saved]))
+      .then(async res => {
+        if (!res.ok) {
+          const text = await res.text();
+          throw new Error(`Server error ${res.status}: ${text}`);
+        }
+        return res.json();
+      })
+      .then(saved => {
+        setDailyTransactions(prev => [...prev, saved]);
+        onSuccess?.();
+      })
       .catch(err => alert('Error al guardar diario: ' + err.message));
   };
 
@@ -271,19 +313,22 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       .catch(err => alert('Error al eliminar diario: ' + err.message));
   };
 
-  const updateDailyTransaction = (t: DailyTransaction) => {
+  const updateDailyTransaction = (t: DailyTransaction, onSuccess?: () => void) => {
     fetch(`/api/daily-transactions/${t.id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(t)
     })
       .then(async res => {
-        if (!res.ok) throw new Error('Failed to update');
+        if (!res.ok) {
+          const text = await res.text();
+          throw new Error(`Server error ${res.status}: ${text}`);
+        }
         return res.json();
       })
       .then(updated => {
         setDailyTransactions(prev => prev.map(p => p.id === updated.id ? updated : p));
-        // alert('¡Transacción actualizada!');
+        onSuccess?.();
       })
       .catch(err => alert('Error al actualizar diario: ' + err.message));
   };
@@ -302,7 +347,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       dailyTransactions,
       addDailyTransaction,
       removeDailyTransaction,
-      updateDailyTransaction
+      updateDailyTransaction,
+      wealthHistory,
+      saveWealthSnapshot,
+      refreshWealthHistory
     }}>
       {children}
     </DataContext.Provider>

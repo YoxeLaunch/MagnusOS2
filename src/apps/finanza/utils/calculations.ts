@@ -63,3 +63,13 @@ export const formatCurrency = (amount: number, currency: 'DOP' | 'USD' | 'EUR' =
 export const formatUSD = (amount: number) => {
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
 };
+
+export const calculateNetWorth = (data: any): number => {
+  if (!data) return 0;
+  const accounts = data.accounts?.reduce((acc: number, curr: any) => acc + (curr.balance || 0), 0) || 0;
+  const investments = data.investments?.reduce((acc: number, curr: any) => acc + (curr.currentValue || curr.amount || 0), 0) || 0;
+  const assets = data.assets?.reduce((acc: number, curr: any) => acc + (curr.value || 0), 0) || 0;
+  // Debts are usually negative balances in accounts or a separate array. Assuming separate array for now if it exists, otherwise ignored.
+  const debts = data.debts?.reduce((acc: number, curr: any) => acc + (curr.amount || 0), 0) || 0;
+  return accounts + investments + assets - debts;
+};

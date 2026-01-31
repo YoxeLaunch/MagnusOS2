@@ -4,6 +4,7 @@ import * as accountsController from '../controllers/accountsController.js';
 import * as ledgerController from '../controllers/ledgerController.js';
 import * as savingsController from '../controllers/savingsController.js';
 import * as importController from '../controllers/importController.js';
+import * as wealthController from '../controllers/wealthController.js';
 
 const router = Router();
 
@@ -49,6 +50,12 @@ router.get('/import/templates', importController.getImportTemplates);
 router.post('/import/preview', importController.previewImport);
 router.post('/import', importController.importTransactions);
 router.post('/import/categorize', importController.categorizeImports);
+
+// ========================================
+// WEALTH (New - Phase 1)
+// ========================================
+router.get('/wealth/history', wealthController.getWealthHistory);
+router.post('/wealth/snapshot', wealthController.createWealthSnapshot);
 
 // ========================================
 // LEGACY ENDPOINTS (to be deprecated)
