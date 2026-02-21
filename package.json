@@ -15,10 +15,15 @@
     "analyze": "npm run lint && npm run type-check",
     "help": "start GUIA_COMANDOS.md",
     "type-check": "tsc --noEmit",
-    "test": "jest"
+    "test": "jest",
+    "mcp": "node server/mcp-server.js"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.26.0",
+    "@types/jsonwebtoken": "^9.0.10",
     "@types/seedrandom": "^3.0.8",
+    "@xterm/addon-fit": "^0.11.0",
+    "@xterm/xterm": "^6.0.0",
     "bcryptjs": "^3.0.3",
     "body-parser": "^1.20.2",
     "boxen": "^8.0.1",
@@ -27,6 +32,7 @@
     "d3-geo": "^3.1.1",
     "d3-scale": "^4.0.2",
     "date-fns": "^4.1.0",
+    "dockerode": "^4.0.9",
     "express": "^4.19.2",
     "express-rate-limit": "^8.2.1",
     "figlet": "^1.9.4",
@@ -35,6 +41,7 @@
     "helmet": "^8.1.0",
     "i18next": "^25.7.3",
     "i18next-browser-languagedetector": "^8.2.0",
+    "jsonwebtoken": "^9.0.3",
     "lucide-react": "0.363.0",
     "multer": "^2.0.2",
     "pdf-parse": "^1.1.1",

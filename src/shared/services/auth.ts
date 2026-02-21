@@ -13,8 +13,10 @@ export const authService = {
             throw error.error || 'Error al iniciar sesión';
         }
 
-        const user = await response.json();
+        const data = await response.json();
+        const { token, ...user } = data;
         localStorage.setItem('sistemam_current_user', JSON.stringify(user));
+        if (token) localStorage.setItem('sistemam_token', token);
         return user;
     },
 
@@ -37,7 +39,26 @@ export const authService = {
 
     logout: () => {
         localStorage.removeItem('sistemam_current_user');
+        localStorage.removeItem('sistemam_token');
         localStorage.removeItem('magnus_current_user'); // Clean up legacy
+    },
+
+    getToken: (): string | null => {
+        return localStorage.getItem('sistemam_token');
+    },
+
+    /**
+     * Helper para incluir el JWT en headers de cualquier fetch.
+     * Uso: fetch('/api/...', { headers: authService.getAuthHeaders() })
+     */
+    getAuthHeaders: (): Record<string, string> => {
+        const token = localStorage.getItem('sistemam_token');
+        return token
+            ? {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            }
+            : { 'Content-Type': 'application/json' };
     },
 
     getCurrentUser: (): User | null => {
