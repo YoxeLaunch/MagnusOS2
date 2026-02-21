@@ -1,4 +1,4 @@
-version: "3.9"
+# version: "3.9" -- obsoleto, ignorado por Docker Compose moderno
 
 services:
   # ========================================
@@ -13,6 +13,8 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-magnus_change_me}
     volumes:
       - magnus_pgdata:/var/lib/postgresql/data
+    command: >
+      postgres -c shared_buffers=256MB -c effective_cache_size=768MB -c work_mem=4MB -c maintenance_work_mem=64MB -c max_connections=50 -c wal_level=minimal -c max_wal_senders=0 -c synchronous_commit=off -c checkpoint_completion_target=0.9 -c log_min_duration_statement=1000
     networks:
       - magnus_net
     # Puerto 5432 NO expuesto al host intencionalmente (fix seguridad).
