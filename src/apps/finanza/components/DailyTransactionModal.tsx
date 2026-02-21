@@ -7,14 +7,20 @@ import { TRANSACTION_META } from '../utils/categoryIcons';
 interface DailyTransactionModalProps {
     date: Date;
     onClose: () => void;
+    initialData?: {
+        type?: 'income' | 'expense' | 'investment';
+        amount?: number;
+        description?: string;
+        category?: string;
+    } | null;
 }
 
-export const DailyTransactionModal: React.FC<DailyTransactionModalProps> = ({ date, onClose }) => {
+export const DailyTransactionModal: React.FC<DailyTransactionModalProps> = ({ date, onClose, initialData }) => {
     const { addDailyTransaction, updateDailyTransaction, removeDailyTransaction, dailyTransactions } = useData();
-    const [amount, setAmount] = useState('');
-    const [description, setDescription] = useState('');
-    const [type, setType] = useState<'income' | 'expense' | 'investment'>('expense');
-    const [category, setCategory] = useState('Varios');
+    const [amount, setAmount] = useState(initialData?.amount?.toString() || '');
+    const [description, setDescription] = useState(initialData?.description || '');
+    const [type, setType] = useState<'income' | 'expense' | 'investment'>(initialData?.type || 'expense');
+    const [category, setCategory] = useState(initialData?.category || 'Varios');
     const [editingId, setEditingId] = useState<number | null>(null);
 
     const dateStr = date.toISOString().split('T')[0];
@@ -27,7 +33,7 @@ export const DailyTransactionModal: React.FC<DailyTransactionModalProps> = ({ da
 
     // Smart Category Detection
     useEffect(() => {
-        if (!description || editingId) return;
+        if (!description || editingId || initialData) return; // Don't auto-categorize if editing or initialData used
         const n = description.toLowerCase();
 
         // Simple heuristic for auto-categorization based on keywords
@@ -41,7 +47,7 @@ export const DailyTransactionModal: React.FC<DailyTransactionModalProps> = ({ da
             else if (n.includes('btc') || n.includes('cripto')) setCategory('Cripto');
             else if (n.includes('bolsa')) setCategory('Bolsa');
         }
-    }, [description, type, editingId]);
+    }, [description, type, editingId, initialData]);
 
     const handleEdit = (t: DailyTransaction) => {
         setAmount(t.amount.toString());

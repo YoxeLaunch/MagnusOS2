@@ -63,6 +63,7 @@ export const INCOME_CATEGORIES = [
     { id: 'Becas', icon: GraduationCap, label: 'Becas' },
     { id: 'Regalos', icon: Gift, label: 'Regalos' },
     { id: 'Aportaciones', icon: Coins, label: 'Aportes' },
+    { id: 'Ajuste', icon: Pencil, label: 'Ajuste' },
     { id: 'Otro', icon: TrendingUp, label: 'Otro' }
 ];
 
@@ -80,6 +81,7 @@ export const EXPENSE_CATEGORIES = [
     { id: 'Regalos', icon: Gift, label: 'Regalos' },
     { id: 'Aportaciones', icon: Coins, label: 'Ayudas' },
     { id: 'Deudas', icon: CreditCard, label: 'Deudas' },
+    { id: 'Ajuste', icon: Pencil, label: 'Ajuste' },
     { id: 'General', icon: Coffee, label: 'General' }
 ];
 

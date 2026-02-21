@@ -4,6 +4,7 @@ import { BrowserRouter, Routes, Route, Navigate, useNavigate } from "react-route
 const FinanzaApp = lazy(() => import("./apps/finanza/App"));
 const MagnusApp = lazy(() => import("./apps/magnus/App"));
 const AuditorApp = lazy(() => import("./apps/auditor/App"));
+const ServerAdminApp = lazy(() => import("./apps/server-admin/App"));
 import { Login } from "./shared/components/auth/Login";
 import { Register } from "./shared/components/auth/Register";
 import { Creator } from "./apps/magnus/components/Creator";
@@ -92,6 +93,14 @@ function AppContent() {
                     user ? (
                         <Suspense fallback={<div className="flex items-center justify-center min-h-screen text-lg">Cargando Auditoría...</div>}>
                             <AuditorApp />
+                        </Suspense>
+                    ) : <Navigate to="/login" />
+                } />
+
+                <Route path="/admin/*" element={
+                    user ? (
+                        <Suspense fallback={<div className="flex items-center justify-center min-h-screen text-lg">Cargando Server HUD...</div>}>
+                            <ServerAdminApp />
                         </Suspense>
                     ) : <Navigate to="/login" />
                 } />

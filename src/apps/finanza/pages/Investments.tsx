@@ -34,7 +34,7 @@ const INVESTMENT_CATEGORIES = [
 ];
 
 export const Investments: React.FC = () => {
-    const { data, addTransaction, removeTransaction, updateTransaction } = useData();
+    const { data, addTransaction, removeTransaction, updateTransaction, dailyTransactions } = useData();
     const [isAdding, setIsAdding] = useState(false);
     const [editingId, setEditingId] = useState<string | null>(null);
 
@@ -49,6 +49,21 @@ export const Investments: React.FC = () => {
         date: new Date().toISOString().split('T')[0],
     });
 
+    // Calculate Global Cash Available from Daily Transactions
+    const globalCashAvailable = useMemo(() => {
+        let income = 0;
+        let expense = 0;
+        let investment = 0;
+
+        dailyTransactions.forEach(t => {
+            if (t.type === 'income') income += t.amount;
+            else if (t.type === 'expense') expense += t.amount;
+            else if (t.type === 'investment') investment += t.amount;
+        });
+
+        return income - expense - investment;
+    }, [dailyTransactions]);
+
     const calculateMetrics = useMemo(() => {
         let invested = 0;
         let current = 0;
@@ -61,8 +76,11 @@ export const Investments: React.FC = () => {
         const pnl = current - invested;
         const pnlPercent = invested > 0 ? (pnl / invested) * 100 : 0;
 
-        return { invested, current, pnl, pnlPercent };
-    }, [data.investments]);
+        // Include cash in total portfolio value
+        const totalPortfolioValue = current + globalCashAvailable;
+
+        return { invested, current, pnl, pnlPercent, totalPortfolioValue };
+    }, [data.investments, globalCashAvailable]);
 
     const resetForm = () => {
         setFormData({
@@ -218,7 +236,7 @@ export const Investments: React.FC = () => {
                         </span>
                     </div>
 
-                    {data.investments.length === 0 ? (
+                    {data.investments.length === 0 && globalCashAvailable <= 0 ? (
                         <div className="bg-white/80 dark:bg-black/40 backdrop-blur-xl rounded-2xl p-12 border border-dashed border-gray-300 dark:border-white/10 text-center">
                             <div className="w-16 h-16 bg-gray-100 dark:bg-white/5 rounded-full flex items-center justify-center mx-auto mb-4">
                                 <PiggyBank size={32} className="text-gray-400" />
@@ -236,6 +254,47 @@ export const Investments: React.FC = () => {
                         </div>
                     ) : (
                         <div className="grid grid-cols-1 gap-4">
+                            {/* VIRTUAL CASH ASSET - Always first if > 0 */}
+                            {globalCashAvailable > 0 && (
+                                <div className="bg-gradient-to-br from-amber-50 to-yellow-50 dark:from-amber-900/20 dark:to-yellow-900/20 backdrop-blur-xl rounded-xl p-5 border-2 border-amber-400/50 dark:border-amber-500/30 flex flex-col md:flex-row md:items-center justify-between relative overflow-hidden shadow-lg shadow-amber-500/10">
+                                    {/* Decorative elements */}
+                                    <div className="absolute top-0 right-0 w-32 h-32 bg-amber-400/10 rounded-full blur-3xl"></div>
+                                    <div className="absolute -bottom-8 -left-8 w-24 h-24 bg-yellow-400/10 rounded-full blur-2xl"></div>
+
+                                    <div className="flex items-center gap-4 mb-4 md:mb-0 relative z-10">
+                                        <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-amber-400 to-yellow-500 flex items-center justify-center text-white shadow-lg">
+                                            <Landmark size={24} />
+                                        </div>
+                                        <div>
+                                            <h4 className="font-bold text-gray-900 dark:text-white text-lg flex items-center gap-2">
+                                                Efectivo Disponible
+                                                <span className="text-[10px] font-bold bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 px-2 py-0.5 rounded-full">LIQUIDEZ</span>
+                                            </h4>
+                                            <div className="flex items-center gap-2 text-xs font-medium text-gray-600 dark:text-gray-400 uppercase tracking-wide">
+                                                <span className="bg-amber-100 dark:bg-white/5 px-2 py-0.5 rounded text-[10px]">
+                                                    Ahorro
+                                                </span>
+                                                <span>•</span>
+                                                <span>DOP</span>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div className="flex items-center justify-between md:justify-end gap-8 md:gap-12 w-full md:w-auto relative z-10">
+                                        <div className="text-right">
+                                            <p className="text-[10px] font-bold text-amber-700 dark:text-amber-400 uppercase">Balance Actual</p>
+                                            <p className="font-extrabold text-amber-900 dark:text-amber-100 text-2xl font-mono">
+                                                {formatCurrency(globalCashAvailable)}
+                                            </p>
+                                            <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
+                                                Calculado desde transacciones diarias
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* REGULAR INVESTMENTS */}
                             {data.investments.map(inv => {
                                 const CategoryIcon = getCategoryIcon(inv.category);
                                 const currentVal = inv.currentValue ?? inv.amount;

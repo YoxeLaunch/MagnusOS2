@@ -1,7 +1,8 @@
 import React, { useState, useMemo } from 'react';
-import { Calendar as CalendarIcon, Wallet, TrendingDown, Target, PieChart, Filter } from 'lucide-react';
+import { Calendar as CalendarIcon, Wallet, TrendingDown, Target, PieChart, Filter, PiggyBank, ArrowRight, Settings } from 'lucide-react';
 import { useData } from '../context/DataContext';
 import { DailyTransactionModal } from '../components/DailyTransactionModal';
+import { GlobalAdjustmentModal } from '../components/GlobalAdjustmentModal';
 import { FinancialCalendar } from '../components/FinancialCalendar';
 import { TransactionTimeline } from '../components/TransactionTimeline';
 import { CategorySummary } from '../components/CategorySummary';
@@ -13,6 +14,8 @@ export const Tracking: React.FC = () => {
     const [currentDate, setCurrentDate] = useState(new Date());
     const [selectedDate, setSelectedDate] = useState<Date | null>(null);
     const [isModalOpen, setIsModalOpen] = useState(false);
+    const [isAdjustmentModalOpen, setIsAdjustmentModalOpen] = useState(false);
+    const [modalInitialData, setModalInitialData] = useState<any>(null); // To pass pre-filled data
     const [filterType, setFilterType] = useState<'all' | 'income' | 'expense' | 'investment'>('all');
 
     // Calculate current cycle based on the selected date in the calendar view
@@ -23,11 +26,11 @@ export const Tracking: React.FC = () => {
         return dailyTransactions.filter(t => isDateInCycle(t.date, currentCycle));
     }, [dailyTransactions, currentCycle]);
 
-    // Calculate Stats
+    // Calculate Stats (Monthly)
     const stats = useMemo(() => {
         let income = 0;
         let expense = 0;
-        let investment = 0; // New Investment Accumulator
+        let investment = 0;
 
         currentCycleTransactions.forEach(t => {
             if (t.type === 'income') income += t.amount;
@@ -35,10 +38,26 @@ export const Tracking: React.FC = () => {
             else if (t.type === 'investment') investment += t.amount;
         });
 
-        const available = income - expense - investment; // Net Liquidity
+        const available = income - expense - investment;
 
         return { income, expense, investment, available };
     }, [currentCycleTransactions]);
+
+    // Calculate Global Stats (All Time)
+    const globalStats = useMemo(() => {
+        let income = 0;
+        let expense = 0;
+        let investment = 0;
+
+        dailyTransactions.forEach(t => {
+            if (t.type === 'income') income += t.amount;
+            else if (t.type === 'expense') expense += t.amount;
+            else if (t.type === 'investment') investment += t.amount;
+        });
+
+        const available = income - expense - investment;
+        return { available };
+    }, [dailyTransactions]);
 
     // Filtered Transactions for Timeline
     const filteredTimelineTransactions = useMemo(() => {
@@ -48,6 +67,17 @@ export const Tracking: React.FC = () => {
 
     const handleDateClick = (date: Date) => {
         setSelectedDate(date);
+        setModalInitialData(null); // Reset initial data
+        setIsModalOpen(true);
+    };
+
+    const handleInvestSweep = () => {
+        setSelectedDate(new Date()); // Default to today
+        setModalInitialData({
+            type: 'investment',
+            amount: globalStats.available > 0 ? globalStats.available : 0,
+            description: `Ahorro Acumulado Global`
+        });
         setIsModalOpen(true);
     };
 
@@ -68,6 +98,37 @@ export const Tracking: React.FC = () => {
                             ({currentCycle.start.getDate()} {currentCycle.start.toLocaleDateString('es-ES', { month: 'short' })} - {currentCycle.end.getDate()} {currentCycle.end.toLocaleDateString('es-ES', { month: 'short' })})
                         </span>
                     </p>
+                </div>
+
+                {/* Global Stats Card (New) */}
+                <div className="bg-gradient-to-br from-indigo-900 to-purple-900 text-white p-4 rounded-xl shadow-lg border border-indigo-500/30 flex items-center gap-4 min-w-[280px]">
+                    <div className="p-3 rounded-full bg-white/10">
+                        <PiggyBank size={24} className="text-yellow-300" />
+                    </div>
+                    <div className="flex-1">
+                        <p className="text-xs text-indigo-200 uppercase font-bold tracking-wider">Ahorro Global Disp.</p>
+                        <div className="flex items-center gap-3">
+                            <p className="text-2xl font-bold text-white">
+                                ${globalStats.available.toLocaleString()}
+                            </p>
+                            {globalStats.available > 0 && (
+                                <button
+                                    onClick={handleInvestSweep}
+                                    title="Invertir todo el disponible"
+                                    className="p-1.5 bg-white/20 hover:bg-white/30 rounded-full transition-colors"
+                                >
+                                    <ArrowRight size={16} />
+                                </button>
+                            )}
+                        </div>
+                    </div>
+                    <button
+                        onClick={() => setIsAdjustmentModalOpen(true)}
+                        title="Ajustar saldo manualmente"
+                        className="p-2 bg-white/10 hover:bg-white/20 rounded-lg transition-colors"
+                    >
+                        <Settings size={18} />
+                    </button>
                 </div>
             </div>
 
@@ -109,13 +170,13 @@ export const Tracking: React.FC = () => {
                         </div>
                     </div>
 
-                    {/* Available (Liquidity) */}
+                    {/* Available (Liquidity) - Monthly */}
                     <div className="bg-gradient-to-r from-slate-900 to-slate-800 text-white p-4 rounded-2xl border border-slate-700 flex items-center gap-4 shadow-lg shadow-slate-900/20">
                         <div className="p-3 rounded-full bg-white/10">
                             <Target size={20} />
                         </div>
                         <div>
-                            <p className="text-xs text-slate-400 uppercase font-bold">Disponible</p>
+                            <p className="text-xs text-slate-400 uppercase font-bold">Disponible (Mes)</p>
                             <p className={`text-xl font-bold ${stats.available >= 0 ? 'text-green-400' : 'text-red-400'}`}>
                                 ${stats.available.toLocaleString()}
                             </p>
@@ -185,9 +246,21 @@ export const Tracking: React.FC = () => {
             {isModalOpen && selectedDate && (
                 <DailyTransactionModal
                     date={selectedDate}
-                    onClose={() => setIsModalOpen(false)}
+                    initialData={modalInitialData}
+                    onClose={() => {
+                        setIsModalOpen(false);
+                        setModalInitialData(null);
+                    }}
+                />
+            )}
+
+            {isAdjustmentModalOpen && (
+                <GlobalAdjustmentModal
+                    currentAmount={globalStats.available}
+                    onClose={() => setIsAdjustmentModalOpen(false)}
                 />
             )}
         </div>
     );
 };
+
