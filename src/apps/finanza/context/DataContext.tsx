@@ -20,6 +20,7 @@ interface DataContextType {
   wealthHistory: WealthSnapshot[];
   saveWealthSnapshot: (snapshot: Partial<WealthSnapshot>) => Promise<void>;
   refreshWealthHistory: () => void;
+  isLoading: boolean;
 }
 
 
@@ -36,8 +37,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   });
 
   const [dailyTransactions, setDailyTransactions] = useState<DailyTransaction[]>([]);
-
   const [isSimulating, setIsSimulating] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
 
   // Fetch data from API
   const API_URL = `/api/transactions`;
@@ -94,7 +95,16 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       });
 
     // Fetch history
-    fetchWealthHistory(userId);
+    const historyPromise = apiFetch(`/api/wealth/history?userId=${userId}`)
+      .then(res => res.json())
+      .then(data => setWealthHistory(Array.isArray(data) ? data : []));
+
+    // Wait for all initial critical data
+    Promise.all([transactionsPromise, dailyPromise, historyPromise])
+      .finally(() => {
+        // Short delay to ensure state updates are processed
+        setTimeout(() => setIsLoading(false), 200);
+      });
   }, [userId]);
 
   const [wealthHistory, setWealthHistory] = useState<WealthSnapshot[]>([]);
@@ -345,7 +355,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       updateDailyTransaction,
       wealthHistory,
       saveWealthSnapshot,
-      refreshWealthHistory
+      refreshWealthHistory,
+      isLoading
     }}>
       {children}
     </DataContext.Provider>

@@ -9,7 +9,7 @@ import { getFinancialCycle, isDateInCycle } from '../utils/financialCycle';
 
 export const PrintReport: React.FC = () => {
     const [searchParams] = useSearchParams();
-    const { data, dailyTransactions, currencies } = useData();
+    const { data, dailyTransactions, currencies, isLoading } = useData();
     const { user } = useAuth();
 
     // --- OPTIONS ---
@@ -96,13 +96,14 @@ export const PrintReport: React.FC = () => {
     // Auto-print
     const hasPrinted = React.useRef(false);
     useEffect(() => {
-        if (hasPrinted.current) return;
+        if (isLoading || hasPrinted.current) return;
+
         const timer = setTimeout(() => {
             window.print();
             hasPrinted.current = true;
-        }, 800);
+        }, 1200); // Slightly longer to ensure all images/icons render
         return () => clearTimeout(timer);
-    }, []);
+    }, [isLoading]);
 
     // --- COMPONENTS ---
     const PageHeader = ({ title, subtitle }: { title: string, subtitle: string }) => (
@@ -128,6 +129,15 @@ export const PrintReport: React.FC = () => {
             <Icon size={18} className="text-blue-600" /> {title}
         </h3>
     );
+    if (isLoading) {
+        return (
+            <div className="flex flex-col items-center justify-center min-h-screen bg-slate-50 text-slate-600">
+                <div className="w-12 h-12 border-4 border-blue-600/20 border-t-blue-600 rounded-full animate-spin mb-4"></div>
+                <h2 className="text-xl font-bold text-slate-900">Preparando Reporte...</h2>
+                <p className="text-sm opacity-60">Sincronizando datos de Magnus Capital</p>
+            </div>
+        );
+    }
 
     return (
         <div className="min-h-screen bg-white text-slate-900 font-sans print:p-0 p-8 max-w-[210mm] mx-auto text-sm leading-relaxed">
@@ -380,7 +390,7 @@ export const PrintReport: React.FC = () => {
                                                 </span>
                                             </td>
                                             <td className={`px-3 py-2 text-right font-mono font-bold whitespace-nowrap ${t.type === 'income' ? 'text-green-600' :
-                                                    t.type === 'investment' ? 'text-blue-600' : 'text-slate-900'
+                                                t.type === 'investment' ? 'text-blue-600' : 'text-slate-900'
                                                 }`}>
                                                 {t.type === 'expense' && '- '}{formatCurrency(t.amount)}
                                             </td>

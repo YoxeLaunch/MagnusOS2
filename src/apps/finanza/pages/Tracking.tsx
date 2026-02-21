@@ -10,7 +10,7 @@ import { getFinancialCycle, isDateInCycle } from '../utils/financialCycle';
 import { TRANSACTION_META } from '../utils/categoryIcons';
 
 export const Tracking: React.FC = () => {
-    const { dailyTransactions } = useData();
+    const { dailyTransactions, isLoading } = useData();
     const [currentDate, setCurrentDate] = useState(new Date());
     const [selectedDate, setSelectedDate] = useState<Date | null>(null);
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -80,6 +80,15 @@ export const Tracking: React.FC = () => {
         });
         setIsModalOpen(true);
     };
+
+    if (isLoading) {
+        return (
+            <div className="flex flex-col items-center justify-center h-full min-h-[400px]">
+                <div className="w-8 h-8 border-4 border-blue-600/20 border-t-blue-600 rounded-full animate-spin mb-4"></div>
+                <p className="text-slate-500 animate-pulse">Sincronizando cronología...</p>
+            </div>
+        );
+    }
 
     return (
         <div className="p-6 md:p-8 space-y-8 max-w-7xl mx-auto animate-in fade-in duration-500">
