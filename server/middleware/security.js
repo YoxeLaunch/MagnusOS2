@@ -2,20 +2,29 @@
 import rateLimit from 'express-rate-limit';
 import helmet from 'helmet';
 
-// 1. Basic Security Headers (Helmet)
-// Disables X-Powered-By, sets XSS filter, HSTS, etc.
+// 1. Security Headers (Helmet) con CSP básica
 export const securityHeaders = helmet({
-    crossOriginResourcePolicy: { policy: "cross-origin" }, // Allow cross-origin for images
-    contentSecurityPolicy: false // Disable CSP for now to avoid frontend issues
+    crossOriginResourcePolicy: { policy: "cross-origin" },
+    contentSecurityPolicy: {
+        directives: {
+            defaultSrc: ["'self'"],
+            scriptSrc: ["'self'"],
+            styleSrc: ["'self'", "'unsafe-inline'"],   // Tailwind lo necesita
+            imgSrc: ["'self'", "data:", "blob:"],
+            fontSrc: ["'self'", "data:"],
+            connectSrc: ["'self'", "ws:", "wss:"],    // WebSocket/Socket.io
+            frameSrc: ["'none'"],
+            objectSrc: ["'none'"],
+        }
+    }
 });
 
-// 2. Rate Limiting (Brute Force Protection)
-// Limits requests from the same IP
+// 2. Rate Limiting global (ajustado: 300 req / 15 min por IP)
 export const apiLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 1000, // Limit each IP to 1000 requests per 15 minutes
-    standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
-    legacyHeaders: false, // Disable the `X-RateLimit-*` headers
+    windowMs: 15 * 60 * 1000,
+    max: 300,
+    standardHeaders: true,
+    legacyHeaders: false,
     message: {
         error: "Too many requests",
         message: "Has excedido el límite de peticiones. Por favor intenta más tarde."

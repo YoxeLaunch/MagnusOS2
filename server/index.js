@@ -6,6 +6,7 @@ import { Server } from 'socket.io';
 import { initDb } from './models/index.js';
 import { initAuditorDb } from './models/auditor.js';
 import { initSocket } from './socket/chatHandler.js';
+import { initDockerSocket } from './socket/dockerSocket.js';
 import routes from './routes/index.js';
 import { initSystemDb } from './models/system/index.js';
 import { securityHeaders, apiLimiter } from './middleware/security.js';
@@ -49,7 +50,7 @@ const corsOptions = {
 app.use(cors(corsOptions));
 app.use(securityHeaders);
 app.use(apiLimiter);
-app.use(express.json({ limit: '50mb' }));
+app.use(express.json({ limit: '1mb' })); // Rutas de importación usan su propio límite extendido
 
 // Health Check Endpoint para Docker
 app.get('/api/health', (req, res) => {
@@ -100,6 +101,7 @@ const startServer = async () => {
 
         // Initialize Socket
         initSocket(io);
+        initDockerSocket(io);
 
 
     } catch (error) {
