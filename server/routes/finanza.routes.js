@@ -5,8 +5,16 @@ import * as ledgerController from '../controllers/ledgerController.js';
 import * as savingsController from '../controllers/savingsController.js';
 import * as importController from '../controllers/importController.js';
 import * as wealthController from '../controllers/wealthController.js';
+import { verifyJWT } from '../middleware/auth.js';
+import express from 'express';
 
 const router = Router();
+
+// Todas las rutas financieras requieren JWT
+router.use(verifyJWT);
+
+// Límite extendido solo para rutas de importación (archivos CSV/PDF)
+const importBodyParser = express.json({ limit: '10mb' });
 
 // ========================================
 // ACCOUNTS (New - P1)
@@ -44,12 +52,12 @@ router.get('/savings-goals/:id/progress', savingsController.getGoalProgress);
 router.get('/savings-rate', savingsController.getSavingsRate);
 
 // ========================================
-// IMPORT (New - P3)
+// IMPORT (New - P3) — límite extendido a 10mb
 // ========================================
-router.get('/import/templates', importController.getImportTemplates);
-router.post('/import/preview', importController.previewImport);
-router.post('/import', importController.importTransactions);
-router.post('/import/categorize', importController.categorizeImports);
+router.get('/import/templates', importBodyParser, importController.getImportTemplates);
+router.post('/import/preview', importBodyParser, importController.previewImport);
+router.post('/import', importBodyParser, importController.importTransactions);
+router.post('/import/categorize', importBodyParser, importController.categorizeImports);
 
 // ========================================
 // WEALTH (New - Phase 1)

@@ -1,8 +1,12 @@
 import { Router } from 'express';
 import * as magnusController from '../controllers/magnusController.js';
 import { updatePassword } from '../controllers/authController.js';
+import { verifyJWT } from '../middleware/auth.js';
 
 const router = Router();
+
+// Todas las rutas de usuarios/sistema requieren JWT
+router.use(verifyJWT);
 
 // Users
 router.get('/users', magnusController.getUsers);

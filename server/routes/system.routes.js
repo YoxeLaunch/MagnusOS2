@@ -1,7 +1,11 @@
 import { Router } from 'express';
 import * as systemController from '../controllers/systemController.js';
+import { verifyJWT } from '../middleware/auth.js';
 
 const router = Router();
+
+// Rutas de sistema protegidas por JWT
+router.use(verifyJWT);
 
 router.get('/system/stats', systemController.getSystemStats);
 router.get('/updates', systemController.getUpdates);
