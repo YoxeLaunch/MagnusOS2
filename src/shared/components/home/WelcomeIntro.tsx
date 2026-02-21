@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Crown, ArrowRight, X } from 'lucide-react';
+import { apiFetch } from '../../../../shared/utils/apiFetch';
 
 interface WelcomeIntroProps {
     onClose: () => void;
@@ -22,7 +23,7 @@ export const WelcomeIntro: React.FC<WelcomeIntroProps> = ({ onClose, userName })
         const step4 = setTimeout(() => setStep(4), 3000); // Show Button
 
         // Load banners from API
-        fetch('/api/settings/banners')
+        apiFetch('/api/settings/banners')
             .then(res => res.json())
             .then(data => {
                 setBanners({

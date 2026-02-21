@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Save, X, Upload, Image as ImageIcon, Info, CheckCircle2, AlertCircle } from 'lucide-react';
 import { useToast } from '../../../../../shared/context/ToastContext';
+import { apiFetch } from '../../../shared/utils/apiFetch';
 
 interface LandingTabProps {
     loading: boolean;
@@ -18,7 +19,7 @@ export const LandingTab: React.FC<LandingTabProps> = ({ loading, setLoading }) =
     useEffect(() => {
         const loadBanners = async () => {
             try {
-                const res = await fetch('/api/settings/banners');
+                const res = await apiFetch('/api/settings/banners');
                 if (res.ok) {
                     const data = await res.json();
                     setLandingImages({
@@ -81,7 +82,7 @@ export const LandingTab: React.FC<LandingTabProps> = ({ loading, setLoading }) =
     const saveLandingImages = async () => {
         try {
             setLoading(true);
-            const res = await fetch('/api/settings/banners', {
+            const res = await apiFetch('/api/settings/banners', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({

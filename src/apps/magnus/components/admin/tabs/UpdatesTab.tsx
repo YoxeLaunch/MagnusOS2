@@ -1,13 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { TrendingUp, Save, Bell } from 'lucide-react';
 import { useToast } from '../../../../../shared/context/ToastContext';
+import { apiFetch } from '../../../shared/utils/apiFetch';
 
 export const UpdatesTab: React.FC = () => {
     const toast = useToast();
     const [updatesList, setUpdatesList] = useState<any[]>([]);
 
     useEffect(() => {
-        fetch('/api/updates').then(res => res.json()).then(setUpdatesList).catch(console.error);
+        apiFetch('/api/updates').then(res => res.json()).then(setUpdatesList).catch(console.error);
     }, []);
 
     const handlePublish = async (e: React.MouseEvent<HTMLButtonElement>) => {
@@ -30,7 +31,7 @@ export const UpdatesTab: React.FC = () => {
 
         try {
             // 1. Save to DB
-            const res = await fetch('/api/updates', {
+            const res = await apiFetch('/api/updates', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ title, description, type, date })
@@ -40,7 +41,7 @@ export const UpdatesTab: React.FC = () => {
 
             // 2. Broadcast if requested
             if (sendBroadcast) {
-                await fetch('/api/system/broadcast', {
+                await apiFetch('/api/system/broadcast', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -53,7 +54,7 @@ export const UpdatesTab: React.FC = () => {
 
             toast.success("Novedad publicada con éxito!");
             // Refresh list
-            fetch('/api/updates').then(res => res.json()).then(setUpdatesList).catch(console.error);
+            apiFetch('/api/updates').then(res => res.json()).then(setUpdatesList).catch(console.error);
 
             // Reset form
             (document.getElementById('update-title') as HTMLInputElement).value = '';

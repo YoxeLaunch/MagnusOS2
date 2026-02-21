@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Bell, Star, Zap, Bug, Construction, Calendar, ChevronDown, ChevronUp } from 'lucide-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
+import { apiFetch } from '../../../../shared/utils/apiFetch';
 
 interface Update {
     id: string;
@@ -26,7 +27,7 @@ export const UpdatesWidget = () => {
 
     useEffect(() => {
         // Use relative path to leverage Vite proxy
-        fetch('/api/updates')
+        apiFetch('/api/updates')
             .then(res => {
                 if (!res.ok) throw new Error('Network response was not ok');
                 return res.json();

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { ChevronLeft, ChevronRight, CheckCircle2, Circle, GraduationCap, Lock, Unlock, BookOpen } from 'lucide-react';
 import { db } from '../services/database';
+import { apiFetch } from '../../../../shared/utils/apiFetch';
 
 export interface Mentor {
     id: string;
@@ -49,7 +50,7 @@ export const MentorshipRoom: React.FC<{ user: any }> = ({ user }) => {
     // Initial Data Load
     useEffect(() => {
         // Preload all mentor images for smooth transitions
-        fetch('/api/mentors').then(r => r.json()).then((mentors: Mentor[]) => {
+        apiFetch('/api/mentors').then(r => r.json()).then((mentors: Mentor[]) => {
             mentors.forEach(m => {
                 const img = new Image();
                 img.src = m.image;
@@ -63,7 +64,7 @@ export const MentorshipRoom: React.FC<{ user: any }> = ({ user }) => {
         loadData();
 
         // 2. Fetch Curriculum (Once)
-        fetch('/api/curriculum')
+        apiFetch('/api/curriculum')
             .then(res => res.json())
             .then((data: Module[]) => {
                 setModules(data);
@@ -76,7 +77,7 @@ export const MentorshipRoom: React.FC<{ user: any }> = ({ user }) => {
     // Date Change Effect (Mentors)
     useEffect(() => {
         // 1. Fetch Mentors
-        fetch('/api/mentors')
+        apiFetch('/api/mentors')
             .then(res => res.json())
             .then((data: Mentor[]) => {
                 if (data && data.length > 0) {
@@ -151,7 +152,7 @@ export const MentorshipRoom: React.FC<{ user: any }> = ({ user }) => {
         }
 
         // API Call
-        await fetch('/api/curriculum/toggle', {
+        await apiFetch('/api/curriculum/toggle', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ missionId: id })

@@ -1,15 +1,16 @@
 import { Company, MedicalRecord, Closure } from '../types';
+import { apiFetch } from '../../../../shared/utils/apiFetch';
 
 export const auditorService = {
     // --- Companies ---
     getCompanies: async (): Promise<Company[]> => {
-        const response = await fetch('/api/auditor/companies');
+        const response = await apiFetch('/api/auditor/companies');
         if (!response.ok) throw new Error('Error al obtener compañías');
         return response.json();
     },
 
     createCompany: async (name: string): Promise<Company> => {
-        const response = await fetch('/api/auditor/companies', {
+        const response = await apiFetch('/api/auditor/companies', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ name })
@@ -27,7 +28,7 @@ export const auditorService = {
             ? `/api/auditor/companies/${companyId}/records?closureId=${closureId}`
             : `/api/auditor/companies/${companyId}/records`;
 
-        const response = await fetch(url);
+        const response = await apiFetch(url);
         if (!response.ok) throw new Error('Error al obtener expedientes');
         const data = await response.json();
 
@@ -63,7 +64,7 @@ export const auditorService = {
             amount_to_pay: record.amountToPay
         };
 
-        const response = await fetch('/api/auditor/records', {
+        const response = await apiFetch('/api/auditor/records', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
@@ -101,7 +102,7 @@ export const auditorService = {
         if (record.glossedAmount !== undefined) payload.glossed_amount = record.glossedAmount;
         if (record.amountToPay !== undefined) payload.amount_to_pay = record.amountToPay;
 
-        const response = await fetch(`/api/auditor/records/${id}`, {
+        const response = await apiFetch(`/api/auditor/records/${id}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
@@ -130,7 +131,7 @@ export const auditorService = {
     },
 
     deleteRecord: async (id: string): Promise<void> => {
-        const response = await fetch(`/api/auditor/records/${id}`, {
+        const response = await apiFetch(`/api/auditor/records/${id}`, {
             method: 'DELETE'
         });
         if (!response.ok) throw new Error('Error al eliminar expediente');
@@ -142,7 +143,7 @@ export const auditorService = {
             ? `/api/auditor/closures?companyId=${companyId}&type=${type}`
             : `/api/auditor/closures?companyId=${companyId}`;
 
-        const response = await fetch(url);
+        const response = await apiFetch(url);
         if (!response.ok) throw new Error('Error al obtener cierres');
         const data = await response.json();
 
@@ -157,7 +158,7 @@ export const auditorService = {
     },
 
     createClosure: async (companyId: string, name: string, type: 'emergency' | 'record'): Promise<Closure> => {
-        const response = await fetch('/api/auditor/closures', {
+        const response = await apiFetch('/api/auditor/closures', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ company_id: companyId, name, type })
@@ -181,7 +182,7 @@ export const auditorService = {
 
     // --- Stats ---
     getStats: async (companyId: string) => {
-        const response = await fetch(`/api/auditor/companies/${companyId}/stats`);
+        const response = await apiFetch(`/api/auditor/companies/${companyId}/stats`);
         if (!response.ok) throw new Error('Error al obtener estadísticas');
         return response.json();
     }

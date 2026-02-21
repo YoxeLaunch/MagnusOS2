@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { AppData, Transaction, CurrencyState, DailyTransaction, WealthSnapshot } from '../types';
 import { authService } from '../../../shared/services/auth';
+import { apiFetch } from '../../../shared/utils/apiFetch';
 
 interface DataContextType {
   data: AppData;
@@ -48,7 +49,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     if (!userId) return; // Don't fetch if no user
 
-    fetch(`${API_URL}?userId=${userId}`)
+    apiFetch(`${API_URL}?userId=${userId}`)
       .then(res => {
         if (!res.ok) throw new Error(res.statusText);
         return res.json();
@@ -74,7 +75,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       })
       .catch(err => console.error('Error fetching data:', err));
 
-    fetch(`/api/daily-transactions?userId=${userId}`)
+    apiFetch(`/api/daily-transactions?userId=${userId}`)
       .then(res => {
         if (!res.ok) throw new Error(res.statusText);
         return res.json();
@@ -99,7 +100,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [wealthHistory, setWealthHistory] = useState<WealthSnapshot[]>([]);
 
   const fetchWealthHistory = (uid: string) => {
-    fetch(`/api/wealth/history?userId=${uid}`)
+    apiFetch(`/api/wealth/history?userId=${uid}`)
       .then(res => res.json())
       .then(data => setWealthHistory(Array.isArray(data) ? data : []))
       .catch(err => console.error("Failed to fetch wealth history", err));
@@ -112,9 +113,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const saveWealthSnapshot = async (snapshot: Partial<WealthSnapshot>) => {
     if (!userId) return;
     try {
-      await fetch('/api/wealth/snapshot', {
+      await apiFetch('/api/wealth/snapshot', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...snapshot, userId })
       });
       refreshWealthHistory();
@@ -140,9 +140,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return;
     }
     const transactionWithUser = { ...t, userId };
-    fetch(API_URL, {
+    apiFetch(API_URL, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(transactionWithUser)
     })
       .then(async res => {
@@ -174,7 +173,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const removeTransaction = (id: string) => {
-    fetch(`${API_URL}/${id}`, {
+    apiFetch(`${API_URL}/${id}`, {
       method: 'DELETE'
     })
       .then(async res => {
@@ -190,9 +189,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const updateTransaction = (t: Transaction) => {
-    fetch(`${API_URL}/${t.id}`, {
+    apiFetch(`${API_URL}/${t.id}`, {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(t)
     })
       .then(async res => {
@@ -225,7 +223,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // Fetch global rates
   const fetchGlobalRates = () => {
-    fetch(`/api/rates`)
+    apiFetch(`/api/rates`)
       .then(res => {
         if (!res.ok) throw new Error(res.statusText);
         return res.json();
@@ -265,9 +263,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     // Sync with server
     const payload = { [code]: newRate };
-    fetch(`/api/rates`, {
+    apiFetch(`/api/rates`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
     }).catch(err => console.error("Failed to sync rate", err));
   };
@@ -286,9 +283,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return;
     }
     const transactionWithUser = { ...t, userId };
-    fetch(`/api/daily-transactions`, {
+    apiFetch(`/api/daily-transactions`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(transactionWithUser)
     })
       .then(async res => {
@@ -306,7 +302,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const removeDailyTransaction = (id: number) => {
-    fetch(`/api/daily-transactions/${id}`, {
+    apiFetch(`/api/daily-transactions/${id}`, {
       method: 'DELETE'
     })
       .then(() => setDailyTransactions(prev => prev.filter(t => t.id !== id)))
@@ -314,9 +310,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const updateDailyTransaction = (t: DailyTransaction, onSuccess?: () => void) => {
-    fetch(`/api/daily-transactions/${t.id}`, {
+    apiFetch(`/api/daily-transactions/${t.id}`, {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(t)
     })
       .then(async res => {

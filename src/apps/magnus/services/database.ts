@@ -7,7 +7,7 @@ export interface ChecklistItem {
 export const db = {
     getChecklist: async (): Promise<ChecklistItem[]> => {
         try {
-            const res = await fetch('/api/data');
+            const res = await apiFetch('/api/data');
             const data = await res.json();
             return data.checklist || [];
         } catch (e) {
@@ -18,7 +18,7 @@ export const db = {
 
     saveChecklist: async (items: ChecklistItem[]) => {
         try {
-            await fetch('/api/checklist', {
+            await apiFetch('/api/checklist', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(items)
@@ -30,7 +30,7 @@ export const db = {
 
     getCalendarData: async (): Promise<Record<string, boolean>> => {
         try {
-            const res = await fetch('/api/data');
+            const res = await apiFetch('/api/data');
             const data = await res.json();
             return data.calendar || {};
         } catch (e) {
@@ -42,7 +42,7 @@ export const db = {
     toggleCalendarDate: async (dateStr: string, currentValue: boolean) => {
         try {
             // We send the NEW value (inverse of current)
-            await fetch('/api/calendar', {
+            await apiFetch('/api/calendar', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ date: dateStr, value: !currentValue })
