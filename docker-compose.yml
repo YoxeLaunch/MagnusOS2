@@ -8,18 +8,19 @@ services:
     image: postgres:16-alpine
     container_name: magnus_postgres
     environment:
-      POSTGRES_DB: magnus
-      POSTGRES_USER: magnus
-      POSTGRES_PASSWORD: magnus
+      POSTGRES_DB: ${POSTGRES_DB:-magnus}
+      POSTGRES_USER: ${POSTGRES_USER:-magnus}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-magnus_change_me}
     volumes:
       - magnus_pgdata:/var/lib/postgresql/data
     networks:
       - magnus_net
-    ports:
-      - "5432:5432"
+    # Puerto 5432 NO expuesto al host intencionalmente (fix seguridad).
+    # El servicio 'magnus' accede por red interna magnus_net.
+    # Acceso manual: docker exec -it magnus_postgres psql -U magnus magnus
     restart: always
     healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U magnus -d magnus" ]
+      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-magnus} -d ${POSTGRES_DB:-magnus}" ]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -32,16 +33,19 @@ services:
       context: .
       dockerfile: Dockerfile.api
     container_name: magnus_os2_app
+    env_file:
+      - .env
     environment:
       NODE_ENV: production
       PORT: 4000
-      DATABASE_URL: postgresql://magnus:magnus@postgres:5432/magnus
+      DATABASE_URL: ${DATABASE_URL:-postgresql://magnus:magnus_change_me@postgres:5432/magnus}
+      JWT_SECRET: ${JWT_SECRET}
     networks:
       - magnus_net
     ports:
       - "4000:4000"
     volumes:
-      - ./server/data:/app/server/data # Persistencia de SQLite (para migración) y archivos locales
+      - ./server/data:/app/server/data
     depends_on:
       postgres:
         condition: service_healthy
