@@ -1,31 +1,37 @@
 import { DataTypes } from 'sequelize';
 import { sequelize } from '../config/database.js';
 
+const isPostgres = !!process.env.DATABASE_URL;
+
 export const User = sequelize.define('User', {
     username: { type: DataTypes.STRING, primaryKey: true },
     password: { type: DataTypes.STRING, allowNull: false },
     name: { type: DataTypes.STRING },
     role: { type: DataTypes.STRING, defaultValue: 'user' },
-    // Storing arrays/objects as JSON strings for simplicity in SQLite
-    // In Postgres we would use DataTypes.JSONB
-    tags: {
-        type: DataTypes.TEXT,
-        get() {
-            const rawValue = this.getDataValue('tags');
-            return rawValue ? JSON.parse(rawValue) : [];
+    // PostgreSQL: JSONB nativo (requiere migrar con migrate-jsonb.js si hay datos previos)
+    // SQLite fallback: TEXT con parse/stringify manual
+    tags: isPostgres
+        ? { type: DataTypes.JSONB, defaultValue: [] }
+        : {
+            type: DataTypes.TEXT,
+            get() {
+                const raw = this.getDataValue('tags');
+                return raw ? JSON.parse(raw) : [];
+            },
+            set(value) {
+                this.setDataValue('tags', JSON.stringify(value));
+            }
         },
-        set(value) {
-            this.setDataValue('tags', JSON.stringify(value));
+    preferences: isPostgres
+        ? { type: DataTypes.JSONB, defaultValue: {} }
+        : {
+            type: DataTypes.TEXT,
+            get() {
+                const raw = this.getDataValue('preferences');
+                return raw ? JSON.parse(raw) : {};
+            },
+            set(value) {
+                this.setDataValue('preferences', JSON.stringify(value));
+            }
         }
-    },
-    preferences: {
-        type: DataTypes.TEXT,
-        get() {
-            const rawValue = this.getDataValue('preferences');
-            return rawValue ? JSON.parse(rawValue) : {};
-        },
-        set(value) {
-            this.setDataValue('preferences', JSON.stringify(value));
-        }
-    }
 });
