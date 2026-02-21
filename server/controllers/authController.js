@@ -1,5 +1,6 @@
 import { User } from '../models/index.js';
 import bcrypt from 'bcryptjs';
+import { generateToken } from '../middleware/auth.js';
 
 export const login = async (req, res) => {
     try {
@@ -23,11 +24,8 @@ export const login = async (req, res) => {
         }
 
         if (isValid) {
-            // Auto-promote 'soberano'
-            if (user.username.toLowerCase() === 'soberano' && user.role !== 'admin') {
-                user.role = 'admin';
-                needsRehash = true; // Just to trigger save
-            }
+            // SECURITY: Removed implicit admin escalation by username.
+            // Admin role is now set only at registration time via ALLOW_FIRST_ADMIN flag.
 
             // Lazy Migration: Upgrade to Hash
             if (needsRehash) {
@@ -38,7 +36,8 @@ export const login = async (req, res) => {
 
             const userData = user.toJSON();
             const { password: _, ...safeUser } = userData;
-            res.json(safeUser);
+            const token = generateToken(user);
+            res.json({ ...safeUser, token });
         } else {
             res.status(401).json({ error: 'Contraseña incorrecta' });
         }
@@ -57,9 +56,14 @@ export const register = async (req, res) => {
             return res.status(400).json({ error: 'El usuario ya existe' });
         }
 
-        // Set role default
-        if (newUser.username.toLowerCase() === 'soberano') newUser.role = 'admin';
-        else newUser.role = 'user';
+        // Set role: admin only for the very first user when ALLOW_FIRST_ADMIN=true
+        const userCount = await User.count();
+        if (process.env.ALLOW_FIRST_ADMIN === 'true' && userCount === 0) {
+            newUser.role = 'admin';
+            console.log(`[AUTH] First user registered as admin via ALLOW_FIRST_ADMIN flag.`);
+        } else {
+            newUser.role = 'user';
+        }
 
         // Hash Password
         newUser.password = await bcrypt.hash(newUser.password, 10);
