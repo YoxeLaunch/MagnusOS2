@@ -50,7 +50,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     if (!userId) return; // Don't fetch if no user
 
-    apiFetch(`${API_URL}?userId=${userId}`)
+    const transactionsPromise = apiFetch(`${API_URL}?userId=${userId}`)
       .then(res => {
         if (!res.ok) throw new Error(res.statusText);
         return res.json();
@@ -76,7 +76,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       })
       .catch(err => console.error('Error fetching data:', err));
 
-    apiFetch(`/api/daily-transactions?userId=${userId}`)
+    const dailyPromise = apiFetch(`/api/daily-transactions?userId=${userId}`)
       .then(res => {
         if (!res.ok) throw new Error(res.statusText);
         return res.json();
