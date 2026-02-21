@@ -31,8 +31,8 @@ const createSequelizeInstance = (dbPath, name) => {
                 } : false
             },
             pool: {
-                max: 5,
-                min: 0,
+                max: 10,   // Conexiones máximas simultáneas
+                min: 2,    // Mantener mínimo 2 conexiones listas (evita latencia cold-start)
                 acquire: 30000,
                 idle: 10000
             }

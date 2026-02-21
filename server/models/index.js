@@ -59,8 +59,10 @@ export const initDb = async () => {
 
             await sequelize.query('PRAGMA foreign_keys = ON;');
         } else {
-            // PostgreSQL: full alter mode is supported
-            await sequelize.sync({ alter: true });
+            // PostgreSQL: sync en modo seguro (sin ALTER automático).
+            // IMPORTANTE: Para cambios de esquema, usar migraciones explícitas.
+            // `alter: true` fue deshabilitado porque puede eliminar columnas silenciosamente en prod.
+            await sequelize.sync({ alter: false });
         }
 
         console.log(`[DB] Database synced (${dbInfo.type.toUpperCase()})`);
