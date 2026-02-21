@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Crown, ArrowRight, X } from 'lucide-react';
-import { apiFetch } from '../../../../shared/utils/apiFetch';
+import { apiFetch } from '../../utils/apiFetch';
 
 interface WelcomeIntroProps {
     onClose: () => void;

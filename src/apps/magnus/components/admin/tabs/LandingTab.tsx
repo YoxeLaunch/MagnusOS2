@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Save, X, Upload, Image as ImageIcon, Info, CheckCircle2, AlertCircle } from 'lucide-react';
 import { useToast } from '../../../../../shared/context/ToastContext';
-import { apiFetch } from '../../../shared/utils/apiFetch';
+import { apiFetch } from '../../../../../shared/utils/apiFetch';
 
 interface LandingTabProps {
     loading: boolean;

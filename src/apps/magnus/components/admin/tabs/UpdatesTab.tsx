@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { TrendingUp, Save, Bell } from 'lucide-react';
 import { useToast } from '../../../../../shared/context/ToastContext';
-import { apiFetch } from '../../../shared/utils/apiFetch';
+import { apiFetch } from '../../../../../shared/utils/apiFetch';
 
 export const UpdatesTab: React.FC = () => {
     const toast = useToast();

@@ -1,5 +1,5 @@
 import { Company, MedicalRecord, Closure } from '../types';
-import { apiFetch } from '../../../../shared/utils/apiFetch';
+import { apiFetch } from '../../../shared/utils/apiFetch';
 
 export const auditorService = {
     // --- Companies ---

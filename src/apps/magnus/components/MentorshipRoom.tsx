@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { ChevronLeft, ChevronRight, CheckCircle2, Circle, GraduationCap, Lock, Unlock, BookOpen } from 'lucide-react';
 import { db } from '../services/database';
-import { apiFetch } from '../../../../shared/utils/apiFetch';
+import { apiFetch } from '../../../shared/utils/apiFetch';
 
 export interface Mentor {
     id: string;
