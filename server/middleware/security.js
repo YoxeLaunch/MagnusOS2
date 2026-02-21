@@ -5,16 +5,18 @@ import helmet from 'helmet';
 // 1. Security Headers (Helmet) con CSP básica
 export const securityHeaders = helmet({
     crossOriginResourcePolicy: { policy: "cross-origin" },
+    hsts: false, // Desactivar HSTS para evitar redirección forzada a HTTPS en red local
     contentSecurityPolicy: {
         directives: {
             defaultSrc: ["'self'"],
-            scriptSrc: ["'self'"],
-            styleSrc: ["'self'", "'unsafe-inline'"],   // Tailwind lo necesita
-            imgSrc: ["'self'", "data:", "blob:"],
-            fontSrc: ["'self'", "data:"],
-            connectSrc: ["'self'", "ws:", "wss:"],    // WebSocket/Socket.io
+            scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
+            styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
+            imgSrc: ["'self'", "data:", "blob:", "https://*"],
+            fontSrc: ["'self'", "data:", "https://fonts.gstatic.com"],
+            connectSrc: ["'self'", "ws:", "wss:", "https://worldtimeapi.org"], // Permitir worldtimeapi
             frameSrc: ["'none'"],
             objectSrc: ["'none'"],
+            upgradeInsecureRequests: null, // Evitar promoción forzada a HTTPS
         }
     }
 });
