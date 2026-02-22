@@ -12,27 +12,31 @@ export const chat = async (req, res) => {
         const { message, userId } = req.body;
         console.log(`[AI] Request from ${userId}: "${message}"`);
 
-        // 1. Get Context (Recent Transactions) - Reduce to 5 for speed
+        // 1. Get Context (Recent Transactions) - Increased for monthly analysis
         let recentTx = [];
         try {
             recentTx = await DailyTransaction.findAll({
                 where: { userId },
-                limit: 5,
+                limit: 40,
                 order: [['date', 'DESC']]
             });
         } catch (dbErr) {
             console.error('[AI DB ERROR]', dbErr.message);
         }
 
-        const context = recentTx.map(t => `${t.description}: ${t.amount}`).join(', ');
+        const context = recentTx.map(t => `${t.date}: ${t.description} (${t.amount})`).join('\n');
         console.log(`[AI] Context size: ${recentTx.length} items`);
 
-        // 2. Format Prompt - Ultra minimal
-        const prompt = `Analista Financiero. Contexto: ${context || 'Sin datos'}. Pregunta: ${message}. Responde brevemente.`.trim();
+        // 2. Prepare Payload
+        const system = "Eres el Analista Financiero de MagnusOS. Tienes acceso a los datos reales arriba. Responde SIEMPRE basándote en ellos de forma breve y profesional en español. 'soberano' es el usuario.";
+        const prompt = `DATOS DE TRANSACCIONES:
+${context || 'No hay transacciones registradas.'}
 
-        // 3. Call Ollama with longer Timeout (120s)
-        console.log(`[AI] Calling Ollama (${OLLAMA_URL}) model ${MODEL}...`);
+PREGUNTA DEL USUARIO: "${message}"`;
 
+        console.log(`[AI DEBUG] PROMPT SENT:\n${prompt}`);
+
+        // 3. Call Ollama
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 120000); // 120s
 
@@ -41,11 +45,12 @@ export const chat = async (req, res) => {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 model: MODEL,
+                system,
                 prompt,
                 stream: false,
                 options: {
-                    num_predict: 100, // Limit output tokens for speed
-                    temperature: 0.3
+                    num_predict: 300,
+                    temperature: 0.1
                 }
             }),
             signal: controller.signal
@@ -55,11 +60,11 @@ export const chat = async (req, res) => {
 
         if (!response.ok) {
             const errorText = await response.text();
-            throw new Error(`Ollama status ${response.status}`);
+            throw new Error(`Ollama status ${response.status}: ${errorText}`);
         }
 
         const data = await response.json();
-        console.log(`[AI] Success.`);
+        console.log(`[AI DEBUG] RESPONSE RECEIVED: "${data.response}"`);
         res.json({ response: data.response });
 
     } catch (error) {

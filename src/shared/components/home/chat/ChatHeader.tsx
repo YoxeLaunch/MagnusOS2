@@ -43,7 +43,7 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
                 <div>
                     <h3 className="font-bold text-slate-900 dark:text-white text-sm flex items-center gap-2">
                         {view === 'DIRECTORY' ? 'Nueva Conversación' :
-                            view === 'AI' ? 'Analista IA (Qwen 2.5)' :
+                            view === 'AI' ? 'Analista IA' :
                                 view === 'CHAT' ? (activeChat === 'global' ? 'Sala Común' : activeChatName) :
                                     'Mensajes'}
                     </h3>
