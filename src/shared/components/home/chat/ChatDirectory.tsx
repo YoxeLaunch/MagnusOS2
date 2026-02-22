@@ -51,7 +51,7 @@ export const ChatDirectory: React.FC<ChatDirectoryProps> = ({ onlineUsers, allUs
             <div>
                 <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Otros Usuarios</h4>
                 <div className="space-y-2 opacity-80">
-                    {allUsers.filter(u => !onlineUsers.some(ou => ou.username === u.username) && u.username !== currentUser.username).map((u) => {
+                    {(Array.isArray(allUsers) ? allUsers : []).filter(u => !onlineUsers.some(ou => ou.username === u.username) && u.username !== currentUser.username).map((u) => {
                         const isVIP = u.username.toLowerCase() === 'soberano' || u.role === 'user' && u.tags?.includes('VIP'); // Simple check from original logic
                         return (
                             <div

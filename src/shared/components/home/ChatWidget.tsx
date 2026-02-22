@@ -9,6 +9,7 @@ import { ChatDirectory } from './chat/ChatDirectory';
 import { MessageBubble } from './chat/MessageBubble';
 import { ChatInput } from './chat/ChatInput';
 import { THEMES } from './chat/types';
+import { apiFetch } from '../../utils/apiFetch';
 
 interface ChatWidgetProps {
     user: User;
@@ -40,16 +41,20 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({ user, isOpen, onClose })
     // Initial Data Fetch
     useEffect(() => {
         if (isOpen) {
-            fetch(`/api/users`)
+            apiFetch(`/api/users`)
                 .then(res => res.json())
                 .then((data: User[]) => {
-                    setAllUsers(data);
-                    const me = data.find(u => u.username === user.username);
+                    const userList = Array.isArray(data) ? data : [];
+                    setAllUsers(userList);
+                    const me = userList.find(u => u.username === user.username);
                     if (me?.preferences?.chatTheme) {
                         setCurrentTheme(me.preferences.chatTheme);
                     }
                 })
-                .catch(err => console.error('Error fetching users:', err));
+                .catch(err => {
+                    console.error('Error fetching users:', err);
+                    setAllUsers([]);
+                });
         }
     }, [isOpen, user.username]);
 
@@ -62,7 +67,7 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({ user, isOpen, onClose })
 
     // Save Theme Preference
     const saveTheme = (newTheme: string) => {
-        fetch(`${SOCKET_URL}/api/users/${user.username}/preferences`, {
+        apiFetch(`${SOCKET_URL}/api/users/${user.username}/preferences`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ preferences: { chatTheme: newTheme } })
@@ -92,7 +97,7 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({ user, isOpen, onClose })
     // Helper for display
     const getActiveChatName = () => {
         if (activeChat === 'global') return 'Sala Común';
-        const u = allUsers.find(u => u.username === activeChat);
+        const u = Array.isArray(allUsers) ? allUsers.find(u => u.username === activeChat) : null;
         return u?.name || activeChat || 'Chat';
     };
 

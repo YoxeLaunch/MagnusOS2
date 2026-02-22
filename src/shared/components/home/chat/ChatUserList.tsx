@@ -25,7 +25,7 @@ export const ChatUserList: React.FC<ChatUserListProps> = ({
 
     // Helper to get User info wrapper
     const getUserInfo = (username: string) => {
-        const u = allUsers.find(au => au.username === username);
+        const u = Array.isArray(allUsers) ? allUsers.find(au => au.username === username) : null;
         // Build fallback display logic if user not found in static list but exists in messages
         return {
             name: u?.name || username,
