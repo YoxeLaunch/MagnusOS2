@@ -1,0 +1,27 @@
+# Dockerfile for AI Sandbox (Python Execution Environment)
+FROM python:3.11-slim-bookworm
+
+# Install system dependencies for financial analysis and tools
+RUN apt-get update && apt-get install -y \
+    curl \
+    git \
+    jq \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Python packages required for analysis
+RUN pip install --no-cache-dir \
+    pandas \
+    numpy \
+    matplotlib \
+    requests \
+    flask
+
+# Set workspace
+WORKDIR /sandbox
+
+# Create a simple bridge script to execute code
+COPY server/scripts/sandbox-bridge.py /app/bridge.py
+
+EXPOSE 5000
+
+CMD ["python", "/app/bridge.py"]

@@ -4,8 +4,8 @@ import { User } from '../../../types/user';
 import { ConnectedUser, THEMES } from './types';
 
 interface ChatHeaderProps {
-    view: 'LIST' | 'CHAT' | 'DIRECTORY';
-    setView: (view: 'LIST' | 'CHAT' | 'DIRECTORY') => void;
+    view: 'LIST' | 'CHAT' | 'DIRECTORY' | 'AI';
+    setView: (view: 'LIST' | 'CHAT' | 'DIRECTORY' | 'AI') => void;
     activeChat: string | null;
     activeChatName: string;
     onlineCount: number;
@@ -43,8 +43,9 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
                 <div>
                     <h3 className="font-bold text-slate-900 dark:text-white text-sm flex items-center gap-2">
                         {view === 'DIRECTORY' ? 'Nueva Conversación' :
-                            view === 'CHAT' ? (activeChat === 'global' ? 'Sala Común' : activeChatName) :
-                                'Mensajes'}
+                            view === 'AI' ? 'Analista IA (Qwen 2.5)' :
+                                view === 'CHAT' ? (activeChat === 'global' ? 'Sala Común' : activeChatName) :
+                                    'Mensajes'}
                     </h3>
                     {view === 'LIST' && (
                         <p className="text-[10px] text-green-600 dark:text-green-400 font-medium">

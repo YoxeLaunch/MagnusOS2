@@ -6,6 +6,7 @@ import systemRoutes from './system.routes.js';
 import healthRoutes from './health.routes.js';
 import auditorRoutes from './auditor.routes.js';
 import telegramRoutes from './telegram.routes.js';
+import aiRoutes from './ai.routes.js';
 
 const router = Router();
 
@@ -16,5 +17,6 @@ router.use('/', systemRoutes);
 router.use('/', healthRoutes);
 router.use('/auditor', auditorRoutes);
 router.use('/telegram', telegramRoutes);
+router.use('/ai', aiRoutes);
 
 export default router;

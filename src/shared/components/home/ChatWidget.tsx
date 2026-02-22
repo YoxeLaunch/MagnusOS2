@@ -10,6 +10,8 @@ import { MessageBubble } from './chat/MessageBubble';
 import { ChatInput } from './chat/ChatInput';
 import { THEMES } from './chat/types';
 import { apiFetch } from '../../utils/apiFetch';
+import { useAI } from './chat/useAI';
+import { Sparkles } from 'lucide-react';
 
 interface ChatWidgetProps {
     user: User;
@@ -22,10 +24,11 @@ const SOCKET_URL = '';
 export const ChatWidget: React.FC<ChatWidgetProps> = ({ user, isOpen, onClose }) => {
     // Custom Hook handles socket logic
     const chat = useChat(user);
+    const ai = useAI();
 
     // UI State
-    // 'LIST' = Main Menu, 'CHAT' = Conversation, 'DIRECTORY' = New Chat
-    const [view, setView] = useState<'LIST' | 'CHAT' | 'DIRECTORY'>('LIST');
+    // 'LIST' = Main Menu, 'CHAT' = Conversation, 'DIRECTORY' = New Chat, 'AI' = AI Analyst
+    const [view, setView] = useState<'LIST' | 'CHAT' | 'DIRECTORY' | 'AI'>('LIST');
     const [activeChat, setActiveChat] = useState<string | null>(null);
     const [isMinimized, setIsMinimized] = useState(false);
 
@@ -60,10 +63,10 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({ user, isOpen, onClose })
 
     // Auto-scroll logic
     useEffect(() => {
-        if (view === 'CHAT') {
+        if (view === 'CHAT' || view === 'AI') {
             messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
         }
-    }, [chat.messages, chat.privateMessages, activeChat, view, isOpen]);
+    }, [chat.messages, chat.privateMessages, ai.messages, activeChat, view, isOpen]);
 
     // Save Theme Preference
     const saveTheme = (newTheme: string) => {
@@ -177,17 +180,35 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({ user, isOpen, onClose })
                 )}
 
                 {view === 'LIST' && (
-                    <ChatUserList
-                        unreadCounts={chat.unreadCounts}
-                        lastGlobalMessage={getLastMessage('global')}
-                        privateChatUsernames={privateChatUsernames}
-                        getLastPrivateMessage={getLastMessage}
-                        onlineUsers={chat.onlineUsers}
-                        allUsers={allUsers}
-                        currentUser={user}
-                        onOpenChat={handleOpenChat}
-                        currentTheme={currentTheme}
-                    />
+                    <div className="flex flex-col h-full">
+                        <button
+                            onClick={() => setView('AI')}
+                            className="m-4 p-4 bg-gradient-to-r from-theme-gold/20 to-purple-500/20 border border-theme-gold/30 rounded-2xl flex items-center justify-between hover:scale-[1.02] transition-transform group"
+                        >
+                            <div className="flex items-center gap-3">
+                                <div className="p-2 bg-theme-gold rounded-xl text-slate-900 shadow-lg group-hover:rotate-12 transition-transform">
+                                    <Sparkles size={20} />
+                                </div>
+                                <div className="text-left">
+                                    <h4 className="font-bold text-slate-900 dark:text-white text-sm">Consultar Analista IA</h4>
+                                    <p className="text-[10px] text-slate-500 dark:text-slate-400">Análisis financiero local y privado</p>
+                                </div>
+                            </div>
+                            <span className="text-theme-gold opacity-0 group-hover:opacity-100 transition-opacity">→</span>
+                        </button>
+
+                        <ChatUserList
+                            unreadCounts={chat.unreadCounts}
+                            lastGlobalMessage={getLastMessage('global')}
+                            privateChatUsernames={privateChatUsernames}
+                            getLastPrivateMessage={getLastMessage}
+                            onlineUsers={chat.onlineUsers}
+                            allUsers={allUsers}
+                            currentUser={user}
+                            onOpenChat={handleOpenChat}
+                            currentTheme={currentTheme}
+                        />
+                    </div>
                 )}
 
                 {view === 'DIRECTORY' && (
@@ -200,6 +221,55 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({ user, isOpen, onClose })
                             chat.clearUnread(username);
                         }}
                     />
+                )}
+
+                {view === 'AI' && (
+                    <div className="h-full flex flex-col bg-slate-50 dark:bg-slate-900/50">
+                        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                            {ai.messages.length === 0 && (
+                                <div className="h-full flex flex-col items-center justify-center text-center p-6 space-y-4 opacity-60">
+                                    <div className="w-16 h-16 bg-theme-gold/20 rounded-full flex items-center justify-center text-theme-gold">
+                                        <Sparkles size={32} />
+                                    </div>
+                                    <div className="space-y-1">
+                                        <h4 className="font-bold text-slate-900 dark:text-white">Analista IA Local</h4>
+                                        <p className="text-xs text-slate-500 max-w-[200px]">
+                                            Haz preguntas sobre tus gastos, proyecciones o pide análisis de tendencias. Todo procesado localmente.
+                                        </p>
+                                    </div>
+                                </div>
+                            )}
+                            {ai.messages.map((msg, idx) => (
+                                <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                                    <div className={`max-w-[80%] p-3 rounded-2xl text-sm ${msg.role === 'user'
+                                        ? 'bg-slate-900 dark:bg-theme-gold text-white dark:text-slate-900 shadow-md'
+                                        : 'bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 border border-slate-100 dark:border-white/5 shadow-sm'
+                                        }`}>
+                                        {msg.content}
+                                    </div>
+                                </div>
+                            ))}
+                            {ai.isThinking && (
+                                <div className="flex justify-start">
+                                    <div className="bg-white dark:bg-slate-800 p-3 rounded-2xl shadow-sm border border-slate-100 dark:border-white/5 flex gap-1">
+                                        <span className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce"></span>
+                                        <span className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce [animation-delay:0.2s]"></span>
+                                        <span className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce [animation-delay:0.4s]"></span>
+                                    </div>
+                                </div>
+                            )}
+                            <div ref={messagesEndRef} />
+                        </div>
+
+                        <ChatInput
+                            onSend={(text) => ai.askAI(text, user.username)}
+                            currentTheme={currentTheme}
+                            replyTo={null}
+                            onCancelReply={() => { }}
+                            onTyping={() => { }}
+                            onStopTyping={() => { }}
+                        />
+                    </div>
                 )}
 
                 {view === 'CHAT' && activeChat && (

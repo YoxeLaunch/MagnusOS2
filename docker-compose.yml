@@ -58,6 +58,35 @@ services:
       timeout: 10s
       retries: 3
 
+  # ========================================
+  # AI Local (Ollama)
+  # ========================================
+  ollama:
+    image: ollama/ollama
+    container_name: magnus_ollama
+    volumes:
+      - ollama_data:/root/.ollama
+    networks:
+      - magnus_net
+    restart: unless-stopped
+    # No exponemos puerto al host, Magnus accede internamente.
+
+    # ========================================
+    # AI Sandbox (Python Execution)
+    # ========================================
+  sandbox:
+    build:
+      context: .
+      dockerfile: Dockerfile.sandbox
+    container_name: magnus_sandbox
+    volumes:
+      - ./server/data/sandbox:/sandbox
+    networks:
+      - magnus_net
+    restart: unless-stopped
+    depends_on:
+      - magnus
+
 # ========================================
 # Networks
 # ========================================
@@ -70,4 +99,6 @@ networks:
 # ========================================
 volumes:
   magnus_pgdata:
+    driver: local
+  ollama_data:
     driver: local
