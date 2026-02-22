@@ -12,36 +12,29 @@ export const chat = async (req, res) => {
         const { message, userId } = req.body;
         console.log(`[AI] Request from ${userId}: "${message}"`);
 
-        // 1. Get Context (Recent Transactions)
+        // 1. Get Context (Recent Transactions) - Reduce to 5 for speed
         let recentTx = [];
         try {
             recentTx = await DailyTransaction.findAll({
                 where: { userId },
-                limit: 10,
+                limit: 5,
                 order: [['date', 'DESC']]
             });
         } catch (dbErr) {
             console.error('[AI DB ERROR]', dbErr.message);
         }
 
-        const context = recentTx.map(t => `${t.date}: ${t.description} (${t.amount} DOP, ${t.type})`).join('\n');
-        console.log(`[AI] Context: ${recentTx.length} transactions found.`);
+        const context = recentTx.map(t => `${t.description}: ${t.amount}`).join(', ');
+        console.log(`[AI] Context size: ${recentTx.length} items`);
 
-        // 2. Format Prompt
-        const prompt = `
-Eres Magnus AI, un analista financiero experto. 
-Transacciones del usuario:
-${context || 'No hay transacciones.'}
+        // 2. Format Prompt - Ultra minimal
+        const prompt = `Analista Financiero. Contexto: ${context || 'Sin datos'}. Pregunta: ${message}. Responde brevemente.`.trim();
 
-Pregunta: "${message}"
-Responde brevemente.
-`.trim();
-
-        // 3. Call Ollama with Timeout
-        console.log(`[AI] Calling Ollama (${OLLAMA_URL}) with model ${MODEL}...`);
+        // 3. Call Ollama with longer Timeout (120s)
+        console.log(`[AI] Calling Ollama (${OLLAMA_URL}) model ${MODEL}...`);
 
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 60000);
+        const timeoutId = setTimeout(() => controller.abort(), 120000); // 120s
 
         const response = await fetch(`${OLLAMA_URL}/api/generate`, {
             method: 'POST',
@@ -49,7 +42,11 @@ Responde brevemente.
             body: JSON.stringify({
                 model: MODEL,
                 prompt,
-                stream: false
+                stream: false,
+                options: {
+                    num_predict: 100, // Limit output tokens for speed
+                    temperature: 0.3
+                }
             }),
             signal: controller.signal
         });
@@ -58,20 +55,20 @@ Responde brevemente.
 
         if (!response.ok) {
             const errorText = await response.text();
-            throw new Error(`Ollama status ${response.status}: ${errorText}`);
+            throw new Error(`Ollama status ${response.status}`);
         }
 
         const data = await response.json();
-        console.log(`[AI] Response received successfully.`);
+        console.log(`[AI] Success.`);
         res.json({ response: data.response });
 
     } catch (error) {
         if (error.name === 'AbortError') {
-            console.error('[AI TIMEOUT] Ollama took too long.');
-            res.status(504).json({ error: 'La IA tardó demasiado en responder.' });
+            console.error('[AI TIMEOUT] Ollama took too long (>120s).');
+            res.status(504).json({ error: 'La IA está tardando demasiado debido a recursos limitados del servidor.' });
         } else {
             console.error('[AI ERROR]', error.message);
-            res.status(500).json({ error: 'Error interno en el analista IA.', details: error.message });
+            res.status(500).json({ error: 'Error en el analista IA.', details: error.message });
         }
     }
 };
