@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Send, X } from 'lucide-react';
 import { THEMES, Message } from './types';
 
@@ -7,20 +7,48 @@ interface ChatInputProps {
     currentTheme: string;
     replyTo: Message | null;
     onCancelReply: () => void;
+    onTyping: () => void;
+    onStopTyping: () => void;
 }
 
-export const ChatInput: React.FC<ChatInputProps> = ({ onSend, currentTheme, replyTo, onCancelReply }) => {
+export const ChatInput: React.FC<ChatInputProps> = ({ onSend, currentTheme, replyTo, onCancelReply, onTyping, onStopTyping }) => {
     const [input, setInput] = useState('');
+    const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+    const isTypingRef = useRef(false);
 
     const themeStyle = THEMES[currentTheme];
     const accentColor = currentTheme === 'default' ? 'text-theme-gold' : themeStyle.accent;
     const primaryColor = currentTheme === 'default' ? 'bg-theme-gold' : themeStyle.primary;
+
+    const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const val = e.target.value;
+        setInput(val);
+
+        if (!isTypingRef.current) {
+            isTypingRef.current = true;
+            onTyping();
+        }
+
+        if (typingTimeoutRef.current) {
+            clearTimeout(typingTimeoutRef.current);
+        }
+
+        typingTimeoutRef.current = setTimeout(() => {
+            isTypingRef.current = false;
+            onStopTyping();
+        }, 2000);
+    };
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         if (input.trim()) {
             onSend(input);
             setInput('');
+            if (typingTimeoutRef.current) {
+                clearTimeout(typingTimeoutRef.current);
+            }
+            isTypingRef.current = false;
+            onStopTyping();
         }
     };
 
@@ -51,7 +79,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({ onSend, currentTheme, repl
                 <input
                     type="text"
                     value={input}
-                    onChange={(e) => setInput(e.target.value)}
+                    onChange={handleInputChange}
                     placeholder="Escribe un mensaje..."
                     className={`flex-1 bg-slate-100 dark:bg-slate-800 border-none rounded-xl px-4 py-3 text-sm focus:ring-2 outline-none dark:text-white placeholder-slate-400 transition-all ${currentTheme === 'default' ? 'focus:ring-theme-gold' : `focus:ring-opacity-50 ${accentColor.replace('text-', 'focus:ring-')}`}`}
                 />

@@ -16,9 +16,10 @@ import { MoneyInsight } from '../components/dashboard/MoneyInsight';
 import { WealthWidget } from '../components/dashboard/WealthWidget';
 import { InvestmentAllocation } from '../components/dashboard/InvestmentAllocation';
 import { getDaysInMonth, getDaysElapsed } from '../utils/financialMetrics';
+import { DashboardSkeleton } from '../../../shared/components/Skeleton';
 
 export const Dashboard: React.FC = () => {
-  const { data, dailyTransactions, currencies } = useData();
+  const { data, dailyTransactions, currencies, isLoading } = useData();
   const navigate = useNavigate();
   const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
 
@@ -40,8 +41,8 @@ export const Dashboard: React.FC = () => {
   };
 
   const convertToDOP = (amount: number, currency?: string) => {
-    if (currency === 'USD') return amount * currencies.usd.rate;
-    if (currency === 'EUR') return amount * currencies.eur.rate;
+    if (currency === 'USD') return amount * (currencies?.usd?.rate || 1);
+    if (currency === 'EUR') return amount * (currencies?.eur?.rate || 1);
     return amount;
   };
 
@@ -55,55 +56,50 @@ export const Dashboard: React.FC = () => {
     let investment = 0;
 
     dailyTransactions.forEach(t => {
-      const amountInDOP = convertToDOP(t.amount);
+      const amountInDOP = convertToDOP(t.amount, t.currency);
       if (isDateInCycle(t.date, currentCycle)) {
         if (t.type === 'income') income += amountInDOP;
         else if (t.type === 'investment') investment += amountInDOP;
         else expense += amountInDOP;
       }
     });
-    // Balance for Budget vs Reality (Expenses Check)
-    // NOTE: available liquidity is technically (income - expense - investment), but for "Budget vs Reality" chart
-    // which compares against budgeted EXPENSES, we only care about real EXPENSES.
+
     return { income, expense, investment, balance: income - expense - investment, cycleLabel: currentCycle.label };
   }, [dailyTransactions, currencies]);
 
-  // Filter for Current Period (Starts Dec 21, 2025)
-  const START_DATE = new Date('2025-12-21');
+  // Filter and Summary Calculations
+  const { totalIncomeCurrent, totalExpenseCurrent, comparisonData, expenseChartData } = useMemo(() => {
+    const START_DATE = new Date('2025-12-21');
 
-  const filterByDate = (transactions: any[]) => {
-    return transactions.filter(t => {
-      const tDate = new Date(t.date || '2025-12-21'); // Default to start date if missing
-      return tDate >= START_DATE;
-    });
-  };
+    const incomes = (data.incomes || []).filter(t => new Date(t.date || '2025-12-21') >= START_DATE);
+    const expenses = (data.expenses || []).filter(t => new Date(t.date || '2025-12-21') >= START_DATE);
 
-  const currentIncomes = filterByDate(data.incomes);
-  const currentExpenses = filterByDate(data.expenses);
+    const totalIncome = incomes.reduce((acc, curr) => acc + (calculateAnnualAmount(curr, currencies) / 12), 0);
+    const totalExpense = expenses.reduce((acc, curr) => acc + (calculateAnnualAmount(curr, currencies) / 12), 0);
 
-  const totalIncomeCurrent = currentIncomes.reduce((acc, curr) => acc + (calculateAnnualAmount(curr, currencies) / 12), 0);
-  const totalExpenseCurrent = currentExpenses.reduce((acc, curr) => acc + (calculateAnnualAmount(curr, currencies) / 12), 0);
+    const compData = [
+      { name: 'Ingresos', value: totalIncome, fill: '#3b82f6' },
+      { name: 'Gastos', value: totalExpense, fill: '#ef4444' }
+    ];
+
+    const pieData = Object.values(expenses.reduce((acc: any, curr) => {
+      const cat = curr.category || curr.name;
+      if (!acc[cat]) acc[cat] = { name: cat, value: 0 };
+      acc[cat].value += (calculateAnnualAmount(curr, currencies) / 12);
+      return acc;
+    }, {}));
+
+    return { totalIncomeCurrent: totalIncome, totalExpenseCurrent: totalExpense, comparisonData: compData, expenseChartData: pieData };
+  }, [data, currencies]);
 
   // Time Metrics
   const now = new Date();
   const daysElapsed = getDaysElapsed(now);
   const totalDaysInMonth = getDaysInMonth(now);
 
-  // Chart Data: Current Month Income vs Expense
-  const comparisonData = [
-    { name: 'Ingresos', value: totalIncomeCurrent, fill: '#3b82f6' }, // Blue-500
-    { name: 'Gastos', value: totalExpenseCurrent, fill: '#ef4444' } // Red-500
-  ];
-
-  // Pie Chart Data
-  const expenseChartData = Object.values(currentExpenses.reduce((acc: any, curr) => {
-    const cat = curr.category || curr.name;
-    if (!acc[cat]) acc[cat] = { name: cat, value: 0 };
-    acc[cat].value += (calculateAnnualAmount(curr, currencies) / 12);
-    return acc;
-  }, {}));
-
   const COLORS = ['#ef4444', '#f59e0b', '#3b82f6', '#10b981', '#8b5cf6'];
+
+  if (isLoading) return <DashboardSkeleton />;
 
   return (
     <div className="p-4 md:p-8 space-y-8 max-w-7xl mx-auto animate-in fade-in duration-500">

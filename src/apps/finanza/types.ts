@@ -8,6 +8,7 @@ export interface DailyTransaction {
   description: string;
   type: 'income' | 'expense' | 'investment';
   category?: string;
+  currency?: string;
 }
 
 export interface CurrencyHistoryItem {

@@ -8,6 +8,7 @@ export const useChat = (user: { username: string; name: string }) => {
     const [privateMessages, setPrivateMessages] = useState<Record<string, Message[]>>({});
     const [onlineUsers, setOnlineUsers] = useState<ConnectedUser[]>([]);
     const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({});
+    const [typers, setTypers] = useState<Record<string, string[]>>({}); // Room -> [usernames]
 
     useEffect(() => {
         // Use relative path for socket connection (handled by Vite proxy)
@@ -24,18 +25,27 @@ export const useChat = (user: { username: string; name: string }) => {
         });
 
         newSocket.on('receive_message', (message: Message) => {
-            setMessages((prev) => [...prev, message]);
-            setUnreadCounts(prev => ({
-                ...prev,
-                'global': (prev['global'] || 0) + 1
-            }));
+            // Filter out optimistic message if it exists
+            setMessages((prev) => {
+                const filtered = prev.filter(m => !(m.isOptimistic && m.text === message.text && m.username === message.username));
+                return [...filtered, message];
+            });
+
+            if (message.username !== user.username) {
+                setUnreadCounts(prev => ({
+                    ...prev,
+                    'global': (prev['global'] || 0) + 1
+                }));
+            }
         });
 
         newSocket.on('receive_private_message', (message: any) => {
             const otherUser = message.from === user.username ? message.to : message.from;
             setPrivateMessages(prev => {
                 const chat = prev[otherUser] || [];
-                return { ...prev, [otherUser]: [...chat, message] };
+                // Filter out optimistic
+                const filtered = chat.filter(m => !(m.isOptimistic && m.text === message.text));
+                return { ...prev, [otherUser]: [...filtered, message] };
             });
 
             if (message.from !== user.username) {
@@ -44,6 +54,22 @@ export const useChat = (user: { username: string; name: string }) => {
                     [otherUser]: (prev[otherUser] || 0) + 1
                 }));
             }
+        });
+
+        newSocket.on('user_typing', ({ username, room }: { username: string, room: string }) => {
+            if (username === user.username) return;
+            setTypers(prev => {
+                const roomTypers = prev[room] || [];
+                if (roomTypers.includes(username)) return prev;
+                return { ...prev, [room]: [...roomTypers, username] };
+            });
+        });
+
+        newSocket.on('user_stop_typing', ({ username, room }: { username: string, room: string }) => {
+            setTypers(prev => {
+                const roomTypers = prev[room] || [];
+                return { ...prev, [room]: roomTypers.filter(u => u !== username) };
+            });
         });
 
         newSocket.on('private_history', ({ withUser, messages }: { withUser: string, messages: Message[] }) => {
@@ -62,12 +88,43 @@ export const useChat = (user: { username: string; name: string }) => {
 
     const sendMessage = (text: string, replyTo?: Message | null) => {
         if (!socket) return;
-        const message = { text, username: user.username, name: user.name, replyTo };
-        socket.emit('send_message', message);
+
+        // Optimistic Update
+        const optimisticMsg: Message = {
+            id: `temp-${Date.now()}`,
+            text,
+            username: user.username,
+            name: user.name,
+            timestamp: new Date().toISOString() as any,
+            type: 'public',
+            replyTo,
+            isOptimistic: true
+        };
+        setMessages(prev => [...prev, optimisticMsg]);
+
+        socket.emit('send_message', { text, username: user.username, name: user.name, replyTo });
     };
 
     const sendPrivateMessage = (to: string, text: string, replyTo?: Message | null) => {
         if (!socket) return;
+
+        // Optimistic Update
+        const optimisticMsg: any = {
+            id: `temp-p-${Date.now()}`,
+            text,
+            from: user.username,
+            to,
+            name: user.name,
+            timestamp: new Date().toISOString() as any,
+            type: 'private',
+            replyTo,
+            isOptimistic: true
+        };
+        setPrivateMessages(prev => {
+            const chat = prev[to] || [];
+            return { ...prev, [to]: [...chat, optimisticMsg] };
+        });
+
         socket.emit('send_private_message', {
             to,
             text,
@@ -75,6 +132,18 @@ export const useChat = (user: { username: string; name: string }) => {
             fromName: user.name,
             replyTo
         });
+    };
+
+    const emitTyping = (room: string) => {
+        if (socket) {
+            socket.emit('typing', { username: user.username, room });
+        }
+    };
+
+    const emitStopTyping = (room: string) => {
+        if (socket) {
+            socket.emit('stop_typing', { username: user.username, room });
+        }
     };
 
     const loadPrivateHistory = (withUser: string) => {
@@ -93,8 +162,11 @@ export const useChat = (user: { username: string; name: string }) => {
         privateMessages,
         onlineUsers,
         unreadCounts,
+        typers,
         sendMessage,
         sendPrivateMessage,
+        emitTyping,
+        emitStopTyping,
         loadPrivateHistory,
         clearUnread
     };

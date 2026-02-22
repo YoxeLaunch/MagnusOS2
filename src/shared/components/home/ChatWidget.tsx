@@ -228,11 +228,25 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({ user, isOpen, onClose })
                             <div ref={messagesEndRef} />
                         </div>
 
+                        {/* Typing Indicator */}
+                        {activeChat && chat.typers[activeChat]?.length > 0 && (
+                            <div className="px-4 py-1 animate-pulse">
+                                <p className="text-[10px] text-slate-400 font-medium italic">
+                                    {chat.typers[activeChat].length === 1
+                                        ? `${chat.typers[activeChat][0]} está escribiendo...`
+                                        : `${chat.typers[activeChat].join(', ')} están escribiendo...`
+                                    }
+                                </p>
+                            </div>
+                        )}
+
                         <ChatInput
                             onSend={handleSend}
                             currentTheme={currentTheme}
                             replyTo={replyTo}
                             onCancelReply={() => setReplyTo(null)}
+                            onTyping={() => chat.emitTyping(activeChat)}
+                            onStopTyping={() => chat.emitStopTyping(activeChat)}
                         />
                     </div>
                 )}

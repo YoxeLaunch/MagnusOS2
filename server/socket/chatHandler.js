@@ -216,7 +216,24 @@ export const initSocket = (io) => {
             }
         });
 
-        // 7. System Broadcast
+        // 7. Typing Indicators
+        socket.on('typing', ({ username, room }) => {
+            if (room === 'global') {
+                socket.broadcast.emit('user_typing', { username, room: 'global' });
+            } else {
+                io.to(room).emit('user_typing', { username, room });
+            }
+        });
+
+        socket.on('stop_typing', ({ username, room }) => {
+            if (room === 'global') {
+                socket.broadcast.emit('user_stop_typing', { username, room: 'global' });
+            } else {
+                io.to(room).emit('user_stop_typing', { username, room });
+            }
+        });
+
+        // 8. System Broadcast
         socket.on('admin:broadcast', (data) => {
             console.log('[SOCKET] Broadcast received:', data);
             io.emit('system:broadcast', {

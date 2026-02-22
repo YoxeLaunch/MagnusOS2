@@ -17,6 +17,7 @@ export interface Message {
         username: string;
         name?: string;
     } | null;
+    isOptimistic?: boolean;
 }
 
 export interface ConnectedUser {
