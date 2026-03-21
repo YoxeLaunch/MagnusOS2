@@ -1,16 +1,18 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { MessageSquare } from 'lucide-react';
+import { AnimatePresence, motion } from 'framer-motion';
 import { User } from '../../types/user';
 import { Message } from './chat/types'; // Import Message type
 import { useChat } from './chat/useChat';
 import { ChatHeader } from './chat/ChatHeader';
 import { ChatUserList } from './chat/ChatUserList';
 import { ChatDirectory } from './chat/ChatDirectory';
-import { MessageBubble } from './chat/MessageBubble';
+import { MessageBubble, ThinkingDots } from './chat/MessageBubble';
 import { ChatInput } from './chat/ChatInput';
+import { DeepAnalysisPanel } from './chat/DeepAnalysisPanel';
 import { THEMES } from './chat/types';
 import { apiFetch } from '../../utils/apiFetch';
-import { useAI } from './chat/useAI';
+import { useAI, AISendOptions } from './chat/useAI';
 import { Sparkles } from 'lucide-react';
 
 interface ChatWidgetProps {
@@ -36,6 +38,10 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({ user, isOpen, onClose })
     const [currentTheme, setCurrentTheme] = useState<string>(user.preferences?.chatTheme || 'default');
     const [showThemePicker, setShowThemePicker] = useState(false);
     const [allUsers, setAllUsers] = useState<User[]>([]);
+
+    // AI Chat Mode State
+    const [aiMode, setAiMode] = useState<'chat' | 'quick' | 'deep'>('chat');
+    const [showDeepPanel, setShowDeepPanel] = useState(false);
 
     const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -95,6 +101,16 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({ user, isOpen, onClose })
             chat.sendMessage(text, replyTo);
         }
         setReplyTo(null);
+    };
+
+    // AI Send Handler
+    const handleAISend = (text: string) => {
+        if (aiMode === 'deep') {
+            setShowDeepPanel(true);
+            return;
+        }
+        const options: AISendOptions = { content: text, mode: aiMode };
+        ai.askAI(options, user.username);
     };
 
     // Helper for display
@@ -224,51 +240,130 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({ user, isOpen, onClose })
                 )}
 
                 {view === 'AI' && (
-                    <div className="h-full flex flex-col bg-slate-50 dark:bg-slate-900/50">
-                        <div className="flex-1 overflow-y-auto p-4 space-y-4">
-                            {ai.messages.length === 0 && (
-                                <div className="h-full flex flex-col items-center justify-center text-center p-6 space-y-4 opacity-60">
-                                    <div className="w-16 h-16 bg-theme-gold/20 rounded-full flex items-center justify-center text-theme-gold">
-                                        <Sparkles size={32} />
-                                    </div>
-                                    <div className="space-y-1">
-                                        <h4 className="font-bold text-slate-900 dark:text-white">Analista IA Local</h4>
-                                        <p className="text-xs text-slate-500 max-w-[200px]">
-                                            Haz preguntas sobre tus gastos, proyecciones o pide análisis de tendencias. Todo procesado localmente.
-                                        </p>
-                                    </div>
-                                </div>
-                            )}
-                            {ai.messages.map((msg, idx) => (
-                                <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                                    <div className={`max-w-[80%] p-3 rounded-2xl text-sm ${msg.role === 'user'
-                                        ? 'bg-slate-900 dark:bg-theme-gold text-white dark:text-slate-900 shadow-md'
-                                        : 'bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 border border-slate-100 dark:border-white/5 shadow-sm'
-                                        }`}>
-                                        {msg.content}
-                                    </div>
-                                </div>
-                            ))}
-                            {ai.isThinking && (
-                                <div className="flex justify-start">
-                                    <div className="bg-white dark:bg-slate-800 p-3 rounded-2xl shadow-sm border border-slate-100 dark:border-white/5 flex gap-1">
-                                        <span className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce"></span>
-                                        <span className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce [animation-delay:0.2s]"></span>
-                                        <span className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce [animation-delay:0.4s]"></span>
-                                    </div>
-                                </div>
-                            )}
-                            <div ref={messagesEndRef} />
+                    <div className="h-full flex flex-col bg-slate-950/80">
+
+                        {/* ── 3-Mode Bar ── */}
+                        <div className="px-3 pt-3 pb-2 flex items-center gap-2 border-b border-white/5 bg-slate-900/50 backdrop-blur-sm shrink-0">
+                            {/* Chat mode */}
+                            <button
+                                onClick={() => { setAiMode('chat'); setShowDeepPanel(false); }}
+                                className={`flex-1 py-1.5 rounded-lg text-[11px] font-bold transition-all duration-200 ${aiMode === 'chat'
+                                    ? 'bg-slate-600 text-white shadow'
+                                    : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'}`}
+                            >
+                                💬 Chat
+                            </button>
+                            {/* Quick mode */}
+                            <button
+                                onClick={() => { setAiMode('quick'); setShowDeepPanel(false); }}
+                                className={`flex-1 py-1.5 rounded-lg text-[11px] font-bold transition-all duration-200 ${aiMode === 'quick'
+                                    ? 'bg-amber-600/80 text-white shadow shadow-amber-500/20'
+                                    : 'text-slate-400 hover:bg-amber-900/30 hover:text-amber-300'}`}
+                            >
+                                ⚡ Resumen
+                            </button>
+                            {/* Deep mode */}
+                            <motion.button
+                                onClick={() => { setAiMode('deep'); setShowDeepPanel(true); }}
+                                whileHover={{ scale: 1.02 }}
+                                whileTap={{ scale: 0.97 }}
+                                className={`flex-1 py-1.5 rounded-lg text-[11px] font-bold transition-all duration-200 ${aiMode === 'deep'
+                                    ? 'bg-gradient-to-r from-violet-700 to-teal-600 text-white shadow shadow-violet-500/30'
+                                    : 'text-slate-400 hover:text-violet-300'}`}
+                                style={aiMode === 'deep' ? { boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.15)' } : {}}
+                            >
+                                ✦ Análisis
+                            </motion.button>
                         </div>
 
-                        <ChatInput
-                            onSend={(text) => ai.askAI(text, user.username)}
-                            currentTheme={currentTheme}
-                            replyTo={null}
-                            onCancelReply={() => { }}
-                            onTyping={() => { }}
-                            onStopTyping={() => { }}
-                        />
+                        {/* ── Deep Analysis Panel ── */}
+                        <AnimatePresence>
+                            {showDeepPanel && (
+                                <motion.div
+                                    initial={{ opacity: 0, height: 0 }}
+                                    animate={{ opacity: 1, height: 'auto' }}
+                                    exit={{ opacity: 0, height: 0 }}
+                                    className="shrink-0 overflow-hidden"
+                                    style={{ maxHeight: '70%' }}
+                                >
+                                    <div className="p-2 h-full">
+                                        <DeepAnalysisPanel
+                                            userId={user.username}
+                                            onClose={() => { setShowDeepPanel(false); setAiMode('chat'); }}
+                                        />
+                                    </div>
+                                </motion.div>
+                            )}
+                        </AnimatePresence>
+
+                        {/* ── Chat Messages ── */}
+                        {!showDeepPanel && (
+                            <>
+                                <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                                    {ai.messages.length === 0 && (
+                                        <div className="h-full flex flex-col items-center justify-center text-center p-6 space-y-3 opacity-60">
+                                            <div className="w-16 h-16 bg-violet-500/10 rounded-full flex items-center justify-center">
+                                                <span className="text-3xl">✦</span>
+                                            </div>
+                                            <div className="space-y-1">
+                                                <h4 className="font-bold text-white text-sm">Analista IA · Gemini</h4>
+                                                <p className="text-xs text-slate-400 max-w-[200px]">
+                                                    {aiMode === 'chat'
+                                                        ? 'Escribe para conversar. Solo usaré 3 transacciones de contexto.'
+                                                        : 'Haz una pregunta y usaré el resumen del mes actual para responder.'}
+                                                </p>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    <AnimatePresence initial={false}>
+                                        {ai.messages.map((msg, idx) => {
+                                            const fakeMessage = {
+                                                id: `ai-${idx}`,
+                                                text: msg.content,
+                                                username: msg.role === 'user' ? user.username : 'analista_ia',
+                                                name: msg.role === 'user' ? user.name : 'Analista IA',
+                                                timestamp: new Date() as any,
+                                                type: 'private' as any
+                                            };
+                                            const isOwn = msg.role === 'user';
+                                            return (
+                                                <MessageBubble
+                                                    key={idx}
+                                                    message={fakeMessage}
+                                                    isOwn={isOwn}
+                                                    showHeader={idx === 0 || ai.messages[idx - 1]?.role !== msg.role}
+                                                    currentTheme="default"
+                                                    isAI={!isOwn}
+                                                />
+                                            );
+                                        })}
+                                    </AnimatePresence>
+
+                                    {ai.isThinking && (
+                                        <motion.div
+                                            initial={{ opacity: 0, x: -10 }}
+                                            animate={{ opacity: 1, x: 0 }}
+                                            className="flex justify-start"
+                                        >
+                                            <div className="bg-slate-800/80 border border-violet-500/20 rounded-2xl rounded-tl-none shadow-sm">
+                                                <ThinkingDots />
+                                            </div>
+                                        </motion.div>
+                                    )}
+                                    <div ref={messagesEndRef} />
+                                </div>
+
+                                <ChatInput
+                                    onSend={handleAISend}
+                                    currentTheme={currentTheme}
+                                    replyTo={null}
+                                    onCancelReply={() => { }}
+                                    onTyping={() => { }}
+                                    onStopTyping={() => { }}
+                                />
+                            </>
+                        )}
                     </div>
                 )}
 
@@ -325,3 +420,4 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({ user, isOpen, onClose })
         </div>
     );
 };
+
