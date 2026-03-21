@@ -4,13 +4,21 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { apiFetch } from '../../../utils/apiFetch';
 
+// ──────────────────────────────────────────
+// Types
+// ──────────────────────────────────────────
 interface SnapshotMetrics {
-    totalIncome?: string;
-    totalExpenses?: string;
-    balance?: string;
+    totalIncome?: string | number;
+    totalExpenses?: string | number;
+    balance?: string | number;
     savingsRate?: number;
     topCategories?: { name: string; amount: string }[];
     txCount?: number;
+    currency?: string;
+    totalIncomeUSD?: string | number;
+    totalExpensesUSD?: string | number;
+    balanceUSD?: string | number;
+    exchangeRate?: number;
 }
 
 interface AnalysisData {
@@ -19,6 +27,7 @@ interface AnalysisData {
     period: string;
     tokens_used?: number;
     offline?: boolean;
+    metrics?: SnapshotMetrics;
 }
 
 interface AvailableSnapshot {
@@ -35,47 +44,74 @@ interface DeepAnalysisPanelProps {
 }
 
 // ──────────────────────────────────────────
-// Skeleton shimmer loader
+// Helpers
+// ──────────────────────────────────────────
+const fmtDOP = (val?: string | number): string => {
+    if (val === undefined || val === null || val === '') return 'N/A';
+    const n = parseFloat(String(val));
+    if (isNaN(n)) return 'N/A';
+    return new Intl.NumberFormat('es-DO', { style: 'currency', currency: 'DOP', maximumFractionDigits: 0 }).format(n);
+};
+
+const fmtUSD = (val?: string | number): string => {
+    if (val === undefined || val === null || val === '') return '';
+    const n = parseFloat(String(val));
+    if (isNaN(n) || n === 0) return '';
+    return `≈ US$${n.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
+};
+
+const fmtPeriod = (p: string) => {
+    if (!p) return '';
+    const d = new Date(p);
+    return d.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' });
+};
+
+// ──────────────────────────────────────────
+// Sub-components
 // ──────────────────────────────────────────
 const SkeletonLine: React.FC<{ width?: string }> = ({ width = 'w-full' }) => (
-    <div className={`h-4 ${width} rounded bg-gradient-to-r from-slate-700/60 via-slate-600/40 to-slate-700/60 animate-pulse`} />
+    <div className={`h-3 ${width} rounded-full bg-gradient-to-r from-slate-700/80 via-slate-600/30 to-slate-700/80 animate-pulse`} />
 );
 
-const AnalysisSkeleton: React.FC = () => (
-    <div className="space-y-4 p-4">
+const AnalysisSkeleton = () => (
+    <div className="space-y-5">
         <div className="grid grid-cols-2 gap-3">
             {[1, 2, 3, 4].map(i => (
                 <div key={i} className="p-3 rounded-xl bg-slate-800/50 space-y-2">
-                    <SkeletonLine width="w-2/3" />
                     <SkeletonLine width="w-1/2" />
+                    <SkeletonLine width="w-3/4" />
+                    <SkeletonLine width="w-1/3" />
                 </div>
             ))}
         </div>
         <div className="space-y-2">
-            <SkeletonLine />
-            <SkeletonLine width="w-5/6" />
-            <SkeletonLine width="w-4/5" />
+            {[1, 2, 3, 4, 5, 6, 7].map(i => (
+                <SkeletonLine key={i} width={i % 3 === 0 ? 'w-4/5' : i % 2 === 0 ? 'w-full' : 'w-5/6'} />
+            ))}
         </div>
     </div>
 );
 
-// ──────────────────────────────────────────
-// Metric Card
-// ──────────────────────────────────────────
-const MetricCard: React.FC<{ label: string; value: string; icon: string; color: string; sub?: string }> = ({
-    label, value, icon, color, sub
-}) => (
+const MetricCard: React.FC<{
+    label: string;
+    dop: string;
+    usd?: string;
+    icon: string;
+    colorClass: string;
+    sub?: string;
+}> = ({ label, dop, usd, icon, colorClass, sub }) => (
     <motion.div
-        initial={{ opacity: 0, y: 10 }}
+        initial={{ opacity: 0, y: 6 }}
         animate={{ opacity: 1, y: 0 }}
-        className={`p-3 rounded-xl bg-slate-800/60 border border-slate-700/50 hover:border-${color}/40 transition-all`}
+        className={`p-3 rounded-xl bg-slate-800/50 border border-slate-700/40 hover:border-slate-600/60 transition-colors`}
     >
-        <div className="flex items-center gap-2 mb-1">
-            <span className="text-lg">{icon}</span>
-            <span className="text-[10px] text-slate-400 uppercase tracking-wider font-semibold">{label}</span>
+        <div className="flex items-center gap-1.5 mb-1.5">
+            <span>{icon}</span>
+            <span className="text-[9px] text-slate-400 uppercase tracking-widest font-bold">{label}</span>
         </div>
-        <div className={`text-lg font-bold text-${color}`}>{value}</div>
-        {sub && <div className="text-[10px] text-slate-500 mt-0.5">{sub}</div>}
+        <div className={`text-base font-black ${colorClass} leading-tight`}>{dop}</div>
+        {usd && <div className="text-[10px] text-slate-500 mt-0.5 font-mono">{usd}</div>}
+        {sub && <div className="text-[9px] text-slate-600 mt-0.5">{sub}</div>}
     </motion.div>
 );
 
@@ -85,27 +121,25 @@ const MetricCard: React.FC<{ label: string; value: string; icon: string; color: 
 export const DeepAnalysisPanel: React.FC<DeepAnalysisPanelProps> = ({ userId, onClose }) => {
     const [loading, setLoading] = useState(false);
     const [analysisData, setAnalysisData] = useState<AnalysisData | null>(null);
-    const [availableSnapshots, setAvailableSnapshots] = useState<AvailableSnapshot[]>([]);
-    const [selectedPeriod, setSelectedPeriod] = useState<string>('');
+    const [snapshots, setSnapshots] = useState<AvailableSnapshot[]>([]);
+    const [selectedPeriod, setSelectedPeriod] = useState('');
     const [error, setError] = useState<string | null>(null);
+    // 'main' = main view, 'history' = full report manager
+    const [panelView, setPanelView] = useState<'main' | 'history'>('main');
+    const [viewingSnap, setViewingSnap] = useState<AvailableSnapshot | null>(null);
+    const [deletingId, setDeletingId] = useState<number | null>(null);
 
-    // Fetch available snapshot periods for the period selector
-    useEffect(() => {
-        const loadSnapshots = async () => {
-            try {
-                const res = await apiFetch('/api/ai/snapshots');
-                const data = await res.json();
-                if (data.snapshots) {
-                    setAvailableSnapshots(data.snapshots);
-                }
-            } catch {
-                // Silently fail — list will be empty
-            }
-        };
-        loadSnapshots();
+    const loadSnapshots = useCallback(async () => {
+        try {
+            const res = await apiFetch('/api/ai/snapshots');
+            const data = await res.json();
+            if (data.snapshots) setSnapshots(data.snapshots);
+        } catch { /* silent */ }
     }, []);
 
-    const runDeepAnalysis = useCallback(async () => {
+    useEffect(() => { loadSnapshots(); }, [loadSnapshots]);
+
+    const runAnalysis = useCallback(async () => {
         setLoading(true);
         setError(null);
         setAnalysisData(null);
@@ -118,101 +152,239 @@ export const DeepAnalysisPanel: React.FC<DeepAnalysisPanelProps> = ({ userId, on
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    message: `Genera un análisis financiero completo del período ${period}`,
-                    userId,
-                    mode: 'deep',
-                    period
+                    message: `Análisis financiero completo del período ${period}. Incluye resumen ejecutivo, métricas DOP con equivalente USD, análisis por categoría, patrones, alertas y recomendaciones.`,
+                    userId, mode: 'deep', period
                 })
             });
 
-            if (res.status === 429) {
-                setError('🚫 Límite diario de análisis profundos alcanzado (10/día). Vuelve mañana.');
-                return;
-            }
-
+            if (res.status === 429) { setError('🚫 Límite diario (10/día) alcanzado. Vuelve mañana.'); return; }
             const data = await res.json();
-            if (data.error) {
-                setError(data.error);
-                return;
-            }
-
+            if (data.error) { setError(data.error); return; }
             setAnalysisData(data);
-            // Reload snapshot list after new analysis
-            const snapRes = await apiFetch('/api/ai/snapshots');
-            const snapData = await snapRes.json();
-            if (snapData.snapshots) setAvailableSnapshots(snapData.snapshots);
+            await loadSnapshots();
         } catch (err: any) {
-            setError('Error al conectar con el servidor: ' + err.message);
+            setError('Error de conexión: ' + err.message);
         } finally {
             setLoading(false);
         }
-    }, [userId, selectedPeriod]);
+    }, [userId, selectedPeriod, loadSnapshots]);
 
-    // Format period display
-    const formatPeriod = (p: string) => {
-        if (!p) return '';
-        const d = new Date(p);
-        return d.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' });
+    // Load a saved snapshot into the main view
+    const loadSnapshot = async (snap: AvailableSnapshot) => {
+        setLoading(true);
+        setError(null);
+        try {
+            const res = await apiFetch(`/api/ai/snapshots/${snap.id}`);
+            const data = await res.json();
+            if (data.snapshot) {
+                const s = data.snapshot;
+                const metrics = s.computed_metrics || {};
+                let response = s.gemini_narrative || '';
+                const alerts = s.gemini_alerts || [];
+                const recs = s.gemini_recommendations || [];
+                if (alerts.length) response += '\n\n### ⚠️ Alertas\n' + alerts.map((a: string, i: number) => `${i + 1}. ${a}`).join('\n');
+                if (recs.length) response += '\n\n### ✅ Recomendaciones\n' + recs.map((r: string, i: number) => `${i + 1}. ${r}`).join('\n');
+                setAnalysisData({
+                    response,
+                    cached: true,
+                    period: s.period,
+                    metrics,
+                    tokens_used: s.tokens_used
+                });
+                setSelectedPeriod(s.period);
+                setPanelView('main');
+            }
+        } catch (err: any) {
+            setError('Error al cargar reporte: ' + err.message);
+        } finally {
+            setLoading(false);
+        }
     };
 
-    const currentMetrics = analysisData?.cached && availableSnapshots.find(s => s.period === analysisData.period)?.computed_metrics;
+    // Delete a snapshot
+    const deleteSnapshot = async (id: number) => {
+        setDeletingId(id);
+        try {
+            const res = await apiFetch(`/api/ai/snapshots/${id}`, { method: 'DELETE' });
+            const data = await res.json();
+            if (data.ok) {
+                await loadSnapshots();
+                if (viewingSnap?.id === id) setViewingSnap(null);
+                // If we're showing this one, clear it
+                if (analysisData?.period === snapshots.find(s => s.id === id)?.period) {
+                    setAnalysisData(null);
+                }
+            } else {
+                setError(data.error || 'Error al eliminar.');
+            }
+        } catch (err: any) {
+            setError('Error al eliminar: ' + err.message);
+        } finally {
+            setDeletingId(null);
+        }
+    };
 
+    const currentMetrics: SnapshotMetrics | null =
+        analysisData?.metrics ||
+        (analysisData?.cached ? snapshots.find(s => s.period === analysisData.period)?.computed_metrics ?? null : null);
+
+    const hasMetrics = currentMetrics && (
+        currentMetrics.totalIncome !== undefined && currentMetrics.totalIncome !== null
+    );
+
+    // ─── HISTORY VIEW ───
+    if (panelView === 'history') {
+        return (
+            <motion.div
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: 20 }}
+                className="flex flex-col h-full bg-gradient-to-b from-slate-900 to-slate-950 rounded-2xl border border-violet-500/20 shadow-2xl overflow-hidden"
+                style={{ minHeight: 0 }}
+            >
+                {/* Header */}
+                <div className="shrink-0 flex items-center gap-3 px-4 py-3 border-b border-white/5 bg-slate-800/30">
+                    <button onClick={() => setPanelView('main')} className="text-slate-400 hover:text-white transition-colors text-sm">←</button>
+                    <div className="flex-1">
+                        <h3 className="text-xs font-bold text-white">Gestión de Reportes</h3>
+                        <p className="text-[9px] text-slate-400">{snapshots.length} reporte(s) guardado(s)</p>
+                    </div>
+                    <button onClick={onClose} className="text-slate-500 hover:text-white text-xs transition-colors">✕</button>
+                </div>
+
+                {/* List */}
+                <div className="flex-1 overflow-y-auto p-3 space-y-2" style={{ minHeight: 0 }}>
+                    {snapshots.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center h-32 text-center space-y-2">
+                            <span className="text-3xl opacity-30">📭</span>
+                            <p className="text-xs text-slate-500">No hay reportes guardados aún.</p>
+                        </div>
+                    ) : snapshots.map(snap => (
+                        <motion.div
+                            key={snap.id}
+                            layout
+                            initial={{ opacity: 0, y: 6 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, scale: 0.95 }}
+                            className="bg-slate-800/50 border border-slate-700/40 rounded-xl p-3 hover:border-violet-500/30 transition-colors"
+                        >
+                            <div className="flex items-start justify-between gap-2">
+                                <div className="flex-1 min-w-0">
+                                    <div className="flex items-center gap-2 mb-1">
+                                        <span className="text-sm font-bold text-white capitalize">{fmtPeriod(snap.period)}</span>
+                                        {snap.tokens_used > 0 && (
+                                            <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-violet-500/15 text-violet-400 border border-violet-500/20">
+                                                {snap.tokens_used}t
+                                            </span>
+                                        )}
+                                    </div>
+                                    {snap.computed_metrics && (
+                                        <div className="text-[10px] text-slate-400 space-y-0.5">
+                                            {snap.computed_metrics.totalIncome !== undefined && (
+                                                <p>💰 {fmtDOP(snap.computed_metrics.totalIncome)} <span className="text-slate-600">{fmtUSD(snap.computed_metrics.totalIncomeUSD)}</span></p>
+                                            )}
+                                            {snap.computed_metrics.totalExpenses !== undefined && (
+                                                <p>💸 {fmtDOP(snap.computed_metrics.totalExpenses)} <span className="text-slate-600">{fmtUSD(snap.computed_metrics.totalExpensesUSD)}</span></p>
+                                            )}
+                                            {snap.computed_metrics.savingsRate !== undefined && (
+                                                <p>📈 Ahorro: {snap.computed_metrics.savingsRate}%</p>
+                                            )}
+                                        </div>
+                                    )}
+                                    <p className="text-[9px] text-slate-600 mt-1">
+                                        Generado: {new Date(snap.created_at).toLocaleDateString('es-ES')}
+                                    </p>
+                                </div>
+                                <div className="flex flex-col gap-1.5 shrink-0">
+                                    <button
+                                        onClick={() => loadSnapshot(snap)}
+                                        className="px-2.5 py-1 rounded-lg text-[10px] font-medium bg-violet-700/40 text-violet-300 hover:bg-violet-700/70 transition-colors border border-violet-600/30"
+                                    >
+                                        Cargar
+                                    </button>
+                                    <button
+                                        onClick={() => deleteSnapshot(snap.id)}
+                                        disabled={deletingId === snap.id}
+                                        className="px-2.5 py-1 rounded-lg text-[10px] font-medium bg-red-900/30 text-red-400 hover:bg-red-900/60 transition-colors border border-red-800/30 disabled:opacity-50"
+                                    >
+                                        {deletingId === snap.id ? '...' : 'Borrar'}
+                                    </button>
+                                </div>
+                            </div>
+                        </motion.div>
+                    ))}
+                </div>
+
+                {error && (
+                    <div className="shrink-0 mx-3 mb-3 p-2 rounded-lg bg-red-900/20 border border-red-500/30 text-red-300 text-xs">
+                        {error}
+                    </div>
+                )}
+            </motion.div>
+        );
+    }
+
+    // ─── MAIN VIEW ───
     return (
         <motion.div
-            initial={{ opacity: 0, y: 10, scale: 0.98 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 10, scale: 0.97 }}
-            transition={{ duration: 0.25, ease: 'easeOut' }}
-            className="flex flex-col h-full bg-gradient-to-br from-slate-900 via-slate-900 to-slate-950 rounded-2xl border border-violet-500/20 shadow-2xl overflow-hidden"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 8 }}
+            transition={{ duration: 0.2, ease: 'easeOut' }}
+            className="flex flex-col h-full bg-gradient-to-b from-slate-900 to-slate-950 rounded-2xl border border-violet-500/20 shadow-2xl overflow-hidden"
+            style={{ minHeight: 0 }}
         >
             {/* Header */}
-            <div className="flex items-center justify-between p-4 border-b border-white/5 bg-gradient-to-r from-violet-900/20 to-teal-900/10">
-                <div className="flex items-center gap-2">
-                    <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-violet-600 to-teal-600 flex items-center justify-center shadow-lg shadow-violet-500/30">
+            <div className="shrink-0 flex items-center justify-between px-4 py-3 border-b border-white/5 bg-gradient-to-r from-violet-900/25 to-teal-900/10">
+                <div className="flex items-center gap-2.5">
+                    <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-violet-600 to-teal-600 flex items-center justify-center shadow-lg shrink-0">
                         <span className="text-sm">📊</span>
                     </div>
                     <div>
-                        <h3 className="text-sm font-bold text-white">Análisis Profundo</h3>
-                        <p className="text-[10px] text-slate-400">Motor mensual · Gemini 2.5 Flash</p>
+                        <h3 className="text-xs font-bold text-white leading-tight">Análisis Profundo</h3>
+                        <p className="text-[9px] text-slate-400">Motor mensual · Gemini 2.5 Flash · RD$/USD</p>
                     </div>
                 </div>
-                <button
-                    onClick={onClose}
-                    className="p-1.5 hover:bg-white/10 rounded-lg transition-colors text-slate-400 hover:text-white"
-                >
-                    ✕
-                </button>
+                <div className="flex items-center gap-1">
+                    <button
+                        onClick={() => setPanelView('history')}
+                        className="p-1.5 hover:bg-white/10 rounded-lg transition-colors text-slate-400 hover:text-violet-300 text-xs"
+                        title="Gestionar reportes"
+                    >
+                        📋
+                        {snapshots.length > 0 && (
+                            <span className="ml-0.5 text-[9px] text-violet-400">{snapshots.length}</span>
+                        )}
+                    </button>
+                    <button onClick={onClose} className="p-1.5 hover:bg-white/10 rounded-lg transition-colors text-slate-400 hover:text-white text-xs">✕</button>
+                </div>
             </div>
 
             {/* Controls */}
-            <div className="p-3 border-b border-white/5 flex items-center gap-2">
-                {availableSnapshots.length > 0 && (
-                    <select
-                        value={selectedPeriod}
-                        onChange={e => setSelectedPeriod(e.target.value)}
-                        className="flex-1 text-xs bg-slate-800 border border-slate-700 text-slate-300 rounded-lg px-2 py-1.5 focus:outline-none focus:border-violet-500"
-                    >
-                        <option value="">Mes actual</option>
-                        {availableSnapshots.map(s => (
-                            <option key={s.id} value={s.period}>
-                                {formatPeriod(s.period)}
-                            </option>
-                        ))}
-                    </select>
-                )}
+            <div className="shrink-0 px-3 py-2.5 border-b border-white/5 flex items-center gap-2 bg-slate-900/30">
+                <select
+                    value={selectedPeriod}
+                    onChange={e => setSelectedPeriod(e.target.value)}
+                    className="flex-1 text-xs bg-slate-800 border border-slate-700/80 text-slate-300 rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-violet-500/70 transition-colors"
+                >
+                    <option value="">Mes actual</option>
+                    {snapshots.map(s => (
+                        <option key={s.id} value={s.period}>
+                            ✓ {fmtPeriod(s.period)}
+                        </option>
+                    ))}
+                </select>
                 <motion.button
-                    onClick={runDeepAnalysis}
+                    onClick={runAnalysis}
                     disabled={loading}
                     whileHover={{ scale: loading ? 1 : 1.02 }}
-                    whileTap={{ scale: 0.98 }}
-                    className="flex items-center gap-2 px-4 py-1.5 rounded-lg text-xs font-bold text-white
-                        bg-gradient-to-r from-violet-700 to-teal-600 
+                    whileTap={{ scale: 0.97 }}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-white
+                        bg-gradient-to-r from-violet-700 to-teal-600
                         hover:from-violet-600 hover:to-teal-500
-                        shadow-lg shadow-violet-500/20
-                        disabled:opacity-60 disabled:cursor-not-allowed
-                        transition-all duration-200
-                        border border-white/10"
-                    style={{ boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.15), 0 4px 12px rgba(139,92,246,0.3)' }}
+                        disabled:opacity-50 disabled:cursor-not-allowed
+                        transition-all duration-200 shrink-0 border border-white/10"
+                    style={{ boxShadow: '0 2px 10px rgba(139,92,246,0.3)' }}
                 >
                     {loading ? (
                         <motion.div
@@ -220,123 +392,177 @@ export const DeepAnalysisPanel: React.FC<DeepAnalysisPanelProps> = ({ userId, on
                             animate={{ rotate: 360 }}
                             transition={{ duration: 0.8, repeat: Infinity, ease: 'linear' }}
                         />
-                    ) : (
-                        <span>✦</span>
-                    )}
-                    {loading ? 'Analizando...' : 'Generar Análisis'}
+                    ) : <span>✦</span>}
+                    {loading ? 'Analizando...' : 'Generar'}
                 </motion.button>
             </div>
 
-            {/* Content */}
-            <div className="flex-1 overflow-y-auto p-3 space-y-4">
-                <AnimatePresence mode="wait">
-                    {loading && (
-                        <motion.div key="skeleton" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-                            <AnalysisSkeleton />
-                        </motion.div>
+            {/* Status badges */}
+            {analysisData && !loading && (
+                <div className="shrink-0 px-3 py-1.5 flex items-center gap-1.5 flex-wrap border-b border-white/5 bg-slate-900/20">
+                    {analysisData.cached
+                        ? <span className="text-[9px] px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 font-semibold">⚡ Caché · 0 tokens</span>
+                        : <span className="text-[9px] px-2 py-0.5 rounded-full bg-slate-700/60 text-slate-400 border border-slate-600/30">🔮 {analysisData.tokens_used ?? 0} tokens</span>
+                    }
+                    {analysisData.offline && <span className="text-[9px] px-2 py-0.5 rounded-full bg-yellow-500/15 text-yellow-400 border border-yellow-500/20">⚠️ Offline</span>}
+                    {analysisData.period && (
+                        <span className="text-[9px] px-2 py-0.5 rounded-full bg-violet-500/15 text-violet-400 border border-violet-500/20">
+                            📅 {fmtPeriod(analysisData.period)}
+                        </span>
                     )}
+                    <span className="text-[9px] px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20">🇩🇴 RD$ + US$</span>
+                </div>
+            )}
 
-                    {error && !loading && (
-                        <motion.div
-                            key="error"
-                            initial={{ opacity: 0, y: 5 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            className="p-4 rounded-xl bg-red-900/20 border border-red-500/30 text-red-300 text-sm"
-                        >
-                            {error}
-                        </motion.div>
-                    )}
+            {/* Scrollable content */}
+            <div className="flex-1 overflow-y-auto" style={{ minHeight: 0 }}>
+                <div className="p-3 space-y-4">
+                    <AnimatePresence mode="wait">
 
-                    {analysisData && !loading && (
-                        <motion.div key="result" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
-                            {/* Status badges */}
-                            <div className="flex items-center gap-2 flex-wrap">
-                                {analysisData.cached && (
-                                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 font-medium">
-                                        ⚡ Desde caché · 0 tokens
-                                    </span>
+                        {loading && (
+                            <motion.div key="skel" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+                                <AnalysisSkeleton />
+                            </motion.div>
+                        )}
+
+                        {error && !loading && (
+                            <motion.div key="err" initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }}
+                                className="p-4 rounded-xl bg-red-900/20 border border-red-500/30 text-red-300 text-xs leading-relaxed">
+                                {error}
+                                <button onClick={() => setError(null)} className="ml-2 underline hover:text-red-200">Cerrar</button>
+                            </motion.div>
+                        )}
+
+                        {analysisData && !loading && (
+                            <motion.div key="result" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-4">
+
+                                {/* Metrics grid */}
+                                {hasMetrics && (
+                                    <div className="grid grid-cols-2 gap-2">
+                                        <MetricCard
+                                            label="Ingresos"
+                                            dop={fmtDOP(currentMetrics!.totalIncome)}
+                                            usd={fmtUSD(currentMetrics!.totalIncomeUSD)}
+                                            icon="💰"
+                                            colorClass="text-emerald-400"
+                                            sub={currentMetrics!.txCount ? `${currentMetrics!.txCount} transacciones` : undefined}
+                                        />
+                                        <MetricCard
+                                            label="Gastos"
+                                            dop={fmtDOP(currentMetrics!.totalExpenses)}
+                                            usd={fmtUSD(currentMetrics!.totalExpensesUSD)}
+                                            icon="💸"
+                                            colorClass="text-red-400"
+                                        />
+                                        <MetricCard
+                                            label="Balance"
+                                            dop={fmtDOP(currentMetrics!.balance)}
+                                            usd={fmtUSD(currentMetrics!.balanceUSD)}
+                                            icon="⚖️"
+                                            colorClass={parseFloat(String(currentMetrics!.balance ?? '0')) >= 0 ? 'text-amber-400' : 'text-red-500'}
+                                        />
+                                        <MetricCard
+                                            label="Ahorro"
+                                            dop={currentMetrics!.savingsRate !== undefined ? `${currentMetrics!.savingsRate}%` : 'N/A'}
+                                            icon="📈"
+                                            colorClass="text-teal-400"
+                                        />
+                                    </div>
                                 )}
-                                {analysisData.offline && (
-                                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-yellow-500/15 text-yellow-400 border border-yellow-500/20 font-medium">
-                                        ⚠️ Modo Offline
-                                    </span>
+
+                                {/* Top categories */}
+                                {currentMetrics?.topCategories && currentMetrics.topCategories.length > 0 && (
+                                    <div className="rounded-xl bg-slate-800/40 border border-slate-700/30 p-3">
+                                        <p className="text-[9px] text-slate-400 uppercase tracking-wider font-bold mb-2.5 flex items-center gap-1">
+                                            🏷️ Top Categorías de Gasto
+                                        </p>
+                                        <div className="space-y-2">
+                                            {currentMetrics.topCategories.map((cat, i) => {
+                                                const total = parseFloat(String(currentMetrics.totalExpenses ?? '1')) || 1;
+                                                const pct = Math.min((parseFloat(cat.amount) / total) * 100, 100);
+                                                return (
+                                                    <div key={i}>
+                                                        <div className="flex items-center justify-between text-[10px] mb-0.5">
+                                                            <span className="text-slate-300 truncate max-w-[55%]">{cat.name}</span>
+                                                            <div className="text-right">
+                                                                <span className="text-slate-300 font-mono">{fmtDOP(cat.amount)}</span>
+                                                                {currentMetrics.exchangeRate && (
+                                                                    <span className="text-slate-600 ml-1 text-[9px]">{fmtUSD((parseFloat(cat.amount) * (currentMetrics.exchangeRate ?? 0.01695)).toFixed(2))}</span>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                        <div className="h-1 bg-slate-700/50 rounded-full overflow-hidden">
+                                                            <div className="h-full bg-gradient-to-r from-violet-600 to-teal-600 rounded-full" style={{ width: `${pct}%` }} />
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
                                 )}
-                                {analysisData.tokens_used ? (
-                                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-700/60 text-slate-400 border border-slate-600/30">
-                                        🔮 {analysisData.tokens_used} tokens
-                                    </span>
-                                ) : null}
-                                {analysisData.period && (
-                                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-violet-500/15 text-violet-400 border border-violet-500/20">
-                                        📅 {formatPeriod(analysisData.period)}
-                                    </span>
+
+                                {/* AI Narrative */}
+                                {analysisData.response && (
+                                    <div className="rounded-xl bg-slate-800/30 border border-violet-500/15 overflow-hidden">
+                                        <div className="flex items-center gap-1.5 px-3 py-2 border-b border-white/5 bg-violet-900/10">
+                                            <span className="text-violet-400 text-xs">✦</span>
+                                            <span className="text-[9px] text-violet-400 uppercase tracking-wider font-bold">Análisis Gemini</span>
+                                        </div>
+                                        <div className="p-4">
+                                            <div className="
+                                                prose prose-sm dark:prose-invert max-w-none
+                                                prose-p:text-slate-300 prose-p:leading-relaxed prose-p:my-2 prose-p:text-[12.5px]
+                                                prose-h1:text-violet-300 prose-h1:font-bold prose-h1:text-sm prose-h1:mt-4 prose-h1:mb-2
+                                                prose-h2:text-violet-300 prose-h2:font-bold prose-h2:text-sm prose-h2:mt-3 prose-h2:mb-1.5
+                                                prose-h3:text-violet-200 prose-h3:font-semibold prose-h3:text-xs prose-h3:mt-3 prose-h3:mb-1
+                                                prose-h4:text-slate-300 prose-h4:font-semibold prose-h4:text-xs prose-h4:mt-2 prose-h4:mb-1
+                                                prose-strong:text-amber-300 prose-strong:font-semibold
+                                                prose-em:text-slate-400 prose-em:italic
+                                                prose-ul:text-slate-300 prose-ul:my-1 prose-ul:pl-4 prose-ul:space-y-0.5
+                                                prose-ol:text-slate-300 prose-ol:my-1 prose-ol:pl-4
+                                                prose-li:text-[12px] prose-li:leading-snug
+                                                prose-hr:border-slate-700/60 prose-hr:my-3
+                                                prose-code:text-teal-300 prose-code:bg-slate-800 prose-code:px-1 prose-code:rounded prose-code:text-[10px]
+                                                prose-pre:bg-slate-800/80 prose-pre:border prose-pre:border-slate-700/50 prose-pre:rounded-lg prose-pre:text-[10px]
+                                                prose-blockquote:border-l-violet-500/60 prose-blockquote:text-slate-400 prose-blockquote:italic prose-blockquote:pl-3
+                                                prose-table:text-[11px] prose-th:text-slate-300 prose-td:text-slate-400
+                                            ">
+                                                <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                                                    {analysisData.response}
+                                                </ReactMarkdown>
+                                            </div>
+                                        </div>
+                                    </div>
                                 )}
-                            </div>
 
-                            {/* Metrics grid (if available from cache) */}
-                            {currentMetrics && (
-                                <div className="grid grid-cols-2 gap-2">
-                                    <MetricCard
-                                        label="Ingresos"
-                                        value={currentMetrics.totalIncome ? `$${Number(currentMetrics.totalIncome).toLocaleString()}` : 'N/A'}
-                                        icon="💰"
-                                        color="emerald-400"
-                                    />
-                                    <MetricCard
-                                        label="Gastos"
-                                        value={currentMetrics.totalExpenses ? `$${Number(currentMetrics.totalExpenses).toLocaleString()}` : 'N/A'}
-                                        icon="💸"
-                                        color="red-400"
-                                    />
-                                    <MetricCard
-                                        label="Balance"
-                                        value={currentMetrics.balance ? `$${Number(currentMetrics.balance).toLocaleString()}` : 'N/A'}
-                                        icon="⚖️"
-                                        color="yellow-400"
-                                    />
-                                    <MetricCard
-                                        label="Ahorro"
-                                        value={currentMetrics.savingsRate ? `${currentMetrics.savingsRate}%` : 'N/A'}
-                                        icon="📈"
-                                        color="teal-400"
-                                    />
-                                </div>
-                            )}
+                            </motion.div>
+                        )}
 
-                            {/* AI Narrative (markdown) */}
-                            <div className="rounded-xl bg-slate-800/40 border border-violet-500/10 p-4">
-                                <div className="text-[10px] text-violet-400 uppercase tracking-wider font-bold mb-2 flex items-center gap-1">
-                                    <span>✦</span> Análisis Gemini
+                        {!loading && !analysisData && !error && (
+                            <motion.div key="empty" initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+                                className="flex flex-col items-center justify-center py-10 text-center space-y-3">
+                                <div className="w-14 h-14 rounded-2xl bg-violet-500/10 border border-violet-500/20 flex items-center justify-center">
+                                    <span className="text-2xl">📊</span>
                                 </div>
-                                <div className="prose prose-sm dark:prose-invert max-w-none
-                                    prose-p:leading-relaxed prose-p:my-1.5 prose-p:text-slate-200
-                                    prose-headings:text-violet-300 prose-headings:font-bold prose-headings:my-2
-                                    prose-strong:text-yellow-300 prose-strong:font-semibold
-                                    prose-ul:text-slate-300 prose-ol:text-slate-300
-                                    prose-li:my-0.5">
-                                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                                        {analysisData.response}
-                                    </ReactMarkdown>
+                                <div>
+                                    <p className="text-sm font-semibold text-slate-300">Sin análisis cargado</p>
+                                    <p className="text-xs text-slate-500 max-w-[200px] leading-relaxed mt-1">
+                                        Pulsa <strong className="text-violet-400">Generar</strong> o carga un reporte anterior desde <span className="text-violet-400">📋</span>.
+                                    </p>
                                 </div>
-                            </div>
-                        </motion.div>
-                    )}
+                                {snapshots.length > 0 && (
+                                    <button
+                                        onClick={() => setPanelView('history')}
+                                        className="text-[10px] text-emerald-400 hover:text-emerald-300 underline transition-colors"
+                                    >
+                                        ✓ {snapshots.length} reporte(s) guardado(s) disponibles →
+                                    </button>
+                                )}
+                            </motion.div>
+                        )}
 
-                    {!loading && !analysisData && !error && (
-                        <motion.div
-                            key="empty"
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            className="flex flex-col items-center justify-center h-32 text-center"
-                        >
-                            <div className="text-3xl mb-2">📊</div>
-                            <p className="text-sm text-slate-400">
-                                Pulsa <strong className="text-violet-300">Generar Análisis</strong> para obtener un informe detallado de tu situación financiera.
-                            </p>
-                            <p className="text-xs text-slate-600 mt-1">Si existe un análisis reciente, se servirá sin consumir tokens.</p>
-                        </motion.div>
-                    )}
-                </AnimatePresence>
+                    </AnimatePresence>
+                </div>
             </div>
         </motion.div>
     );

@@ -1,5 +1,5 @@
 import React from 'react';
-import { MessageSquare, Minimize2, X, Palette, Crown, User as UserIcon } from 'lucide-react';
+import { MessageSquare, Minimize2, Maximize2, X, Palette, Crown, User as UserIcon } from 'lucide-react';
 import { User } from '../../../types/user';
 import { ConnectedUser, THEMES } from './types';
 
@@ -16,6 +16,8 @@ interface ChatHeaderProps {
     setCurrentTheme: (theme: string) => void;
     onClose: () => void;
     onMinimize: () => void;
+    onMaximize?: () => void;
+    isMaximized?: boolean;
     user: User;
     saveThemePreference: (theme: string) => void;
 }
@@ -23,7 +25,7 @@ interface ChatHeaderProps {
 export const ChatHeader: React.FC<ChatHeaderProps> = ({
     view, setView, activeChat, activeChatName, onlineCount, isVIP,
     showThemePicker, setShowThemePicker, currentTheme, setCurrentTheme,
-    onClose, onMinimize, user, saveThemePreference
+    onClose, onMinimize, onMaximize, isMaximized, user, saveThemePreference
 }) => {
 
     const themeStyle = THEMES[currentTheme];
@@ -109,6 +111,11 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
                 <button onClick={onMinimize} className="p-1.5 hover:bg-slate-200 dark:hover:bg-white/10 rounded-lg transition-colors text-slate-500">
                     <Minimize2 size={16} />
                 </button>
+                {onMaximize && (
+                    <button onClick={onMaximize} className="p-1.5 hover:bg-slate-200 dark:hover:bg-white/10 rounded-lg transition-colors text-slate-500">
+                        <Maximize2 size={16} className={isMaximized ? "text-theme-gold" : ""} />
+                    </button>
+                )}
                 <button onClick={onClose} className="p-1.5 hover:bg-red-500/10 hover:text-red-500 rounded-lg transition-colors text-slate-500">
                     <X size={16} />
                 </button>

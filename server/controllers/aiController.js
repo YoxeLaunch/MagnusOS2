@@ -53,6 +53,63 @@ const checkRateLimit = (userId) => {
 // Context Builders — One per mode
 // ========================================
 
+// ========================================
+// Currency config — DOP (Dominican Peso)
+// ========================================
+const DOP_TO_USD = parseFloat(process.env.DOP_TO_USD_RATE || '0.01695'); // ~59 DOP = 1 USD
+
+// ========================================
+// Utility: Compute metrics from transactions
+// ========================================
+const computeMetrics = (transactions) => {
+    let totalIncome = 0;
+    let totalExpenses = 0;
+    const categoryMap = {};
+
+    for (const tx of transactions) {
+        const amount = parseFloat(tx.amount) || 0;
+        // Use the 'type' field: 'income' | 'expense'
+        const isExpense = (tx.type === 'expense') || (tx.type === 'gasto');
+        const isIncome = (tx.type === 'income') || (tx.type === 'ingreso');
+        const cat = tx.category || tx.description?.split(' ')[0] || 'Otros';
+
+        if (isIncome) {
+            totalIncome += amount;
+        } else if (isExpense) {
+            totalExpenses += amount;
+            categoryMap[cat] = (categoryMap[cat] || 0) + amount;
+        } else {
+            // Fallback: use sign
+            if (amount >= 0) totalIncome += amount;
+            else { totalExpenses += Math.abs(amount); categoryMap[cat] = (categoryMap[cat] || 0) + Math.abs(amount); }
+        }
+    }
+
+    const balance = totalIncome - totalExpenses;
+    const savingsRate = totalIncome > 0 ? ((balance / totalIncome) * 100).toFixed(1) : 0;
+
+    const topCategories = Object.entries(categoryMap)
+        .sort(([, a], [, b]) => b - a)
+        .slice(0, 5)
+        .map(([name, amount]) => ({ name, amount: amount.toFixed(2) }));
+
+    return {
+        // DOP values (native)
+        totalIncome: totalIncome.toFixed(2),
+        totalExpenses: totalExpenses.toFixed(2),
+        balance: balance.toFixed(2),
+        savingsRate: parseFloat(savingsRate),
+        topCategories,
+        txCount: transactions.length,
+        currency: 'DOP',
+        // USD equivalents
+        totalIncomeUSD: (totalIncome * DOP_TO_USD).toFixed(2),
+        totalExpensesUSD: (totalExpenses * DOP_TO_USD).toFixed(2),
+        balanceUSD: (balance * DOP_TO_USD).toFixed(2),
+        exchangeRate: DOP_TO_USD
+    };
+};
+
 /**
  * Mode 'chat': Lightweight context — only last 3 transactions.
  * ~250 tokens. Ideal for conversational messages ("Hola", "¿cuánto tengo?")
@@ -151,18 +208,30 @@ const buildDeepContext = async (userId, message, period) => {
         console.error('[AI] DB error in deep context:', e.message);
     }
 
-    const txContext = recentTx.map(t => `${t.date}: ${t.description} (${t.amount})`).join('\n');
+    const txContext = recentTx.map(t =>
+        `${t.date} | ${t.type === 'income' ? '+' : '-'}RD$${t.amount} | ${t.category || 'Sin cat'} | ${t.description}`
+    ).join('\n');
     console.log(`[AI] Context-Mode: deep | Source: live-db | Context-Size: ${recentTx.length} tx`);
 
-    const systemPrompt = `Eres el Analista Financiero Senior de MagnusOS. Analiza TODAS las transacciones con detalle exhaustivo.
-Incluye: resumen ejecutivo, análisis de categorías, patrones de gasto, alertas críticas, y recomendaciones accionables.
-Usa markdown con encabezados, listas y negritas para máxima legibilidad.
-'soberano' es el usuario.
+    const computed_metrics = computeMetrics(recentTx);
+    const usdRate = DOP_TO_USD;
 
-DATOS DE TRANSACCIONES COMPLETOS (${recentTx.length} registros):
+    const systemPrompt = `Eres el Analista Financiero Senior de MagnusOS. Los montos están en Pesos Dominicanos (RD$).
+Anota siempre los valores en RD$ primero y entre paréntesis el equivalente en USD (tasa: 1 USD ≈ ${(1/usdRate).toFixed(0)} RD$).
+Métricas precalculadas del período:
+- Ingresos: RD$${computed_metrics.totalIncome} (~US$${computed_metrics.totalIncomeUSD})
+- Gastos: RD$${computed_metrics.totalExpenses} (~US$${computed_metrics.totalExpensesUSD})
+- Balance: RD$${computed_metrics.balance} (~US$${computed_metrics.balanceUSD})
+- Tasa de ahorro: ${computed_metrics.savingsRate}%
+- Total transacciones: ${computed_metrics.txCount}
+
+Incluye: resumen ejecutivo, análisis por categoría, patrones de gasto, alertas críticas y recomendaciones accionables.
+Usa markdown con encabezados ##, listas, tablas y negritas para máxima legibilidad. El usuario se llama 'soberano'.
+
+TRANSACCIONES (${recentTx.length} registros, formato: fecha | monto | categoría | descripción):
 ${txContext || 'No hay transacciones registradas.'}`;
 
-    return { cached: false, systemPrompt, userPrompt: message };
+    return { cached: false, systemPrompt, userPrompt: message, computed_metrics };
 };
 
 // ========================================
@@ -187,45 +256,17 @@ export const chat = async (req, res) => {
             const latestSnapshot = await getLatestSnapshot();
             if (latestSnapshot) {
                 return res.json({
-                    response: `⚠️ **Modo Offline** — Sirviendo análisis desde caché (${latestSnapshot.period}):\n\n${latestSnapshot.gemini_narrative || 'No hay narrativa disponible.'}`,
+                    response: latestSnapshot.gemini_narrative || 'No hay narrativa disponible.',
                     offline: true,
-                    period: latestSnapshot.period
+                    cached: true,
+                    period: latestSnapshot.period,
+                    metrics: latestSnapshot.computed_metrics || {}
                 });
             }
             return res.status(503).json({ error: 'Servicio de IA temporalmente no disponible.', offline: true });
         }
 
-        // --- Deep mode: check for cached snapshot ---
-        if (mode === 'deep') {
-            const deepCtx = await buildDeepContext(userId, message, period);
-            if (deepCtx.cached) {
-                const s = deepCtx.snapshot;
-                const narrative = s.gemini_narrative || 'Análisis no disponible.';
-                const alerts = (s.gemini_alerts || []).map((a, i) => `${i + 1}. ${a}`).join('\n');
-                const recs = (s.gemini_recommendations || []).map((r, i) => `${i + 1}. ${r}`).join('\n');
-                const metrics = s.computed_metrics || {};
-
-                let cachedResponse = `## 📊 Análisis Financiero — ${s.period}\n\n`;
-                cachedResponse += `**Período:** ${s.period} | **Generado:** ${new Date(s.created_at).toLocaleDateString('es-ES')}\n\n`;
-                cachedResponse += `### Métricas del Período\n`;
-                cachedResponse += `- 💰 **Ingresos:** ${metrics.totalIncome || 'N/A'}\n`;
-                cachedResponse += `- 💸 **Gastos:** ${metrics.totalExpenses || 'N/A'}\n`;
-                cachedResponse += `- ⚖️ **Balance:** ${metrics.balance || 'N/A'}\n`;
-                cachedResponse += `- 📈 **Tasa de Ahorro:** ${metrics.savingsRate || 'N/A'}%\n\n`;
-                cachedResponse += `### Diagnóstico\n${narrative}\n\n`;
-                if (alerts) cachedResponse += `### ⚠️ Alertas\n${alerts}\n\n`;
-                if (recs) cachedResponse += `### ✅ Recomendaciones\n${recs}\n`;
-
-                return res.json({
-                    response: cachedResponse,
-                    cached: true,
-                    period: s.period,
-                    tokens_used: s.tokens_used
-                });
-            }
-        }
-
-        // --- Build context based on mode ---
+        // --- Build context ONCE based on mode ---
         let contextResult;
         if (mode === 'quick') {
             contextResult = await buildQuickContext(userId, message, period);
@@ -233,6 +274,33 @@ export const chat = async (req, res) => {
             contextResult = await buildDeepContext(userId, message, period);
         } else {
             contextResult = await buildChatContext(userId, message, history);
+        }
+
+        // --- Serve from cache if available (deep mode only) ---
+        if (contextResult.cached) {
+            const s = contextResult.snapshot;
+            const metrics = s.computed_metrics || {};
+            const narrative = s.gemini_narrative || 'Análisis no disponible.';
+            const alerts = (s.gemini_alerts || []);
+            const recs = (s.gemini_recommendations || []);
+
+            // Build a nice markdown response from cached parts
+            let cachedResponse = '';
+            if (narrative) cachedResponse += narrative + '\n\n';
+            if (alerts.length) {
+                cachedResponse += '### ⚠️ Alertas\n' + alerts.map((a, i) => `${i + 1}. ${a}`).join('\n') + '\n\n';
+            }
+            if (recs.length) {
+                cachedResponse += '### ✅ Recomendaciones\n' + recs.map((r, i) => `${i + 1}. ${r}`).join('\n');
+            }
+
+            return res.json({
+                response: cachedResponse,
+                cached: true,
+                period: s.period,
+                metrics,
+                tokens_used: s.tokens_used || 0
+            });
         }
 
         const fullPrompt = `${contextResult.systemPrompt}\n\nPREGUNTA: ${contextResult.userPrompt}`;
@@ -243,7 +311,7 @@ export const chat = async (req, res) => {
             const result = await geminiModel.generateContent({
                 contents: [{ role: 'user', parts: [{ text: fullPrompt }] }],
                 generationConfig: {
-                    maxOutputTokens: mode === 'deep' ? 4096 : mode === 'quick' ? 2048 : 800,
+                    maxOutputTokens: mode === 'deep' ? 8192 : mode === 'quick' ? 2048 : 800,
                     temperature: mode === 'chat' ? 0.3 : 0.2,
                 }
             });
@@ -256,22 +324,31 @@ export const chat = async (req, res) => {
             consecutiveFailures = 0;
             circuitBreakerOpen = false;
 
-            // If deep mode and was live, save snapshot for caching
-            if (mode === 'deep' && !contextResult.cached) {
-                // Save a basic snapshot with the narrative for future cache hits
+            // If deep mode, save snapshot so next request is free
+            if (mode === 'deep') {
+                const periodKey = period || new Date().toISOString().substring(0, 7);
+                const metricsToSave = contextResult.computed_metrics || {};
                 try {
-                    await saveSnapshot(period || new Date().toISOString().substring(0, 7), {}, {
+                    await saveSnapshot(periodKey, metricsToSave, {
                         narrative: responseText,
                         alerts: [],
                         recommendations: [],
                         tokensUsed
                     });
+                    console.log(`[AI] Snapshot saved for period ${periodKey} | metrics: ${JSON.stringify(metricsToSave)}`);
                 } catch (saveErr) {
                     console.error('[AI] Failed to save snapshot cache:', saveErr.message);
                 }
             }
 
-            return res.json({ response: responseText, mode, tokens_used: tokensUsed });
+            return res.json({
+                response: responseText,
+                mode,
+                tokens_used: tokensUsed,
+                metrics: contextResult.computed_metrics || null,
+                cached: false,
+                period: period || new Date().toISOString().substring(0, 7)
+            });
         }
 
         // --- FALLBACK TO OLLAMA ---
@@ -347,10 +424,43 @@ export const analyze = async (req, res) => {
 export const listSnapshots = async (req, res) => {
     try {
         const { listSnapshots: listFn } = await import('../services/snapshotService.js');
-        const snapshots = await listFn(12);
+        const snapshots = await listFn(24);
         res.json({ snapshots });
     } catch (error) {
         console.error('[AI] Error listing snapshots:', error.message);
         res.status(500).json({ error: 'Error al listar snapshots.' });
     }
 };
+
+/**
+ * Get a single snapshot by ID (for viewing detail)
+ */
+export const getSnapshotById = async (req, res) => {
+    try {
+        const { MonthlySnapshot } = await import('../models/monthlySnapshot.js');
+        const snap = await MonthlySnapshot.findByPk(req.params.id);
+        if (!snap) return res.status(404).json({ error: 'Snapshot no encontrado.' });
+        res.json({ snapshot: snap });
+    } catch (error) {
+        console.error('[AI] Error getting snapshot:', error.message);
+        res.status(500).json({ error: 'Error al obtener snapshot.' });
+    }
+};
+
+/**
+ * Delete a snapshot by ID
+ */
+export const deleteSnapshot = async (req, res) => {
+    try {
+        const { MonthlySnapshot } = await import('../models/monthlySnapshot.js');
+        const snap = await MonthlySnapshot.findByPk(req.params.id);
+        if (!snap) return res.status(404).json({ error: 'Snapshot no encontrado.' });
+        await snap.destroy();
+        console.log(`[AI] Snapshot deleted: id=${req.params.id} period=${snap.period}`);
+        res.json({ ok: true, message: `Reporte de ${snap.period} eliminado.` });
+    } catch (error) {
+        console.error('[AI] Error deleting snapshot:', error.message);
+        res.status(500).json({ error: 'Error al eliminar snapshot.' });
+    }
+};
+

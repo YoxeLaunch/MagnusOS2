@@ -10,6 +10,8 @@ router.use(verifyJWT);
 router.post('/chat', aiController.chat);
 router.post('/analyze', aiController.analyze);
 router.get('/snapshots', aiController.listSnapshots);
+router.get('/snapshots/:id', aiController.getSnapshotById);
+router.delete('/snapshots/:id', aiController.deleteSnapshot);
 
 export default router;
 

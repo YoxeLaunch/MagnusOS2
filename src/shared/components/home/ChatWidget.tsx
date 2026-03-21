@@ -33,6 +33,7 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({ user, isOpen, onClose })
     const [view, setView] = useState<'LIST' | 'CHAT' | 'DIRECTORY' | 'AI'>('LIST');
     const [activeChat, setActiveChat] = useState<string | null>(null);
     const [isMinimized, setIsMinimized] = useState(false);
+    const [isMaximized, setIsMaximized] = useState(false);
 
     // Theme State
     const [currentTheme, setCurrentTheme] = useState<string>(user.preferences?.chatTheme || 'default');
@@ -160,7 +161,11 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({ user, isOpen, onClose })
     }
 
     return (
-        <div className="fixed bottom-6 right-6 w-[90vw] md:w-[400px] h-[600px] max-h-[80vh] bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-theme-gold/20 flex flex-col overflow-hidden z-50 animate-slide-up font-sans">
+        <div className={`fixed z-50 bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-theme-gold/20 flex flex-col overflow-hidden animate-slide-up font-sans transition-all duration-300 ${
+            isMaximized 
+                ? 'top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[95vw] md:w-[900px] h-[90vh]'
+                : 'bottom-6 right-6 w-[90vw] md:w-[400px] h-[600px] max-h-[80vh]'
+        }`}>
 
             <ChatHeader
                 view={view}
@@ -175,6 +180,8 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({ user, isOpen, onClose })
                 setCurrentTheme={setCurrentTheme}
                 onClose={onClose}
                 onMinimize={() => setIsMinimized(true)}
+                onMaximize={() => setIsMaximized(!isMaximized)}
+                isMaximized={isMaximized}
                 user={user}
                 saveThemePreference={saveTheme}
             />
