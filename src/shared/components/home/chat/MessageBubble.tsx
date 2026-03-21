@@ -1,6 +1,7 @@
 import React from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { motion, AnimatePresence } from 'framer-motion';
 import { Message, THEMES } from './types';
 
 interface MessageBubbleProps {
@@ -8,9 +9,48 @@ interface MessageBubbleProps {
     isOwn: boolean;
     showHeader: boolean;
     currentTheme: string;
+    isAI?: boolean; // true when this is the Analista IA chat
 }
 
-export const MessageBubble: React.FC<MessageBubbleProps & { onReply?: (msg: Message) => void }> = ({ message, isOwn, showHeader, currentTheme, onReply }) => {
+// ──────────────────────────────────────────
+// Framer-motion variants (per plan spec)
+// ──────────────────────────────────────────
+const bubbleVariants = (isUser: boolean) => ({
+    hidden: { opacity: 0, x: isUser ? 20 : -20, scale: 0.97 },
+    visible: {
+        opacity: 1,
+        x: 0,
+        scale: 1,
+        transition: { duration: 0.2, ease: 'easeOut' as const }
+    },
+    exit: { opacity: 0, scale: 0.95, transition: { duration: 0.15 } }
+});
+
+// Three-dots "AI is typing" indicator
+const ThinkingDots: React.FC = () => (
+    <div className="flex items-center gap-1 px-3 py-2">
+        {[0, 1, 2].map(i => (
+            <motion.div
+                key={i}
+                className="w-2 h-2 rounded-full bg-yellow-400"
+                animate={{ y: [0, -6, 0] }}
+                transition={{
+                    duration: 0.7,
+                    ease: 'easeInOut',
+                    repeat: Infinity,
+                    repeatType: 'mirror',
+                    delay: i * 0.14
+                }}
+            />
+        ))}
+    </div>
+);
+
+export { ThinkingDots };
+
+export const MessageBubble: React.FC<MessageBubbleProps & { onReply?: (msg: Message) => void }> = ({
+    message, isOwn, showHeader, currentTheme, onReply, isAI = false
+}) => {
     const themeStyle = THEMES[currentTheme];
     const accentColor = currentTheme === 'default' ? 'text-theme-gold' : themeStyle.accent;
     const primaryColor = currentTheme === 'default' ? 'bg-theme-gold' : themeStyle.primary;
@@ -18,8 +58,23 @@ export const MessageBubble: React.FC<MessageBubbleProps & { onReply?: (msg: Mess
     const displayName = message.name || message.username || message.from;
     const isVIP = message.role === 'admin' || message.tags?.includes('VIP') || message.username === 'soberano';
 
+    // Detect if this message contains markdown (AI responses)
+    const hasMarkdown = isAI && !isOwn && (
+        message.text.includes('**') ||
+        message.text.includes('##') ||
+        message.text.includes('\n-') ||
+        message.text.includes('\n1.')
+    );
+
     return (
-        <div className={`flex flex-col ${isOwn ? 'items-end' : 'items-start'} group/message`}>
+        <motion.div
+            className={`flex flex-col ${isOwn ? 'items-end' : 'items-start'} group/message`}
+            variants={bubbleVariants(isOwn)}
+            initial="hidden"
+            animate="visible"
+            exit="exit"
+            layout
+        >
             {showHeader && (
                 <div className="flex items-center gap-1.5 mb-1 ml-1">
                     <span className={`text-xs font-bold tracking-wider px-2 py-0.5 rounded-full backdrop-blur-sm shadow-sm ${currentTheme !== 'default' ? 'bg-slate-900/40 text-white' : (isOwn ? accentColor : 'text-slate-500 bg-slate-100 dark:text-slate-400 dark:bg-slate-800')}`}>
@@ -30,13 +85,21 @@ export const MessageBubble: React.FC<MessageBubbleProps & { onReply?: (msg: Mess
                             VIP
                         </span>
                     )}
+                    {isAI && !isOwn && (
+                        <span className="text-[10px] font-semibold text-violet-400 bg-violet-500/10 px-1.5 py-0.5 rounded border border-violet-500/20 flex items-center gap-1">
+                            ✦ Gemini
+                        </span>
+                    )}
                 </div>
             )}
-            <div className={`relative max-w-[85%] text-sm rounded-2xl shadow-sm transition-all duration-300 p-3 ${isOwn
+
+            <div className={`relative max-w-[88%] text-sm rounded-2xl shadow-sm transition-all duration-300 p-3 ${isOwn
                 ? `${primaryColor} text-white rounded-tr-none shadow-md ${isVIP ? 'shadow-[0_0_15px_rgba(212,175,55,0.4)] border border-white/20' : ''}`
-                : `bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 rounded-tl-none border ${isVIP
-                    ? 'border-theme-gold shadow-[0_0_15px_rgba(212,175,55,0.2)]'
-                    : 'border-slate-200 dark:border-white/10'}`
+                : isAI && !isOwn
+                    ? 'bg-gradient-to-br from-slate-800/90 to-slate-900/90 text-slate-100 rounded-tl-none border border-violet-500/20 shadow-[0_0_20px_rgba(139,92,246,0.08)] backdrop-blur-sm'
+                    : `bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 rounded-tl-none border ${isVIP
+                        ? 'border-theme-gold shadow-[0_0_15px_rgba(212,175,55,0.2)]'
+                        : 'border-slate-200 dark:border-white/10'}`
                 }`}>
 
                 {/* Reply Context */}
@@ -51,22 +114,27 @@ export const MessageBubble: React.FC<MessageBubbleProps & { onReply?: (msg: Mess
                     </div>
                 )}
 
-                <div className="whitespace-pre-wrap break-words w-full markdown-body text-sm">
-                    {/* Only use Markdown for AI, keep standard text for humans or if it doesn't look like markdown */}
-                    {((displayName || '').includes('IA') || displayName === 'Analista IA' || message.text.includes('**')) ? (
-                         <div className="prose prose-sm dark:prose-invert max-w-none 
-                                        prose-p:leading-snug prose-p:my-1 
-                                        prose-ul:my-1 prose-ol:my-1 prose-li:my-0
-                                        prose-headings:text-base prose-headings:my-2 prose-headings:font-bold">
-                             <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                                 {message.text}
-                             </ReactMarkdown>
-                         </div>
+                {/* Message Content */}
+                <div className="break-words w-full">
+                    {hasMarkdown ? (
+                        <div className="prose prose-sm dark:prose-invert max-w-none
+                            prose-p:leading-relaxed prose-p:my-1.5
+                            prose-ul:my-1.5 prose-ol:my-1.5 prose-li:my-0.5
+                            prose-headings:text-sm prose-headings:my-2 prose-headings:font-bold prose-headings:text-violet-300
+                            prose-strong:text-yellow-300 prose-strong:font-bold
+                            prose-code:text-emerald-300 prose-code:bg-black/20 prose-code:px-1 prose-code:rounded
+                            prose-hr:border-white/10
+                            [&>*]:text-slate-100">
+                            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                                {message.text}
+                            </ReactMarkdown>
+                        </div>
                     ) : (
-                        message.text
+                        <span className="whitespace-pre-wrap">{message.text}</span>
                     )}
-                    
-                    <div className={`text-[9px] mt-1 opacity-70 ${isOwn ? 'text-white' : 'text-slate-400'} text-right block`}>
+
+                    <div className={`text-[9px] mt-1.5 opacity-60 ${isOwn ? 'text-white' : 'text-slate-400'} text-right flex items-center justify-end gap-1`}>
+                        {isAI && !isOwn && <span className="opacity-50">✦</span>}
                         {new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </div>
                 </div>
@@ -85,6 +153,6 @@ export const MessageBubble: React.FC<MessageBubbleProps & { onReply?: (msg: Mess
                     </button>
                 )}
             </div>
-        </div>
+        </motion.div>
     );
 };

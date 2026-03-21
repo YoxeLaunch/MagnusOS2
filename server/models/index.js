@@ -9,6 +9,7 @@ import { Account, toMinorUnits, fromMinorUnits } from './account.js';
 import { Category, Payee } from './category.js';
 import { LedgerTransaction, TransactionLine } from './ledger.js';
 import { SavingsGoal, SavingsContribution } from './savingsGoal.js';
+import { MonthlySnapshot } from './monthlySnapshot.js';
 
 // ========================================
 // Legacy Associations (to be deprecated)
@@ -130,6 +131,9 @@ export {
     TransactionLine,
     SavingsGoal,
     SavingsContribution,
+
+    // AI Analytics Models (v2.0)
+    MonthlySnapshot,
 
     // Helpers
     toMinorUnits,

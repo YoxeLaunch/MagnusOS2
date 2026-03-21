@@ -46,6 +46,7 @@
     "jsonwebtoken": "^9.0.3",
     "lucide-react": "0.363.0",
     "multer": "^2.0.2",
+    "node-cron": "^4.2.1",
     "pdf-parse": "^1.1.1",
     "pg": "^8.17.2",
     "pg-hstore": "^2.3.4",
