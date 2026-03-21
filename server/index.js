@@ -90,6 +90,7 @@ const startServer = async () => {
             // Print Network Interfaces
             const interfaces = os.networkInterfaces();
             console.log('\n--- Direcciones de Acceso ---');
+            console.log(`[mDNS]: http://Manus.local:${PORT}`);
             Object.keys(interfaces).forEach((ifname) => {
                 interfaces[ifname].forEach((iface) => {
                     if ('IPv4' !== iface.family || iface.internal !== false) return;

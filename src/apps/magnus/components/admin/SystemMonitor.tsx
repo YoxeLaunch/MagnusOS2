@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
 import { Activity, Cpu, Server, Clock } from 'lucide-react';
+import { apiFetch } from '../../../../shared/utils/apiFetch';
 
 interface SystemStats {
     uptime: number;
@@ -29,7 +30,7 @@ export const SystemMonitor: React.FC = () => {
     useEffect(() => {
         const fetchStats = async () => {
             try {
-                const res = await fetch(`/api/system/stats`);
+                const res = await apiFetch(`/api/system/stats`);
                 if (!res.ok) return;
                 const data: SystemStats = await res.json();
 

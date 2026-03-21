@@ -1,8 +1,16 @@
 import { DailyTransaction } from '../models/index.js';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 
 const OLLAMA_URL = process.env.OLLAMA_URL || 'http://ollama:11434';
 const SANDBOX_URL = process.env.SANDBOX_URL || 'http://sandbox:5000';
-const MODEL = 'qwen2:0.5b';
+const OLLAMA_MODEL = 'qwen2:0.5b';
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+
+// Initialize Gemini if key is available
+let genAI = null;
+if (GEMINI_API_KEY) {
+    genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
+}
 
 /**
  * AI Controller - Autonomous Finance Analytics
@@ -12,7 +20,7 @@ export const chat = async (req, res) => {
         const { message, userId } = req.body;
         console.log(`[AI] Request from ${userId}: "${message}"`);
 
-        // 1. Get Context (Recent Transactions) - Increased for monthly analysis
+        // 1. Get Context (Recent Transactions)
         let recentTx = [];
         try {
             recentTx = await DailyTransaction.findAll({
@@ -28,15 +36,32 @@ export const chat = async (req, res) => {
         console.log(`[AI] Context size: ${recentTx.length} items`);
 
         // 2. Prepare Payload
-        const system = "Eres el Analista Financiero de MagnusOS. Tienes acceso a los datos reales arriba. Responde SIEMPRE basándote en ellos de forma breve y profesional en español. 'soberano' es el usuario.";
-        const prompt = `DATOS DE TRANSACCIONES:
+        const systemPrompt = "Eres el Analista Financiero de MagnusOS. Tienes acceso a los datos reales arriba. Responde SIEMPRE basándote en ellos de forma breve y profesional en español. 'soberano' es el usuario.";
+        const userPrompt = `DATOS DE TRANSACCIONES:
 ${context || 'No hay transacciones registradas.'}
 
 PREGUNTA DEL USUARIO: "${message}"`;
 
-        console.log(`[AI DEBUG] PROMPT SENT:\n${prompt}`);
+        // 3. Choice of Engine: Gemini or Ollama
+        if (genAI) {
+            console.log('[AI] Using Gemini Engine (2.5 Flash)...');
+            const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+            
+            const result = await model.generateContent({
+                contents: [{ role: 'user', parts: [{ text: `${systemPrompt}\n\n${userPrompt}` }] }],
+                generationConfig: {
+                    maxOutputTokens: 500,
+                    temperature: 0.1,
+                },
+            });
 
-        // 3. Call Ollama
+            const responseText = result.response.text();
+            console.log(`[AI DEBUG] GEMINI RESPONSE: "${responseText.substring(0, 50)}..."`);
+            return res.json({ response: responseText });
+        }
+
+        // --- FALLBACK TO OLLAMA ---
+        console.log('[AI] Using Ollama Engine (Fallback)...');
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 120000); // 120s
 
@@ -44,9 +69,9 @@ PREGUNTA DEL USUARIO: "${message}"`;
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                model: MODEL,
-                system,
-                prompt,
+                model: OLLAMA_MODEL,
+                system: systemPrompt,
+                prompt: userPrompt,
                 stream: false,
                 options: {
                     num_predict: 300,
@@ -64,13 +89,13 @@ PREGUNTA DEL USUARIO: "${message}"`;
         }
 
         const data = await response.json();
-        console.log(`[AI DEBUG] RESPONSE RECEIVED: "${data.response}"`);
+        console.log(`[AI DEBUG] OLLAMA RESPONSE: "${data.response.substring(0, 50)}..."`);
         res.json({ response: data.response });
 
     } catch (error) {
         if (error.name === 'AbortError') {
-            console.error('[AI TIMEOUT] Ollama took too long (>120s).');
-            res.status(504).json({ error: 'La IA está tardando demasiado debido a recursos limitados del servidor.' });
+            console.error('[AI TIMEOUT] AI Engine took too long.');
+            res.status(504).json({ error: 'La IA está tardando demasiado debido a recursos limitados.' });
         } else {
             console.error('[AI ERROR]', error.message);
             res.status(500).json({ error: 'Error en el analista IA.', details: error.message });
@@ -99,3 +124,4 @@ export const analyze = async (req, res) => {
         res.status(500).json({ error: 'Error al ejecutar análisis en el sandbox.' });
     }
 };
+

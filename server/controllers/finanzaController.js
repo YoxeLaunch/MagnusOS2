@@ -1,14 +1,17 @@
-import { DailyTransaction, CurrencyHistory } from '../models/index.js';
+import { DailyTransaction, CurrencyHistory, Transaction } from '../models/index.js';
+
+// --- RATES CACHE ---
+let ratesCache = {
+    data: null,
+    timestamp: 0
+};
+const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
 
 // --- TRANSACTIONS (Budget/Recurring) ---
 export const getTransactions = async (req, res) => {
     try {
         const { userId } = req.query;
         if (!userId || userId === 'undefined') return res.json([]);
-
-        // Using legacy Transaction model for Budget/Recurring items
-        // We just migrated these from SQLite 'Transactions' to Postgres 'Transactions'
-        const { Transaction } = await import('../models/index.js');
 
         const transactions = await Transaction.findAll({
             where: { userId },
@@ -43,7 +46,9 @@ export const getTransactions = async (req, res) => {
                 currency: t.currency || 'DOP',
                 date: t.date,
                 type: t.type,
-                deductions: cleanDeductions
+                deductions: cleanDeductions,
+                validFrom: t.validFrom,
+                validTo: t.validTo
             };
         });
 
@@ -56,7 +61,6 @@ export const getTransactions = async (req, res) => {
 
 export const createTransaction = async (req, res) => {
     try {
-        const { Transaction } = await import('../models/index.js');
         const transaction = await Transaction.create(req.body);
         res.json(transaction);
     } catch (error) {
@@ -66,7 +70,6 @@ export const createTransaction = async (req, res) => {
 
 export const updateTransaction = async (req, res) => {
     try {
-        const { Transaction } = await import('../models/index.js');
         const { id } = req.params;
         const [updated] = await Transaction.update(req.body, { where: { id } });
         if (updated) {
@@ -82,7 +85,6 @@ export const updateTransaction = async (req, res) => {
 
 export const deleteTransaction = async (req, res) => {
     try {
-        const { Transaction } = await import('../models/index.js');
         const { id } = req.params;
         const deleted = await Transaction.destroy({ where: { id } });
         if (deleted) res.status(204).send();
@@ -166,6 +168,11 @@ const getTrend = (current, previous) => {
 
 export const getRates = async (req, res) => {
     try {
+        const now = Date.now();
+        if (ratesCache.data && (now - ratesCache.timestamp < CACHE_DURATION)) {
+            return res.json(ratesCache.data);
+        }
+
         const usdHistory = await CurrencyHistory.findAll({
             where: { code: 'USD' },
             order: [['date', 'DESC'], ['id', 'DESC']],
@@ -182,11 +189,18 @@ export const getRates = async (req, res) => {
         const usdTrend = getTrend(usdRate, usdHistory[1]?.rate);
         const eurTrend = getTrend(eurRate, eurHistory[1]?.rate);
 
-        res.json({
+        const responseData = {
             usd: usdRate,
             eur: eurRate,
             trends: { usd: usdTrend, eur: eurTrend }
-        });
+        };
+
+        ratesCache = {
+            data: responseData,
+            timestamp: now
+        };
+
+        res.json(responseData);
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
@@ -201,6 +215,10 @@ export const updateRates = async (req, res) => {
         const today = new Date().toISOString().split('T')[0];
         if (usd) await CurrencyHistory.create({ date: today, code: 'USD', rate: usd });
         if (eur) await CurrencyHistory.create({ date: today, code: 'EUR', rate: eur });
+
+        // Invalidate cache
+        ratesCache.data = null;
+
         res.json({ success: true, message: 'Rates updated' });
     } catch (error) {
         res.status(500).json({ error: error.message });

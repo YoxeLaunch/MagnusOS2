@@ -19,6 +19,7 @@
     "mcp": "node server/mcp-server.js"
   },
   "dependencies": {
+    "@google/generative-ai": "^0.24.1",
     "@modelcontextprotocol/sdk": "^1.26.0",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/seedrandom": "^3.0.8",
@@ -33,6 +34,7 @@
     "d3-scale": "^4.0.2",
     "date-fns": "^4.1.0",
     "dockerode": "^4.0.9",
+    "dotenv": "^17.3.1",
     "express": "^4.19.2",
     "express-rate-limit": "^8.2.1",
     "figlet": "^1.9.4",

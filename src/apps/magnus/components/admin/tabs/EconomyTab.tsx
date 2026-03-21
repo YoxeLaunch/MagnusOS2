@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Shield, TrendingUp, Save, DollarSign, Euro } from 'lucide-react';
 import { useToast } from '../../../../../shared/context/ToastContext';
 import { User } from '../../../types';
+import { apiFetch } from '../../../../../shared/utils/apiFetch';
 
 interface EconomyTabProps {
     currentUser: User;
@@ -21,7 +22,7 @@ export const EconomyTab: React.FC<EconomyTabProps> = ({ currentUser, isSoberano 
 
     const loadRates = async () => {
         try {
-            const res = await fetch(`/api/rates`);
+            const res = await apiFetch(`/api/rates`);
             const data = await res.json();
             setRates(data);
         } catch (e) {
@@ -31,7 +32,7 @@ export const EconomyTab: React.FC<EconomyTabProps> = ({ currentUser, isSoberano 
 
     const loadLogs = async () => {
         try {
-            const res = await fetch(`/api/rates/history`);
+            const res = await apiFetch(`/api/rates/history`);
             const data = await res.json();
             setLogs(data);
         } catch (e) {
@@ -47,9 +48,8 @@ export const EconomyTab: React.FC<EconomyTabProps> = ({ currentUser, isSoberano 
 
         setLoadingRates(true);
         try {
-            const res = await fetch(`/api/rates`, {
+            const res = await apiFetch(`/api/rates`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     ...rates,
                     username: currentUser.username

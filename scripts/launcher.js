@@ -26,25 +26,35 @@ const printHeader = () => {
 
 const getNetworkInfo = () => {
     const interfaces = os.networkInterfaces();
-    let ipAddress = 'localhost';
+    let ipAddresses = [];
     Object.keys(interfaces).forEach((ifname) => {
         interfaces[ifname].forEach((iface) => {
             if ('IPv4' !== iface.family || iface.internal !== false) return;
-            ipAddress = iface.address;
+            ipAddresses.push({ name: ifname, ip: iface.address });
         });
     });
-    return ipAddress;
+    // Fallback if no network is found
+    if (ipAddresses.length === 0) {
+        ipAddresses.push({ name: 'local', ip: 'localhost' });
+    }
+    return ipAddresses;
 };
 
 const printStatusBox = () => {
-    const localIp = getNetworkInfo();
+    const localIps = getNetworkInfo();
     const tunnelUrl = SERVICES.TUNNEL.url || chalk.dim('Esperando conexión...');
     const tunnelStatus = SERVICES.TUNNEL.url ? chalk.bold.green('EN LÍNEA') : chalk.yellow('CONECTANDO...');
 
+    let localAccessLines = `${chalk.cyan('➜')}  Panel:      ${chalk.underline.white('http://localhost:4000')}\n`;
+    localAccessLines += `${chalk.cyan('➜')}  Dominio:    ${chalk.underline.white('http://Manus.local:4000')} ${chalk.dim('(mDNS)')}\n`;
+
+    localIps.forEach(net => {
+        localAccessLines += `${chalk.cyan('➜')}  Red [${net.name}]: ${chalk.underline.white(`http://${net.ip}:4000`)}\n`;
+    });
+
     const infoText = `
 ${chalk.bold.white('ACCESO LOCAL:')}
-${chalk.cyan('➜')}  Panel:      ${chalk.underline.white(`http://localhost:4000`)}
-${chalk.cyan('➜')}  Red Local:  ${chalk.underline.white(`http://${localIp}:4000`)}
+${localAccessLines.trim()}
 
 ${chalk.bold.white('ACCESO REMOTO:')}
 ${chalk.yellow('➜')}  Cloudflare: ${chalk.underline.yellow(tunnelUrl)}
@@ -57,7 +67,7 @@ ${chalk.bold.cyan(SERVICES.CLIENT.name)}: ${SERVICES.CLIENT.status}
 
     console.log(boxen(infoText, {
         padding: 1, margin: 1, borderStyle: 'round', borderColor: SERVICES.TUNNEL.url ? 'green' : 'cyan',
-        title: ` ESTADO DEL SISTEMA `, titleAlignment: 'center'
+        title: ' ESTADO DEL SISTEMA ', titleAlignment: 'center'
     }));
 };
 

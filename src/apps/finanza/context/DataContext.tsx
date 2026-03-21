@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { AppData, Transaction, CurrencyState, DailyTransaction, WealthSnapshot } from '../types';
 import { authService } from '../../../shared/services/auth';
 import { apiFetch } from '../../../shared/utils/apiFetch';
+import { useToast } from '../../../shared/context/ToastContext';
 
 interface DataContextType {
   data: AppData;
@@ -39,6 +40,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [dailyTransactions, setDailyTransactions] = useState<DailyTransaction[]>([]);
   const [isSimulating, setIsSimulating] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const toast = useToast();
 
   // Fetch data from API
   const API_URL = `/api/transactions`;
@@ -146,7 +148,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const addTransaction = (t: Transaction) => {
     if (!userId) {
-      alert("Error: No hay sesión activa");
+      toast.error("Error: No hay sesión activa");
       return;
     }
     const transactionWithUser = { ...t, userId };
@@ -174,7 +176,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           if (parsedTransaction.type === 'investment') return { ...prev, investments: [...prev.investments, parsedTransaction] };
           return { ...prev, expenses: [...prev.expenses, parsedTransaction] };
         });
-        alert('¡Gasto guardado correctamente!');
+        toast.success('¡Gasto guardado correctamente!');
       })
       .catch(err => {
         console.error('Error adding transaction:', err);
@@ -194,8 +196,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           expenses: prev.expenses.filter(e => e.id !== id),
           investments: prev.investments.filter(inv => inv.id !== id),
         }));
+        toast.success('Elemento eliminado');
       })
-      .catch(err => alert(`Error al eliminar: ${err.message}`));
+      .catch(err => toast.error(`Error al eliminar: ${err.message}`));
   };
 
   const updateTransaction = (t: Transaction) => {
@@ -226,9 +229,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           }
           return { ...prev, expenses: prev.expenses.map(e => e.id === parsedTransaction.id ? parsedTransaction : e) };
         });
-        alert('¡Gasto actualizado!');
+        toast.success('¡Gasto actualizado!');
       })
-      .catch(err => alert(`Error al actualizar: ${err.message}`));
+      .catch(err => toast.error(`Error al actualizar: ${err.message}`));
   };
 
   // Fetch global rates
@@ -289,7 +292,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const addDailyTransaction = (t: Omit<DailyTransaction, 'id'>, onSuccess?: () => void) => {
     if (!userId) {
-      alert("Error: No hay sesión activa");
+      toast.error("Error: No hay sesión activa");
       return;
     }
     const transactionWithUser = { ...t, userId };
@@ -307,16 +310,20 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       .then(saved => {
         setDailyTransactions(prev => [...prev, saved]);
         onSuccess?.();
+        toast.success('Registro diario guardado');
       })
-      .catch(err => alert('Error al guardar diario: ' + err.message));
+      .catch(err => toast.error('Error al guardar diario: ' + err.message));
   };
 
   const removeDailyTransaction = (id: number) => {
     apiFetch(`/api/daily-transactions/${id}`, {
       method: 'DELETE'
     })
-      .then(() => setDailyTransactions(prev => prev.filter(t => t.id !== id)))
-      .catch(err => alert('Error al eliminar diario: ' + err.message));
+      .then(() => {
+        setDailyTransactions(prev => prev.filter(t => t.id !== id));
+        toast.success('Registro eliminado');
+      })
+      .catch(err => toast.error('Error al eliminar diario: ' + err.message));
   };
 
   const updateDailyTransaction = (t: DailyTransaction, onSuccess?: () => void) => {
@@ -334,8 +341,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       .then(updated => {
         setDailyTransactions(prev => prev.map(p => p.id === updated.id ? updated : p));
         onSuccess?.();
+        toast.success('Registro diario actualizado');
       })
-      .catch(err => alert('Error al actualizar diario: ' + err.message));
+      .catch(err => toast.error('Error al actualizar diario: ' + err.message));
   };
 
   return (

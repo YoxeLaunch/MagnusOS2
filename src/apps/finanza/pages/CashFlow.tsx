@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useData } from '../context/DataContext';
-import { calculateAnnualAmount, formatCurrency, calculateTotalAnnual } from '../utils/calculations';
+import { calculateAnnualAmount, calculateAnnualAmountV2, formatCurrency, calculateTotalAnnual } from '../utils/calculations';
 import { calculateISR, calculateNetSalary, SUGGESTED_RATES } from '../utils/salaryCalculations';
 import { getIncomeIcon, getExpenseIcon, INCOME_CATEGORIES, EXPENSE_CATEGORIES } from '../utils/categoryIcons';
 import {
@@ -11,6 +11,7 @@ import {
 import { Transaction } from '../types';
 import { exportToCSV } from '../../../shared/utils/csvExport';
 import { PrintOptionsModal, PrintOptions } from '../components/PrintOptionsModal';
+import { DatePicker } from '../../../shared/components/ui/DatePicker';
 
 interface StatCardProps {
     label: string;
@@ -117,13 +118,15 @@ const IncomesView: React.FC<{ onPrint: () => void }> = ({ onPrint }) => {
     const [editingId, setEditingId] = useState<string | null>(null);
     const [newIncome, setNewIncome] = useState<Partial<Transaction>>({
         name: '', amount: 0, frequency: 'Mensual', category: 'Salario', currency: 'DOP', type: 'income',
-        deductions: { afp: 0, sfs: 0, isr: 0, others: [] }
+        deductions: { afp: 0, sfs: 0, isr: 0, others: [] }, validFrom: '', validTo: ''
     });
 
     const getIcon = getIncomeIcon;
     const CATEGORIES = INCOME_CATEGORIES;
 
-    const totalIncome = useMemo(() => calculateTotalAnnual(data.incomes, currencies), [data.incomes, currencies]);
+    const totalIncome = useMemo(() => {
+        return data.incomes.reduce((acc, curr) => acc + calculateAnnualAmountV2(curr, currencies), 0);
+    }, [data.incomes, currencies]);
 
     // Calculate total deductions across all income sources
     const totalDeductions = useMemo(() => {
@@ -131,17 +134,20 @@ const IncomesView: React.FC<{ onPrint: () => void }> = ({ onPrint }) => {
             if (!curr.deductions) return acc;
             const deductionAmount = (curr.deductions.afp || 0) + (curr.deductions.sfs || 0) + (curr.deductions.isr || 0) + (curr.deductions.others?.reduce((s, o) => s + o.amount, 0) || 0);
 
-            // Annualize based on frequency
-            let annualDeduction = deductionAmount;
-            if (curr.frequency === 'Mensual') annualDeduction *= 12;
-            else if (curr.frequency === 'Trimestral') annualDeduction *= 4;
-
-            return acc + annualDeduction;
+            // Annualize based on frequency - ideally this should also respect V2 proportional but we leave it as V1 for deduction simplicity to avoid over-complicating initially, or apply the proportion
+            const annualImpact = calculateAnnualAmountV2({ ...curr, amount: deductionAmount }, currencies);
+            return acc + annualImpact;
         }, 0);
-    }, [data.incomes]);
+    }, [data.incomes, currencies]);
 
-    // Net total is total minus deductions (already calculated via calculateTotalAnnual)
-    const netTotalIncome = useMemo(() => calculateTotalAnnual(data.incomes, currencies), [data.incomes, currencies]);
+    // Net total is calculated correctly via V2 amounts
+    const netTotalIncome = useMemo(() => {
+        return data.incomes.reduce((acc, income) => {
+            const deductionAmount = income.deductions ? (income.deductions.afp || 0) + (income.deductions.sfs || 0) + (income.deductions.isr || 0) + (income.deductions.others?.reduce((s, o) => s + o.amount, 0) || 0) : 0;
+            const netAmount = income.amount - deductionAmount;
+            return acc + calculateAnnualAmountV2({ ...income, amount: netAmount }, currencies);
+        }, 0);
+    }, [data.incomes, currencies]);
     const monthlyAvg = useMemo(() => netTotalIncome / 12, [netTotalIncome]);
 
     const handleAdd = () => {
@@ -149,7 +155,9 @@ const IncomesView: React.FC<{ onPrint: () => void }> = ({ onPrint }) => {
         const transactionData = {
             name: newIncome.name, amount: Number(newIncome.amount), frequency: newIncome.frequency as Transaction['frequency'],
             category: newIncome.category || 'Salario', currency: newIncome.currency as Transaction['currency'], type: 'income' as const,
-            deductions: newIncome.category === 'Salario' ? newIncome.deductions : undefined
+            deductions: newIncome.category === 'Salario' ? newIncome.deductions : undefined,
+            validFrom: newIncome.validFrom || undefined,
+            validTo: newIncome.validTo || undefined
         };
         if (editingId) {
             updateTransaction({ id: editingId, ...transactionData });
@@ -158,14 +166,16 @@ const IncomesView: React.FC<{ onPrint: () => void }> = ({ onPrint }) => {
             addTransaction({ id: Date.now().toString(), ...transactionData });
         }
         setIsAdding(false);
-        setNewIncome({ name: '', amount: 0, frequency: 'Mensual', category: 'Salario', currency: 'DOP', type: 'income', deductions: { afp: 0, sfs: 0, isr: 0, others: [] } });
+        setNewIncome({ name: '', amount: 0, frequency: 'Mensual', category: 'Salario', currency: 'DOP', type: 'income', deductions: { afp: 0, sfs: 0, isr: 0, others: [] }, validFrom: '', validTo: '' });
     };
 
     const handleEdit = (income: Transaction) => {
         setNewIncome({
             name: income.name, amount: income.amount, frequency: income.frequency,
             category: income.category || 'Salario', currency: income.currency || 'DOP', type: 'income',
-            deductions: income.deductions || { afp: 0, sfs: 0, isr: 0, others: [] }
+            deductions: income.deductions || { afp: 0, sfs: 0, isr: 0, others: [] },
+            validFrom: income.validFrom || '',
+            validTo: income.validTo || ''
         });
         setEditingId(income.id);
         setIsAdding(true);
@@ -174,7 +184,7 @@ const IncomesView: React.FC<{ onPrint: () => void }> = ({ onPrint }) => {
     const cancelEdit = () => {
         setIsAdding(false);
         setEditingId(null);
-        setNewIncome({ name: '', amount: 0, frequency: 'Mensual', category: 'Salario', currency: 'DOP', type: 'income', deductions: { afp: 0, sfs: 0, isr: 0, others: [] } });
+        setNewIncome({ name: '', amount: 0, frequency: 'Mensual', category: 'Salario', currency: 'DOP', type: 'income', deductions: { afp: 0, sfs: 0, isr: 0, others: [] }, validFrom: '', validTo: '' });
     };
 
     return (
@@ -240,7 +250,14 @@ const IncomesView: React.FC<{ onPrint: () => void }> = ({ onPrint }) => {
                                                     <Icon size={18} />
                                                 </div>
                                                 <div>
-                                                    <div className="font-medium text-text">{income.name}</div>
+                                                    <div className="font-medium text-text">
+                                                        {income.name}
+                                                        {(income.validFrom || income.validTo) && (
+                                                            <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300">
+                                                                Temporal
+                                                            </span>
+                                                        )}
+                                                    </div>
                                                     <div className="text-xs text-gray-500">{income.category || 'Varios'}</div>
                                                 </div>
                                             </td>
@@ -249,7 +266,7 @@ const IncomesView: React.FC<{ onPrint: () => void }> = ({ onPrint }) => {
                                                 {formatCurrency(netAmount, income.currency || 'DOP')}
                                                 {totalDeductions > 0 && <div className="text-xs text-gray-400 line-through">{formatCurrency(income.amount)}</div>}
                                             </td>
-                                            <td className="px-6 py-4 text-right font-bold text-success dark:text-green-400">{formatCurrency(calculateAnnualAmount({ ...income, amount: netAmount }, currencies))}</td>
+                                            <td className="px-6 py-4 text-right font-bold text-success dark:text-green-400">{formatCurrency(calculateAnnualAmountV2({ ...income, amount: netAmount }, currencies))}</td>
                                             <td className="px-6 py-4 text-center">
                                                 <button onClick={() => handleEdit(income)} aria-label={`${t('common:edit')} ${income.name}`} className="text-gray-400 hover:text-blue-500 mr-2 p-2 rounded-full hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-all"><Pencil size={18} aria-hidden="true" /></button>
                                                 <button onClick={() => removeTransaction(income.id)} aria-label={`${t('common:delete')} ${income.name}`} className="text-gray-400 hover:text-error p-2 rounded-full hover:bg-red-50 dark:hover:bg-red-900/20 transition-all"><Trash2 size={18} aria-hidden="true" /></button>
@@ -346,6 +363,14 @@ const IncomesView: React.FC<{ onPrint: () => void }> = ({ onPrint }) => {
                                 ))}
                             </div>
                         </InputGroup>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <InputGroup label="Válido Desde (Opcional)">
+                                <DatePicker value={newIncome.validFrom || ''} onChange={date => setNewIncome({ ...newIncome, validFrom: date })} />
+                            </InputGroup>
+                            <InputGroup label="Válido Hasta (Opcional)">
+                                <DatePicker value={newIncome.validTo || ''} onChange={date => setNewIncome({ ...newIncome, validTo: date })} />
+                            </InputGroup>
+                        </div>
                         {newIncome.category === 'Salario' && (
                             <div className="p-4 bg-gray-50 dark:bg-gray-800/50 rounded-xl border border-gray-200 dark:border-gray-700 space-y-3">
                                 <h4 className="text-sm font-bold text-gray-700 dark:text-gray-300 flex items-center gap-2">
@@ -449,7 +474,7 @@ const ExpensesView: React.FC = () => {
     const [isAdding, setIsAdding] = useState(false);
     const [editingId, setEditingId] = useState<string | null>(null);
     const [newExpense, setNewExpense] = useState<Partial<Transaction>>({
-        name: '', amount: 0, frequency: 'Mensual', category: 'General', currency: 'DOP', type: 'expense'
+        name: '', amount: 0, frequency: 'Mensual', category: 'General', currency: 'DOP', type: 'expense', validFrom: '', validTo: ''
     });
 
     const totalMonthly = useMemo(() => {
@@ -466,7 +491,9 @@ const ExpensesView: React.FC = () => {
         }, 0);
     }, [data.expenses, currencies]);
 
-    const totalAnnual = useMemo(() => calculateTotalAnnual(data.expenses, currencies), [data.expenses, currencies]);
+    const totalAnnual = useMemo(() => {
+        return data.expenses.reduce((acc, curr) => acc + calculateAnnualAmountV2(curr, currencies), 0);
+    }, [data.expenses, currencies]);
 
     const getIcon = getExpenseIcon;
     const CATEGORIES = EXPENSE_CATEGORIES;
@@ -475,7 +502,9 @@ const ExpensesView: React.FC = () => {
         if (!newExpense.name || !newExpense.amount) return;
         const transactionData = {
             name: newExpense.name, amount: Number(newExpense.amount), frequency: newExpense.frequency as Transaction['frequency'],
-            category: newExpense.category || 'General', currency: newExpense.currency as Transaction['currency'], type: 'expense' as const
+            category: newExpense.category || 'General', currency: newExpense.currency as Transaction['currency'], type: 'expense' as const,
+            validFrom: newExpense.validFrom || undefined,
+            validTo: newExpense.validTo || undefined
         };
         if (editingId) {
             updateTransaction({ id: editingId, ...transactionData });
@@ -484,13 +513,15 @@ const ExpensesView: React.FC = () => {
             addTransaction({ id: Date.now().toString(), ...transactionData });
         }
         setIsAdding(false);
-        setNewExpense({ name: '', amount: 0, frequency: 'Mensual', category: 'General', currency: 'DOP', type: 'expense' });
+        setNewExpense({ name: '', amount: 0, frequency: 'Mensual', category: 'General', currency: 'DOP', type: 'expense', validFrom: '', validTo: '' });
     };
 
     const handleEdit = (expense: Transaction) => {
         setNewExpense({
             name: expense.name, amount: expense.amount, frequency: expense.frequency,
-            category: expense.category || 'General', currency: expense.currency || 'DOP', type: 'expense'
+            category: expense.category || 'General', currency: expense.currency || 'DOP', type: 'expense',
+            validFrom: expense.validFrom || '',
+            validTo: expense.validTo || ''
         });
         setEditingId(expense.id);
         setIsAdding(true);
@@ -499,7 +530,7 @@ const ExpensesView: React.FC = () => {
     const cancelEdit = () => {
         setIsAdding(false);
         setEditingId(null);
-        setNewExpense({ name: '', amount: 0, frequency: 'Mensual', category: 'General', currency: 'DOP', type: 'expense' });
+        setNewExpense({ name: '', amount: 0, frequency: 'Mensual', category: 'General', currency: 'DOP', type: 'expense', validFrom: '', validTo: '' });
     };
 
     return (
@@ -561,7 +592,14 @@ const ExpensesView: React.FC = () => {
                                                 <Icon size={18} />
                                             </div>
                                             <div>
-                                                <div className="font-bold text-text">{expense.name}</div>
+                                                <div className="font-bold text-text">
+                                                    {expense.name}
+                                                    {(expense.validFrom || expense.validTo) && (
+                                                        <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300">
+                                                            Temporal
+                                                        </span>
+                                                    )}
+                                                </div>
                                                 <div className="text-xs text-gray-500">{expense.category || 'General'}</div>
                                             </div>
                                         </td>
@@ -569,7 +607,7 @@ const ExpensesView: React.FC = () => {
                                             <div>{formatCurrency(expense.amount, expense.currency || 'DOP')}</div>
                                             {expense.currency && expense.currency !== 'DOP' && <div className="text-xs text-gray-500 font-normal">≈ {formatCurrency(expense.currency === 'USD' ? expense.amount * currencies.usd.rate : expense.amount * currencies.eur.rate)}</div>}
                                         </td>
-                                        <td className="px-6 py-4 text-right text-gray-500 dark:text-gray-400">{formatCurrency(calculateAnnualAmount(expense, currencies))}</td>
+                                        <td className="px-6 py-4 text-right text-gray-500 dark:text-gray-400">{formatCurrency(calculateAnnualAmountV2(expense, currencies))}</td>
                                         <td className="px-6 py-4 text-center"><span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${expense.frequency === 'Fijo' ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300' : 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300'}`}>{expense.frequency}</span></td>
                                         <td className="px-6 py-4 text-center">
                                             <button onClick={() => handleEdit(expense)} aria-label={`${t('common:edit')} ${expense.name}`} className="text-gray-400 hover:text-blue-500 mr-2 p-2 rounded-full hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-all"><Pencil size={16} aria-hidden="true" /></button>
@@ -630,6 +668,14 @@ const ExpensesView: React.FC = () => {
                                 ))}
                             </div>
                         </InputGroup>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <InputGroup label="Válido Desde (Opcional)">
+                                <DatePicker value={newExpense.validFrom || ''} onChange={date => setNewExpense({ ...newExpense, validFrom: date })} />
+                            </InputGroup>
+                            <InputGroup label="Válido Hasta (Opcional)">
+                                <DatePicker value={newExpense.validTo || ''} onChange={date => setNewExpense({ ...newExpense, validTo: date })} />
+                            </InputGroup>
+                        </div>
                     </div>
                 </Modal>
             )}

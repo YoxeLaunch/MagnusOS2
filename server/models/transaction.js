@@ -11,7 +11,14 @@ export const Transaction = sequelize.define('Transaction', {
     currency: { type: DataTypes.STRING, allowNull: false, defaultValue: 'DOP' },
     date: { type: DataTypes.DATEONLY, allowNull: false, defaultValue: DataTypes.NOW },
     type: { type: DataTypes.STRING, allowNull: false },
-    deductions: { type: DataTypes.JSON, allowNull: true } // For salary deductions (AFP, SFS, ISR, Others)
+    deductions: { type: DataTypes.JSON, allowNull: true }, // For salary deductions (AFP, SFS, ISR, Others)
+    validFrom: { type: DataTypes.DATEONLY, allowNull: true }, // Added for FASE 1 - Non-destructive Historical Tracking
+    validTo: { type: DataTypes.DATEONLY, allowNull: true } // Added for FASE 1 - Non-destructive Historical Tracking
+}, {
+    indexes: [
+        { fields: ['userId'] },
+        { fields: ['date'] }
+    ]
 });
 
 export const DailyTransaction = sequelize.define('DailyTransaction', {
@@ -22,4 +29,9 @@ export const DailyTransaction = sequelize.define('DailyTransaction', {
     description: { type: DataTypes.STRING, allowNull: false },
     type: { type: DataTypes.STRING, allowNull: false },
     category: { type: DataTypes.STRING, allowNull: true }
+}, {
+    indexes: [
+        { fields: ['userId'] },
+        { fields: ['date'] }
+    ]
 });

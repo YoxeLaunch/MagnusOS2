@@ -20,6 +20,8 @@ export interface Transaction {
         isr?: number;
         others?: Array<{ label: string; amount: number }>;
     };
+    validFrom?: string; // FASE 1 - Non-destructive Historical Tracking
+    validTo?: string;   // FASE 1 - Non-destructive Historical Tracking
 }
 
 /**

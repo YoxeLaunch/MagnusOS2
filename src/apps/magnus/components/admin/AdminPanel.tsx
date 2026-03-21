@@ -7,6 +7,7 @@ import { authService } from '../../services/auth';
 import { SettingsModal } from '../../../../shared/components/home/SettingsModal';
 import { SystemMonitor } from '../../../../shared/components/admin/SystemMonitor';
 import { exportToCSV } from '../../../../shared/utils/csvExport';
+import { apiFetch } from '../../../../shared/utils/apiFetch';
 
 // Lazy-loaded tab components
 const LandingTab = lazy(() => import('./tabs/LandingTab').then(module => ({ default: module.LandingTab })));
@@ -66,7 +67,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ currentUser, onClose }) 
 
     const loadMentors = async () => {
         try {
-            const res = await fetch(`/api/mentors`);
+            const res = await apiFetch(`/api/mentors`);
             const data = await res.json();
             const sortedMentors = sortMentorsByDate(data);
             setMentors(sortedMentors);
@@ -87,9 +88,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ currentUser, onClose }) 
         if (!isSoberano) return;
         try {
             const sortedMentors = sortMentorsByDate(mentors);
-            const res = await fetch(`/api/mentors`, {
+            const res = await apiFetch(`/api/mentors`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(sortedMentors)
             });
             if (res.ok) {
@@ -124,7 +124,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ currentUser, onClose }) 
     const handleDeleteUser = async () => {
         if (!deleteConfirmUser) return;
         try {
-            const response = await fetch(`/api/users/${deleteConfirmUser.username}`, {
+            const response = await apiFetch(`/api/users/${deleteConfirmUser.username}`, {
                 method: 'DELETE',
             });
             if (!response.ok) throw new Error('Error al eliminar');

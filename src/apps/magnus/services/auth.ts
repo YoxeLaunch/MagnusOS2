@@ -1,4 +1,5 @@
 import { User } from '../types';
+import { apiFetch } from '../../../shared/utils/apiFetch';
 
 export const authService = {
     login: async (username: string, password: string): Promise<User> => {
@@ -36,9 +37,8 @@ export const authService = {
     },
 
     updateProfile: async (username: string, updates: Partial<User>): Promise<User> => {
-        const response = await fetch(`/api/users/${username}`, {
+        const response = await apiFetch(`/api/users/${username}`, {
             method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(updates)
         });
 
@@ -61,14 +61,13 @@ export const authService = {
     },
 
     getAllUsers: async (): Promise<User[]> => {
-        const response = await fetch('/api/users');
+        const response = await apiFetch('/api/users');
         return response.json();
     },
 
     updateUserTag: async (username: string, tag: string, action: 'add' | 'remove'): Promise<User> => {
-        const response = await fetch(`/api/users/${username}/tags`, {
+        const response = await apiFetch(`/api/users/${username}/tags`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ tag, action })
         });
         return response.json();

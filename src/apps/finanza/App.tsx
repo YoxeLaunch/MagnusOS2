@@ -3,6 +3,7 @@ import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Layout } from './components/Layout';
 import { DataProvider } from './context/DataContext';
 import { ErrorBoundary } from '../../shared/components/ErrorBoundary';
+import { ToastProvider } from '../../shared/context/ToastContext';
 
 // Lazy Load Pages to reduce bundle size
 const Dashboard = lazy(() => import('./pages/Dashboard').then(module => ({ default: module.Dashboard })));
@@ -31,34 +32,36 @@ const LoadingFallback = () => (
 
 const App: React.FC = () => {
   return (
-    <DataProvider>
-      <ErrorBoundary>
-        <Suspense fallback={<LoadingFallback />}>
-          <Routes>
-            <Route path="print" element={<PrintReport />} />
-            <Route path="*" element={
-              <Layout>
-                <Suspense fallback={<LoadingFallback />}>
-                  <Routes>
-                    <Route path="/" element={<Dashboard />} />
-                    <Route path="flujo" element={<CashFlow />} />
-                    <Route path="patrimonio" element={<Wealth />} />
-                    <Route path="inversiones" element={<Investments />} />
-                    <Route path="seguimiento" element={<Tracking />} />
-                    <Route path="proyecciones" element={<Projections />} />
-                    <Route path="cuentas" element={<Accounts />} />
-                    <Route path="ahorros" element={<Savings />} />
-                    <Route path="libro-mayor" element={<Ledger />} />
-                    <Route path="importar" element={<Import />} />
-                    <Route path="*" element={<Navigate to="." replace />} />
-                  </Routes>
-                </Suspense>
-              </Layout>
-            } />
-          </Routes>
-        </Suspense>
-      </ErrorBoundary>
-    </DataProvider>
+    <ToastProvider>
+      <DataProvider>
+        <ErrorBoundary>
+          <Suspense fallback={<LoadingFallback />}>
+            <Routes>
+              <Route path="print" element={<PrintReport />} />
+              <Route path="*" element={
+                <Layout>
+                  <Suspense fallback={<LoadingFallback />}>
+                    <Routes>
+                      <Route path="/" element={<Dashboard />} />
+                      <Route path="flujo" element={<CashFlow />} />
+                      <Route path="patrimonio" element={<Wealth />} />
+                      <Route path="inversiones" element={<Investments />} />
+                      <Route path="seguimiento" element={<Tracking />} />
+                      <Route path="proyecciones" element={<Projections />} />
+                      <Route path="cuentas" element={<Accounts />} />
+                      <Route path="ahorros" element={<Savings />} />
+                      <Route path="libro-mayor" element={<Ledger />} />
+                      <Route path="importar" element={<Import />} />
+                      <Route path="*" element={<Navigate to="." replace />} />
+                    </Routes>
+                  </Suspense>
+                </Layout>
+              } />
+            </Routes>
+          </Suspense>
+        </ErrorBoundary>
+      </DataProvider>
+    </ToastProvider>
   );
 };
 

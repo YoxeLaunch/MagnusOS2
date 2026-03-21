@@ -60,27 +60,27 @@ export const DatePicker: React.FC<DatePickerProps> = ({ value, onChange, label, 
         setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + delta, 1));
     };
 
+    const MONTHS_SHORT = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+
     const formatDateDisplay = (dateStr: string) => {
         if (!dateStr) return 'Seleccionar fecha';
 
         // Handle YYYY-MM-DD manually to prevent timezone offset
         if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
             const [y, m, d] = dateStr.split('-');
-            return `${d}/${m}/${y}`;
+            const monthIndex = parseInt(m, 10) - 1;
+            return `${d} ${MONTHS_SHORT[monthIndex]} ${y}`;
         }
 
         // Fallback for ISO strings
         const date = new Date(dateStr);
         if (isNaN(date.getTime())) return dateStr;
 
-        // Use UTC methods to avoid timezone shifts if the string is YYYY-MM-DD
-        // But if it includes time (ISO), we might want local or just the date part.
-        // Easiest is to format based on the date object.
         const d = date.getDate().toString().padStart(2, '0');
-        const m = (date.getMonth() + 1).toString().padStart(2, '0');
+        const monthIndex = date.getMonth();
         const y = date.getFullYear();
 
-        return `${d}/${m}/${y}`;
+        return `${d} ${MONTHS_SHORT[monthIndex]} ${y}`;
     };
 
     // Calendar generation

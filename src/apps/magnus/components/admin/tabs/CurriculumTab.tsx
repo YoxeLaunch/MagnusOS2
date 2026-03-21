@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { BookOpen, Plus, Trash2, Save, FileText, ChevronDown, ChevronRight } from 'lucide-react';
+import { apiFetch } from '../../../../../shared/utils/apiFetch';
 
 interface CurriculumTabProps {
     isSoberano: boolean;
@@ -15,7 +16,7 @@ export const CurriculumTab: React.FC<CurriculumTabProps> = ({ isSoberano }) => {
 
     const loadCurriculum = async () => {
         try {
-            const res = await fetch(`/api/curriculum`);
+            const res = await apiFetch(`/api/curriculum`);
             const data = await res.json();
             setCurriculum(data);
             if (data.length > 0 && !openModuleId) {
@@ -28,9 +29,8 @@ export const CurriculumTab: React.FC<CurriculumTabProps> = ({ isSoberano }) => {
 
     const createMission = async (moduleId: string, text: string, week: number) => {
         try {
-            await fetch(`/api/curriculum/mission`, {
+            await apiFetch(`/api/curriculum/mission`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ moduleId, text, week })
             });
             loadCurriculum();
@@ -41,9 +41,8 @@ export const CurriculumTab: React.FC<CurriculumTabProps> = ({ isSoberano }) => {
 
     const updateMission = async (id: string, text: string, week: number) => {
         try {
-            await fetch(`/api/curriculum/mission`, {
+            await apiFetch(`/api/curriculum/mission`, {
                 method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ id, text, week })
             });
         } catch (e) {
@@ -54,9 +53,8 @@ export const CurriculumTab: React.FC<CurriculumTabProps> = ({ isSoberano }) => {
     const deleteMission = async (id: string) => {
         if (!confirm('¿Eliminar esta misión?')) return;
         try {
-            await fetch(`/api/curriculum/mission`, {
+            await apiFetch(`/api/curriculum/mission`, {
                 method: 'DELETE',
-                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ id })
             });
             loadCurriculum();
@@ -95,8 +93,8 @@ export const CurriculumTab: React.FC<CurriculumTabProps> = ({ isSoberano }) => {
                         <div
                             key={mod.id}
                             className={`bg-white dark:bg-slate-800 rounded-xl border transition-all duration-300 overflow-hidden ${isOpen
-                                    ? 'border-theme-gold/50 shadow-md ring-1 ring-theme-gold/20'
-                                    : 'border-slate-200 dark:border-white/5 hover:border-slate-300 dark:hover:border-white/10'
+                                ? 'border-theme-gold/50 shadow-md ring-1 ring-theme-gold/20'
+                                : 'border-slate-200 dark:border-white/5 hover:border-slate-300 dark:hover:border-white/10'
                                 }`}
                         >
                             {/* Header / Accordion Toggle */}

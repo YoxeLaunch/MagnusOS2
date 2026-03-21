@@ -1,7 +1,8 @@
 import React from 'react';
 import { Crown, Trash2, Search, Key, X, Eye, EyeOff } from 'lucide-react';
 import { useToast } from '../../../../../shared/context/ToastContext';
-import { User } from '../../../types';
+import { User, UserRole } from '../../../types';
+import { apiFetch } from '../../../../../shared/utils/apiFetch';
 import { UserAvatar } from '../../../../../shared/components/UserAvatar';
 import { exportToCSV } from '../../../../../shared/utils/csvExport';
 
@@ -46,8 +47,8 @@ const UserRow = React.memo(({ user, currentUser, onToggleVIP, onDelete }: {
                         <button
                             onClick={() => onToggleVIP(user)}
                             className={`px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider transition-colors ${user.tags?.includes('VIP')
-                                ? 'bg-slate-100 dark:bg-slate-700 text-slate-500 hover:bg-slate-200'
-                                : 'bg-theme-gold/10 text-theme-gold hover:bg-theme-gold hover:text-black'
+                                    ? 'bg-slate-100 dark:bg-slate-700 text-slate-500 hover:bg-slate-200'
+                                    : 'bg-theme-gold/10 text-theme-gold hover:bg-theme-gold hover:text-black'
                                 }`}
                         >
                             {user.tags?.includes('VIP') ? 'Quitar' : 'VIP'}
@@ -107,33 +108,17 @@ export const UsersTab: React.FC<UsersTabProps> = ({
             return;
         }
 
-        console.log('[PASSWORD RESET] Starting password reset for user:', passwordResetUser.username);
-        console.log('[PASSWORD RESET] Admin username:', currentUser.username);
-
         setIsResetting(true);
         try {
-            const payload = {
-                newPassword,
-                adminUsername: currentUser.username
-            };
-            console.log('[PASSWORD RESET] Sending payload:', { ...payload, newPassword: '***' });
-
-            const res = await fetch(`/api/users/${passwordResetUser.username}/password`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
+            const response = await apiFetch(`/api/users/${passwordResetUser.username}/password`, {
+                method: 'POST',
+                body: JSON.stringify({ password: newPassword })
             });
 
-            console.log('[PASSWORD RESET] Response status:', res.status);
-
-            if (!res.ok) {
-                const error = await res.json();
-                console.error('[PASSWORD RESET] Error response:', error);
-                throw new Error(error.error || 'Error al actualizar contraseña');
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || 'Error al actualizar contraseña');
             }
-
-            const result = await res.json();
-            console.log('[PASSWORD RESET] Success response:', result);
 
             toast.success(`Contraseña actualizada para ${passwordResetUser.username}`);
             setPasswordResetUser(null);
@@ -349,4 +334,3 @@ export const UsersTab: React.FC<UsersTabProps> = ({
         </div>
     );
 };
-

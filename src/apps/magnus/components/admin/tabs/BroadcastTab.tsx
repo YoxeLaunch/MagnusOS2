@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Radio as LucideRadio, Send as LucideSend, AlertTriangle, Info, Bell, MessageSquare } from 'lucide-react';
 import { useToast } from '../../../../../shared/context/ToastContext';
+import { apiFetch } from '../../../../../shared/utils/apiFetch';
 
 export const BroadcastTab: React.FC = () => {
     const toast = useToast();
@@ -14,9 +15,8 @@ export const BroadcastTab: React.FC = () => {
         setIsSending(true);
 
         try {
-            const res = await fetch(`/api/system/broadcast`, {
+            const res = await apiFetch(`/api/system/broadcast`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(broadcastMsg)
             });
 
