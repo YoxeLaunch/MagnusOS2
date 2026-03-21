@@ -25,7 +25,7 @@ export const chat = async (req, res) => {
         try {
             recentTx = await DailyTransaction.findAll({
                 where: { userId },
-                limit: 40,
+                limit: 300, // Augmented limit for Gemini's large context
                 order: [['date', 'DESC']]
             });
         } catch (dbErr) {
@@ -36,7 +36,7 @@ export const chat = async (req, res) => {
         console.log(`[AI] Context size: ${recentTx.length} items`);
 
         // 2. Prepare Payload
-        const systemPrompt = "Eres el Analista Financiero de MagnusOS. Tienes acceso a los datos reales arriba. Responde SIEMPRE basándote en ellos de forma breve y profesional en español. 'soberano' es el usuario.";
+        const systemPrompt = "Eres el Analista Financiero de MagnusOS. Tienes acceso a los datos reales arriba. Analízalos profundamente. Puedes usar listas, negritas y dar explicaciones detalladas. 'soberano' es el usuario.";
         const userPrompt = `DATOS DE TRANSACCIONES:
 ${context || 'No hay transacciones registradas.'}
 
@@ -50,8 +50,8 @@ PREGUNTA DEL USUARIO: "${message}"`;
             const result = await model.generateContent({
                 contents: [{ role: 'user', parts: [{ text: `${systemPrompt}\n\n${userPrompt}` }] }],
                 generationConfig: {
-                    maxOutputTokens: 500,
-                    temperature: 0.1,
+                    maxOutputTokens: 4096, // Increased from 500 to allow complete answers
+                    temperature: 0.2, // Slightly more creative for analysis
                 },
             });
 

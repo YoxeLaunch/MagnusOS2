@@ -49,9 +49,9 @@ export const MessageBubble: React.FC<MessageBubbleProps & { onReply?: (msg: Mess
                     </div>
                 )}
 
-                <div>
+                <div className="whitespace-pre-wrap break-words w-full">
                     {message.text}
-                    <div className={`text-[9px] mt-1 opacity-70 ${isOwn ? 'text-white' : 'text-slate-400'} text-right`}>
+                    <div className={`text-[9px] mt-1 opacity-70 ${isOwn ? 'text-white' : 'text-slate-400'} text-right block`}>
                         {new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </div>
                 </div>
