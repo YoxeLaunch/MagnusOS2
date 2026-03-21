@@ -9,5 +9,7 @@ router.use(verifyJWT);
 
 router.post('/chat', aiController.chat);
 router.post('/analyze', aiController.analyze);
+router.get('/snapshots', aiController.listSnapshots);
 
 export default router;
+
