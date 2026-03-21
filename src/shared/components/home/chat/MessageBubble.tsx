@@ -1,4 +1,6 @@
 import React from 'react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { Message, THEMES } from './types';
 
 interface MessageBubbleProps {
@@ -49,8 +51,21 @@ export const MessageBubble: React.FC<MessageBubbleProps & { onReply?: (msg: Mess
                     </div>
                 )}
 
-                <div className="whitespace-pre-wrap break-words w-full">
-                    {message.text}
+                <div className="whitespace-pre-wrap break-words w-full markdown-body text-sm">
+                    {/* Only use Markdown for AI, keep standard text for humans or if it doesn't look like markdown */}
+                    {((displayName || '').includes('IA') || displayName === 'Analista IA' || message.text.includes('**')) ? (
+                         <div className="prose prose-sm dark:prose-invert max-w-none 
+                                        prose-p:leading-snug prose-p:my-1 
+                                        prose-ul:my-1 prose-ol:my-1 prose-li:my-0
+                                        prose-headings:text-base prose-headings:my-2 prose-headings:font-bold">
+                             <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                                 {message.text}
+                             </ReactMarkdown>
+                         </div>
+                    ) : (
+                        message.text
+                    )}
+                    
                     <div className={`text-[9px] mt-1 opacity-70 ${isOwn ? 'text-white' : 'text-slate-400'} text-right block`}>
                         {new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </div>
