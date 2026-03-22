@@ -79,36 +79,36 @@ MagnusOS2 está diseñado para una operación autónoma, segura y con requerimie
 ```mermaid
 graph TD
     %% Definición de Nodos principales
-    User([👤 Usuario]) -.->|HTTP REST / WebSocket| LB[Proxy / Nginx]
+    User(["👤 Usuario"]) -.->|"HTTP REST / WebSocket"| LB["Proxy / Nginx"]
     
     subgraph "Frontend SPA"
-        React[React 18 + Vite]
-        React -->|Módulo| Finanzas[💰 finanza]
-        React -->|Módulo| Magnus[⚙️ magnus / admin]
-        React -->|Módulo| Auditor[📊 auditor]
+        React["React 18 + Vite"]
+        React -->|"Módulo"| Finanzas["💰 finanza"]
+        React -->|"Módulo"| Magnus["⚙️ magnus / admin"]
+        React -->|"Módulo"| Auditor["📊 auditor"]
     end
     
     LB --> React
-    LB -->|Rutas API| Backend
+    LB -->|"Rutas API"| Backend
     
     subgraph "Backend Node.js"
-        Backend[Express.js / Socket.IO]
-        JWT[Middleware Auth JWT]
-        ORM[Sequelize ORM]
+        Backend["Express.js / Socket.IO"]
+        JWT["Middleware Auth JWT"]
+        ORM["Sequelize ORM"]
         
         Backend <--> JWT
         Backend <--> ORM
     end
     
     subgraph "Servicios Aislados (Contenedores Externos)"
-        DB[(PostgreSQL 16)]
-        AI[🧠 Ollama Local LLM]
-        Sandbox[📦 Python Sandbox]
+        DB[("PostgreSQL 16")]
+        AI["🧠 Ollama Local LLM"]
+        Sandbox["📦 Python Sandbox"]
     end
     
-    ORM <-->|TCP Interno| DB
-    Backend <-->|API| AI
-    Backend <-->|Ejecución| Sandbox
+    ORM <-->|"TCP Interno"| DB
+    Backend <-->|"API"| AI
+    Backend <-->|"Ejecución"| Sandbox
 
     %% Estilos aesthetic
     style User fill:#fff,stroke:#333,stroke-width:2px,color:#000
@@ -148,12 +148,12 @@ sequenceDiagram
 
 ```mermaid
 graph LR
-    A[src] --> B(apps)
-    A --> C(shared)
-    B --> F(finanza:<br>Gestor de control de flujo)
-    B --> M(magnus:<br>Panel y Lab IA)
-    C --> CO(components:<br>Botones, layouts)
-    C --> UT(utils:<br>Matemáticas, fechas)
+    A["src"] --> B("apps")
+    A --> C("shared")
+    B --> F("finanza:<br>Gestor de control de flujo")
+    B --> M("magnus:<br>Panel y Lab IA")
+    C --> CO("components:<br>Botones, layouts")
+    C --> UT("utils:<br>Matemáticas, fechas")
 ```
 
 ---
