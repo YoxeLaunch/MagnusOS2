@@ -160,12 +160,22 @@ graph LR
 
 ## 🤝 Contribuyendo
 
-1. Crea tu propia rama: `git checkout -b feature/MiNuevaIdea`
-2. Realiza tus cambios y haz "commit": `git commit -m 'feat: añado una nueva característica'`
-3. Sube la rama temporal a GitHub: `git push origin feature/MiNuevaIdea`
-4. Abre un **Pull Request** para revisar.
+Si te interesa colaborar o adaptar esta infraestructura a tus necesidades:
+1. Haz un **Fork** interactivo del repositorio.
+2. Crea tu propia rama: `git checkout -b feature/MiNuevaIdea`
+3. Sube tus cambios a GitHub: `git push origin feature/MiNuevaIdea`
+4. Abre un **Pull Request**.
+
+---
+
+## ✒️ Autor y Créditos
+
+Este poderoso OS Financiero y Administrativo fue creado e ideado por:
+* **YoxeLaunch** - Arquitecto, Desarrollador Principal y Creador Original.
+* GitHub: [@YoxeLaunch](https://github.com/YoxeLaunch)
 
 <br>
 <div align="center">
-  <sub>Construido para el control total ⚜️ — MagnusOS2</sub>
+  <p><strong>Construido para el control total ⚜️ — Diseñado por YoxeLaunch</strong></p>
+  <sub>© 2026 MagnusOS2 Project</sub>
 </div>
