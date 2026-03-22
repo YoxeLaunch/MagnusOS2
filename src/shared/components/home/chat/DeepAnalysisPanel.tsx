@@ -21,8 +21,16 @@ interface SnapshotMetrics {
     exchangeRate?: number;
 }
 
+interface AIStructuredResponse {
+    analisis_ejecutivo: string;
+    alertas_criticas: string[];
+    recomendaciones: string[];
+    distribucion_gastos: { categoria: string; porcentaje: number; comentario: string }[];
+}
+
 interface AnalysisData {
     response: string;
+    structured?: AIStructuredResponse;
     cached: boolean;
     period: string;
     tokens_used?: number;
@@ -115,6 +123,95 @@ const MetricCard: React.FC<{
     </motion.div>
 );
 
+const StructuredReport: React.FC<{ data?: AIStructuredResponse; fallbackResponse?: string }> = ({ data, fallbackResponse }) => {
+    if (!data) {
+        return (
+            <div className="rounded-xl bg-slate-800/30 border border-violet-500/15 p-4">
+                <ReactMarkdown remarkPlugins={[remarkGfm]} className="prose prose-sm dark:prose-invert max-w-none text-slate-300 text-[12.5px]">
+                    {fallbackResponse || ''}
+                </ReactMarkdown>
+            </div>
+        );
+    }
+
+    return (
+        <div className="space-y-4">
+            {/* Executive Summary */}
+            <div className="rounded-xl bg-slate-800/30 border border-violet-500/15 overflow-hidden shadow-lg shadow-violet-900/5">
+                <div className="flex items-center gap-1.5 px-3 py-2 border-b border-white/5 bg-violet-900/10">
+                    <span className="text-violet-400 text-xs">✦</span>
+                    <span className="text-[9px] text-violet-400 uppercase tracking-wider font-bold">Resumen Ejecutivo</span>
+                </div>
+                <div className="p-3.5">
+                    <p className="text-slate-300 text-[13px] leading-relaxed font-medium">{data.analisis_ejecutivo}</p>
+                </div>
+            </div>
+
+            {/* Critical Alerts */}
+            {data.alertas_criticas?.length > 0 && (
+                <div className="rounded-xl bg-red-900/5 border border-red-500/20 overflow-hidden">
+                    <div className="flex items-center gap-1.5 px-3 py-2 border-b border-red-500/10 bg-red-900/20">
+                        <span className="text-red-400 text-xs">⚠️</span>
+                        <span className="text-[9px] text-red-400 uppercase tracking-wider font-bold text-shadow-sm">Alertas Críticas</span>
+                    </div>
+                    <div className="p-3 space-y-2.5">
+                        {data.alertas_criticas.map((alert: string, i: number) => (
+                            <div key={i} className="flex gap-2.5 text-xs text-red-200/90 leading-snug">
+                                <span className="text-red-500/60 font-black mt-0.5 font-mono">•</span>
+                                <p>{alert}</p>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
+
+            {/* Recommendations */}
+            {data.recomendaciones?.length > 0 && (
+                <div className="rounded-xl bg-emerald-900/5 border border-emerald-500/20 overflow-hidden">
+                    <div className="flex items-center gap-1.5 px-3 py-2 border-b border-emerald-500/10 bg-emerald-900/20">
+                        <span className="text-emerald-400 text-xs">✅</span>
+                        <span className="text-[9px] text-emerald-400 uppercase tracking-wider font-bold">Recomendaciones</span>
+                    </div>
+                    <div className="p-3 space-y-2.5">
+                        {data.recomendaciones.map((rec: string, i: number) => (
+                            <div key={i} className="flex gap-2.5 text-xs text-emerald-200/90 leading-snug">
+                                <span className="text-emerald-500 font-black">→</span>
+                                <p>{rec}</p>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
+
+            {/* AI distribution check */}
+            {data.distribucion_gastos?.length > 0 && (
+                <div className="rounded-xl bg-slate-900/40 border border-slate-700/30 overflow-hidden">
+                    <div className="flex items-center gap-1.5 px-3 py-2 border-b border-white/5 bg-slate-800/30">
+                        <span className="text-amber-400 text-xs">📊</span>
+                        <span className="text-[9px] text-slate-400 uppercase tracking-wider font-bold">Insights de IA por Categoría</span>
+                    </div>
+                    <div className="p-3 space-y-4">
+                        {data.distribucion_gastos.map((item: any, i: number) => (
+                            <div key={i} className="group">
+                                <div className="flex items-center justify-between text-[11px] mb-1">
+                                    <span className="text-slate-200 font-bold group-hover:text-violet-300 transition-colors">{item.categoria}</span>
+                                    <span className="px-1.5 py-0.5 rounded bg-violet-500/10 text-violet-400 font-mono font-bold text-[10px]">{item.porcentaje}%</span>
+                                </div>
+                                <div className="relative p-2.5 rounded-lg bg-slate-800/30 border border-slate-700/20 group-hover:border-violet-500/20 transition-all">
+                                    <div className="absolute left-0 top-0 bottom-0 w-1 bg-violet-600/30 group-hover:bg-violet-600 transition-colors rounded-l-lg" />
+                                    <p className="text-[10px] text-slate-400 leading-relaxed italic last:mb-0">
+                                        "{item.comentario}"
+                                    </p>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+};
+
 // ──────────────────────────────────────────
 // Main Panel
 // ──────────────────────────────────────────
@@ -179,13 +276,18 @@ export const DeepAnalysisPanel: React.FC<DeepAnalysisPanelProps> = ({ userId, on
             if (data.snapshot) {
                 const s = data.snapshot;
                 const metrics = s.computed_metrics || {};
-                let response = s.gemini_narrative || '';
-                const alerts = s.gemini_alerts || [];
-                const recs = s.gemini_recommendations || [];
-                if (alerts.length) response += '\n\n### ⚠️ Alertas\n' + alerts.map((a: string, i: number) => `${i + 1}. ${a}`).join('\n');
-                if (recs.length) response += '\n\n### ✅ Recomendaciones\n' + recs.map((r: string, i: number) => `${i + 1}. ${r}`).join('\n');
+                
+                // Extract structured data from metrics if available, or try to reconstruct
+                const structured: AIStructuredResponse = {
+                    analisis_ejecutivo: s.gemini_narrative || '',
+                    alertas_criticas: s.gemini_alerts || [],
+                    recomendaciones: s.gemini_recommendations || [],
+                    distribucion_gastos: metrics.distribution || []
+                };
+
                 setAnalysisData({
-                    response,
+                    response: s.gemini_narrative || '',
+                    structured,
                     cached: true,
                     period: s.period,
                     metrics,
@@ -501,38 +603,11 @@ export const DeepAnalysisPanel: React.FC<DeepAnalysisPanelProps> = ({ userId, on
                                     </div>
                                 )}
 
-                                {/* AI Narrative */}
                                 {analysisData.response && (
-                                    <div className="rounded-xl bg-slate-800/30 border border-violet-500/15 overflow-hidden">
-                                        <div className="flex items-center gap-1.5 px-3 py-2 border-b border-white/5 bg-violet-900/10">
-                                            <span className="text-violet-400 text-xs">✦</span>
-                                            <span className="text-[9px] text-violet-400 uppercase tracking-wider font-bold">Análisis Gemini</span>
-                                        </div>
-                                        <div className="p-4">
-                                            <div className="
-                                                prose prose-sm dark:prose-invert max-w-none
-                                                prose-p:text-slate-300 prose-p:leading-relaxed prose-p:my-2 prose-p:text-[12.5px]
-                                                prose-h1:text-violet-300 prose-h1:font-bold prose-h1:text-sm prose-h1:mt-4 prose-h1:mb-2
-                                                prose-h2:text-violet-300 prose-h2:font-bold prose-h2:text-sm prose-h2:mt-3 prose-h2:mb-1.5
-                                                prose-h3:text-violet-200 prose-h3:font-semibold prose-h3:text-xs prose-h3:mt-3 prose-h3:mb-1
-                                                prose-h4:text-slate-300 prose-h4:font-semibold prose-h4:text-xs prose-h4:mt-2 prose-h4:mb-1
-                                                prose-strong:text-amber-300 prose-strong:font-semibold
-                                                prose-em:text-slate-400 prose-em:italic
-                                                prose-ul:text-slate-300 prose-ul:my-1 prose-ul:pl-4 prose-ul:space-y-0.5
-                                                prose-ol:text-slate-300 prose-ol:my-1 prose-ol:pl-4
-                                                prose-li:text-[12px] prose-li:leading-snug
-                                                prose-hr:border-slate-700/60 prose-hr:my-3
-                                                prose-code:text-teal-300 prose-code:bg-slate-800 prose-code:px-1 prose-code:rounded prose-code:text-[10px]
-                                                prose-pre:bg-slate-800/80 prose-pre:border prose-pre:border-slate-700/50 prose-pre:rounded-lg prose-pre:text-[10px]
-                                                prose-blockquote:border-l-violet-500/60 prose-blockquote:text-slate-400 prose-blockquote:italic prose-blockquote:pl-3
-                                                prose-table:text-[11px] prose-th:text-slate-300 prose-td:text-slate-400
-                                            ">
-                                                <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                                                    {analysisData.response}
-                                                </ReactMarkdown>
-                                            </div>
-                                        </div>
-                                    </div>
+                                    <StructuredReport 
+                                        data={analysisData.structured} 
+                                        fallbackResponse={analysisData.response} 
+                                    />
                                 )}
 
                             </motion.div>

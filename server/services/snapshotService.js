@@ -34,9 +34,16 @@ export const getSnapshot = async (period) => {
 export const saveSnapshot = async (period, computedMetrics, geminiResponse) => {
     try {
         const normalizedPeriod = normalizePeriod(period);
+        
+        // Include AI-generated distribution in the stored metrics
+        const finalMetrics = {
+            ...computedMetrics,
+            distribution: geminiResponse.distribution || []
+        };
+
         const [snapshot, created] = await MonthlySnapshot.upsert({
             period: normalizedPeriod,
-            computed_metrics: computedMetrics,
+            computed_metrics: finalMetrics,
             gemini_narrative: geminiResponse.narrative,
             gemini_alerts: geminiResponse.alerts || [],
             gemini_recommendations: geminiResponse.recommendations || [],

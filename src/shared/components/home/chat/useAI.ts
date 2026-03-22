@@ -7,6 +7,7 @@ export interface AIMessage {
     mode?: 'chat' | 'quick' | 'deep';
     cached?: boolean;
     tokens_used?: number;
+    structured?: any;
 }
 
 export interface AISendOptions {
@@ -59,7 +60,8 @@ export const useAI = () => {
                     content: data.response,
                     mode,
                     cached: data.cached || false,
-                    tokens_used: data.tokens_used
+                    tokens_used: data.tokens_used,
+                    structured: data.structured || null
                 };
                 setMessages(prev => [...prev, aiMsg]);
             } else {

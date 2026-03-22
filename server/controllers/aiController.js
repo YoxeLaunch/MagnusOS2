@@ -59,7 +59,7 @@ const checkRateLimit = (userId) => {
 const DOP_TO_USD = parseFloat(process.env.DOP_TO_USD_RATE || '0.01695'); // ~59 DOP = 1 USD
 
 // ========================================
-// Utility: Compute metrics from transactions
+// Utility: Compute metrics and aggregate data
 // ========================================
 const computeMetrics = (transactions) => {
     let totalIncome = 0;
@@ -68,7 +68,6 @@ const computeMetrics = (transactions) => {
 
     for (const tx of transactions) {
         const amount = parseFloat(tx.amount) || 0;
-        // Use the 'type' field: 'income' | 'expense'
         const isExpense = (tx.type === 'expense') || (tx.type === 'gasto');
         const isIncome = (tx.type === 'income') || (tx.type === 'ingreso');
         const cat = tx.category || tx.description?.split(' ')[0] || 'Otros';
@@ -79,19 +78,25 @@ const computeMetrics = (transactions) => {
             totalExpenses += amount;
             categoryMap[cat] = (categoryMap[cat] || 0) + amount;
         } else {
-            // Fallback: use sign
             if (amount >= 0) totalIncome += amount;
-            else { totalExpenses += Math.abs(amount); categoryMap[cat] = (categoryMap[cat] || 0) + Math.abs(amount); }
+            else { 
+                totalExpenses += Math.abs(amount); 
+                categoryMap[cat] = (categoryMap[cat] || 0) + Math.abs(amount); 
+            }
         }
     }
 
     const balance = totalIncome - totalExpenses;
     const savingsRate = totalIncome > 0 ? ((balance / totalIncome) * 100).toFixed(1) : 0;
 
-    const topCategories = Object.entries(categoryMap)
-        .sort(([, a], [, b]) => b - a)
-        .slice(0, 5)
-        .map(([name, amount]) => ({ name, amount: amount.toFixed(2) }));
+    // Detailed categorization for AI insight
+    const categoriesNormalized = Object.entries(categoryMap)
+        .sort(([, a], [ , b]) => b - a)
+        .map(([name, amount]) => ({
+            name,
+            amount: amount.toFixed(2),
+            percentage: totalExpenses > 0 ? ((amount / totalExpenses) * 100).toFixed(1) : 0
+        }));
 
     return {
         // DOP values (native)
@@ -99,7 +104,8 @@ const computeMetrics = (transactions) => {
         totalExpenses: totalExpenses.toFixed(2),
         balance: balance.toFixed(2),
         savingsRate: parseFloat(savingsRate),
-        topCategories,
+        topCategories: categoriesNormalized.slice(0, 5), // Backward compatibility
+        allCategories: categoriesNormalized,
         txCount: transactions.length,
         currency: 'DOP',
         // USD equivalents
@@ -184,19 +190,16 @@ ${metricsContext}`;
 };
 
 /**
- * Mode 'deep': Full snapshot or full 300 tx analysis.
- * ~4,500–6,000 tokens. Only on explicit user request.
- * Returns cached data if snapshot exists — 0 additional Gemini calls.
+ * Mode 'deep': Full snapshot analysis with Structured JSON.
+ * Returns pre-calculated data if snapshot exists.
  */
 const buildDeepContext = async (userId, message, period) => {
-    // Check for fresh cached snapshot first
     const snapshot = await getSnapshot(period);
     if (snapshot && !isStale(snapshot)) {
-        console.log(`[AI] Context-Mode: deep | Source: cached-snapshot (0 tokens!) | Period: ${snapshot.period}`);
+        console.log(`[AI] Context-Mode: deep | Source: cached-snapshot | Period: ${snapshot.period}`);
         return { cached: true, snapshot };
     }
 
-    // No snapshot or stale — go full analysis
     let recentTx = [];
     try {
         recentTx = await DailyTransaction.findAll({
@@ -208,28 +211,33 @@ const buildDeepContext = async (userId, message, period) => {
         console.error('[AI] DB error in deep context:', e.message);
     }
 
-    const txContext = recentTx.map(t =>
-        `${t.date} | ${t.type === 'income' ? '+' : '-'}RD$${t.amount} | ${t.category || 'Sin cat'} | ${t.description}`
-    ).join('\n');
-    console.log(`[AI] Context-Mode: deep | Source: live-db | Context-Size: ${recentTx.length} tx`);
-
     const computed_metrics = computeMetrics(recentTx);
     const usdRate = DOP_TO_USD;
 
-    const systemPrompt = `Eres el Analista Financiero Senior de MagnusOS. Los montos están en Pesos Dominicanos (RD$).
-Anota siempre los valores en RD$ primero y entre paréntesis el equivalente en USD (tasa: 1 USD ≈ ${(1/usdRate).toFixed(0)} RD$).
-Métricas precalculadas del período:
-- Ingresos: RD$${computed_metrics.totalIncome} (~US$${computed_metrics.totalIncomeUSD})
-- Gastos: RD$${computed_metrics.totalExpenses} (~US$${computed_metrics.totalExpensesUSD})
-- Balance: RD$${computed_metrics.balance} (~US$${computed_metrics.balanceUSD})
-- Tasa de ahorro: ${computed_metrics.savingsRate}%
-- Total transacciones: ${computed_metrics.txCount}
+    // Use aggregated data instead of full transaction list to save tokens
+    const categorySummary = computed_metrics.allCategories.map(c => 
+        `- ${c.name}: RD$${c.amount} (${c.percentage}%)`
+    ).join('\n');
 
-Incluye: resumen ejecutivo, análisis por categoría, patrones de gasto, alertas críticas y recomendaciones accionables.
-Usa markdown con encabezados ##, listas, tablas y negritas para máxima legibilidad. El usuario se llama 'soberano'.
+    const systemPrompt = `Eres el Auditor Financiero Senior de MagnusOS. Tu objetivo es proporcionar un análisis estructurado basado exclusivamente en los datos proporcionados.
+Los montos están en Pesos Dominicanos (RD$). Tasa de cambio: 1 USD ≈ ${(1/usdRate).toFixed(0)} RD$.
 
-TRANSACCIONES (${recentTx.length} registros, formato: fecha | monto | categoría | descripción):
-${txContext || 'No hay transacciones registradas.'}`;
+MÉTRICAS DEL PERÍODO:
+- Total Ingresos: RD$${computed_metrics.totalIncome} (~US$${computed_metrics.totalIncomeUSD})
+- Total Gastos: RD$${computed_metrics.totalExpenses} (~US$${computed_metrics.totalExpensesUSD})
+- Balance Neto: RD$${computed_metrics.balance} (~US$${computed_metrics.balanceUSD})
+- Tasa de Ahorro Real: ${computed_metrics.savingsRate}%
+- Volumen Transacciones: ${computed_metrics.txCount}
+
+RESUMEN POR CATEGORÍAS:
+${categorySummary}
+
+INSTRUCCIONES ESTRICTAS:
+1. No generes saludos ni introducciones.
+2. No uses Markdown para el análisis principal.
+3. Genera INSIGHTS cualitativos, alertas de desviaciones y recomendaciones de optimización.
+4. El usuario se identifica como 'Soberano'.
+5. Tu respuesta debe ser un objeto JSON válido.`;
 
     return { cached: false, systemPrompt, userPrompt: message, computed_metrics };
 };
@@ -308,37 +316,86 @@ export const chat = async (req, res) => {
         // --- Call Gemini (or Ollama fallback) ---
         if (genAI) {
             const geminiModel = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+            
+            const generationConfig = {
+                maxOutputTokens: mode === 'deep' ? 4096 : mode === 'quick' ? 2048 : 800,
+                temperature: mode === 'chat' ? 0.3 : 0.2,
+            };
+
+            // Enable structured JSON for Deep mode
+            if (mode === 'deep') {
+                generationConfig.responseMimeType = "application/json";
+                generationConfig.responseSchema = {
+                    type: "object",
+                    properties: {
+                        analisis_ejecutivo: { type: "string" },
+                        alertas_criticas: { type: "array", items: { type: "string" } },
+                        recomendaciones: { type: "array", items: { type: "string" } },
+                        distribucion_gastos: {
+                            type: "array",
+                            items: {
+                                type: "object",
+                                properties: {
+                                    categoria: { type: "string" },
+                                    porcentaje: { type: "number" },
+                                    comentario: { type: "string" }
+                                },
+                                required: ["categoria", "porcentaje", "comentario"]
+                            }
+                        }
+                    },
+                    required: ["analisis_ejecutivo", "alertas_criticas", "recomendaciones", "distribucion_gastos"]
+                };
+            }
+
             const result = await geminiModel.generateContent({
                 contents: [{ role: 'user', parts: [{ text: fullPrompt }] }],
-                generationConfig: {
-                    maxOutputTokens: mode === 'deep' ? 8192 : mode === 'quick' ? 2048 : 800,
-                    temperature: mode === 'chat' ? 0.3 : 0.2,
-                }
+                generationConfig
             });
 
-            const responseText = result.response.text();
+            let responseText = result.response.text();
+            let parsedJSON = null;
+            
+            if (mode === 'deep') {
+                try {
+                    parsedJSON = JSON.parse(responseText);
+                    // Use executive summary as narrative for backward compatibility
+                    responseText = parsedJSON.analisis_ejecutivo;
+                } catch (parseErr) {
+                    console.error('[AI] JSON Parse Error:', parseErr.message, responseText);
+                }
+            }
+
             const tokensUsed = result.response.usageMetadata?.totalTokenCount || 0;
             console.log(`[AI] Gemini OK | Mode: ${mode} | Tokens: ${tokensUsed}`);
 
-            // Circuit Breaker — reset on success
             consecutiveFailures = 0;
             circuitBreakerOpen = false;
 
-            // If deep mode, save snapshot so next request is free
             if (mode === 'deep') {
                 const periodKey = period || new Date().toISOString().substring(0, 7);
                 const metricsToSave = contextResult.computed_metrics || {};
                 try {
                     await saveSnapshot(periodKey, metricsToSave, {
-                        narrative: responseText,
-                        alerts: [],
-                        recommendations: [],
+                        narrative: parsedJSON?.analisis_ejecutivo || responseText,
+                        alerts: parsedJSON?.alertas_criticas || [],
+                        recommendations: parsedJSON?.recomendaciones || [],
+                        distribution: parsedJSON?.distribucion_gastos || [],
                         tokensUsed
                     });
-                    console.log(`[AI] Snapshot saved for period ${periodKey} | metrics: ${JSON.stringify(metricsToSave)}`);
                 } catch (saveErr) {
                     console.error('[AI] Failed to save snapshot cache:', saveErr.message);
                 }
+
+                return res.json({
+                    response: responseText,
+                    structured: parsedJSON,
+                    mode,
+                    tokens_used: tokensUsed,
+                    metrics: contextResult.computed_metrics || null,
+                    cached: false,
+                    period: periodKey
+                });
             }
 
             return res.json({
