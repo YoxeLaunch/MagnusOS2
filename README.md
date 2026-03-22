@@ -71,25 +71,90 @@ En el directorio del proyecto, puedes correr:
 
 ---
 
-## 📂 Arquitectura del Proyecto
+## 📂 Arquitectura y Funcionamiento
 
-El sistema está dividido en módulos escalables:
+### 1. Nivel de Infraestructura
+MagnusOS2 está diseñado para una operación autónoma, segura y con requerimientos exactos para el mejor desempeño.
 
 ```mermaid
 graph TD
-    src --> apps
-    src --> shared
-    apps --> finanza
-    apps --> magnus
-    shared --> components
-    shared --> hooks
-    shared --> utils
-    shared --> context
+    %% Definición de Nodos principales
+    User([👤 Usuario]) -.->|HTTP REST / WebSocket| LB[Proxy / Nginx]
+    
+    subgraph "Frontend SPA"
+        React[React 18 + Vite]
+        React -->|Módulo| Finanzas[💰 finanza]
+        React -->|Módulo| Magnus[⚙️ magnus / admin]
+        React -->|Módulo| Auditor[📊 auditor]
+    end
+    
+    LB --> React
+    LB -->|Rutas API| Backend
+    
+    subgraph "Backend Node.js"
+        Backend[Express.js / Socket.IO]
+        JWT[Middleware Auth JWT]
+        ORM[Sequelize ORM]
+        
+        Backend <--> JWT
+        Backend <--> ORM
+    end
+    
+    subgraph "Servicios Aislados (Contenedores Externos)"
+        DB[(PostgreSQL 16)]
+        AI[🧠 Ollama Local LLM]
+        Sandbox[📦 Python Sandbox]
+    end
+    
+    ORM <-->|TCP Interno| DB
+    Backend <-->|API| AI
+    Backend <-->|Ejecución| Sandbox
+
+    %% Estilos aesthetic
+    style User fill:#fff,stroke:#333,stroke-width:2px,color:#000
+    style Backend fill:#339933,stroke:#333,stroke-width:2px,color:#fff
+    style DB fill:#336791,stroke:#333,stroke-width:2px,color:#fff
+    style AI fill:#ff8c00,stroke:#333,stroke-width:2px,color:#fff
 ```
 
-* **`apps/finanza`**: Componentes específicos de gestión monetaria y dashboard de bills.
-* **`apps/magnus`**: Funciones del ecosistema OS y el panel de administración.
-* **`shared`**: Recursos globales reutilizables en toda la plataforma.
+### 2. Flujo Financiero (Ledger de Doble Entrada)
+El motor principal del sistema garantiza la integridad matemática (Suma = 0) bajo un estricto proceso.
+
+```mermaid
+sequenceDiagram
+    participant U as Usuario
+    participant R as React Frontend
+    participant E as Node.js API
+    participant DB as Base de Datos
+    
+    U->>R: Inicia Gasto / Inversión
+    R->>E: POST /api/ledger/transactions (con JWT)
+    activate E
+    E->>E: Valida Seguridad JWT
+    E->>E: Valida Invariante Contable (Db = Cr)
+    E->>DB: BEGIN TRANSACTION
+    activate DB
+    E->>DB: Escribe Transacción Principal
+    E->>DB: Inserta líneas contables (Unidad en centavos)
+    E->>DB: Actualiza caché y balance (Account)
+    E->>DB: COMMIT
+    deactivate DB
+    E-->>R: JSON Confirmación y Totales
+    deactivate E
+    R-->>U: Renderiza Dashboard (Recharts + Framer)
+```
+
+### 3. Distribución de Pantallas
+
+```mermaid
+graph LR
+    A[src] --> B(apps)
+    A --> C(shared)
+    B --> F(finanza:<br>Gestor de control de flujo)
+    B --> M(magnus:<br>Panel y Lab IA)
+    C --> CO(components:<br>Botones, layouts)
+    C --> UT(utils:<br>Matemáticas, fechas)
+```
 
 ---
 
