@@ -2,6 +2,7 @@ import React, { useMemo } from 'react';
 import { Transaction, DailyTransaction, CurrencyState } from '../../types';
 import { CalendarClock, CheckCircle2, AlertCircle } from 'lucide-react';
 import { formatCurrency } from '../../utils/calculations';
+import { getFinancialCycle, isDateInCycle } from '../../utils/financialCycle';
 
 interface UpcomingBillsProps {
     plannedExpenses: Transaction[];
@@ -12,23 +13,34 @@ interface UpcomingBillsProps {
 
 export const UpcomingBills: React.FC<UpcomingBillsProps> = ({ plannedExpenses, transactions, currentDate, currencies }) => {
 
-    // Logic to find unpaid bills
+    // Logic to find unpaid bills — only check transactions within the CURRENT financial cycle
     const unpaidBills = useMemo(() => {
-        // Filter only monthly expenses for now to be safe
+        // Get the active financial cycle (e.g. Jan 26 – Feb 25 for "Febrero")
+        const currentCycle = getFinancialCycle(currentDate);
+
+        // Filter transactions to only those within the current cycle period
+        const cycleTransactions = transactions.filter(t =>
+            t.date && isDateInCycle(t.date, currentCycle)
+        );
+
+        // Only check monthly recurring expenses
         const recurring = plannedExpenses.filter(e => e.frequency === 'Mensual');
 
         return recurring.filter(plan => {
-            // Check if this planned expense appears in this month's transactions
-            const isPaid = transactions.some(t => {
-                // Match logic: Name similarity (with null checks)
-                const planName = (plan.name || '').toLowerCase();
-                const txName = (t.description || '').toLowerCase();
+            // Check if this planned expense appears in THIS cycle's transactions
+            const isPaid = cycleTransactions.some(t => {
+                const planName = (plan.name || '').toLowerCase().trim();
+                const txName = (t.description || '').toLowerCase().trim();
                 if (!planName || !txName) return false;
+                // At least 4 chars must match to avoid false positives
+                if (planName.length < 4 || txName.length < 4) return false;
                 return txName.includes(planName) || planName.includes(txName);
             });
             return !isPaid;
         });
-    }, [plannedExpenses, transactions]);
+    }, [plannedExpenses, transactions, currentDate]);
+
+    const cycleLabel = getFinancialCycle(currentDate).label;
 
     return (
         <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-white/5 shadow-sm overflow-hidden h-full">
@@ -36,6 +48,9 @@ export const UpcomingBills: React.FC<UpcomingBillsProps> = ({ plannedExpenses, t
                 <h3 className="font-bold text-slate-900 dark:text-white flex items-center gap-2">
                     <CalendarClock className="text-blue-500" size={20} />
                     Próximos Pagos
+                    <span className="text-xs font-normal text-slate-400 capitalize">
+                        · {cycleLabel}
+                    </span>
                 </h3>
                 <span className="text-xs font-bold px-2 py-1 rounded-full bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300">
                     {unpaidBills.length} Pendientes
