@@ -56,7 +56,7 @@ export const Tracking: React.FC = () => {
         });
 
         const available = income - expense - investment;
-        return { available };
+        return { available, investment };
     }, [dailyTransactions]);
 
     // Filtered Transactions for Timeline
@@ -109,35 +109,51 @@ export const Tracking: React.FC = () => {
                     </p>
                 </div>
 
-                {/* Global Stats Card (New) */}
-                <div className="bg-gradient-to-br from-indigo-900 to-purple-900 text-white p-4 rounded-xl shadow-lg border border-indigo-500/30 flex items-center gap-4 min-w-[280px]">
-                    <div className="p-3 rounded-full bg-white/10">
-                        <PiggyBank size={24} className="text-yellow-300" />
-                    </div>
-                    <div className="flex-1">
-                        <p className="text-xs text-indigo-200 uppercase font-bold tracking-wider">Ahorro Global Disp.</p>
-                        <div className="flex items-center gap-3">
+                {/* Global Stats Card (Redesigned) */}
+                <div className="flex flex-col md:flex-row gap-4">
+                    {/* Cash Disp. */}
+                    <div className="bg-gradient-to-br from-indigo-900 to-purple-900 text-white p-4 rounded-xl shadow-lg border border-indigo-500/30 flex items-center gap-4 min-w-[240px]">
+                        <div className="p-3 rounded-full bg-white/10">
+                            <Wallet size={24} className="text-indigo-300" />
+                        </div>
+                        <div className="flex-1">
+                            <p className="text-[10px] text-indigo-200 uppercase font-bold tracking-wider">Cash Disp. Global</p>
                             <p className="text-2xl font-bold text-white">
                                 ${globalStats.available.toLocaleString()}
                             </p>
-                            {globalStats.available > 0 && (
-                                <button
-                                    onClick={handleInvestSweep}
-                                    title="Invertir todo el disponible"
-                                    className="p-1.5 bg-white/20 hover:bg-white/30 rounded-full transition-colors"
-                                >
-                                    <ArrowRight size={16} />
-                                </button>
-                            )}
+                        </div>
+                        <button
+                            onClick={() => setIsAdjustmentModalOpen(true)}
+                            title="Ajustar saldo manualmente"
+                            className="p-2 bg-white/10 hover:bg-white/20 rounded-lg transition-colors"
+                        >
+                            <Settings size={18} />
+                        </button>
+                    </div>
+
+                    {/* Total Invested (Histórico) */}
+                    <div className="bg-gradient-to-br from-emerald-900 to-teal-900 text-white p-4 rounded-xl shadow-lg border border-emerald-500/30 flex items-center gap-4 min-w-[240px]">
+                        <div className="p-3 rounded-full bg-white/10">
+                            <PiggyBank size={24} className="text-yellow-300" />
+                        </div>
+                        <div className="flex-1">
+                            <p className="text-[10px] text-emerald-200 uppercase font-bold tracking-wider">Inversión Ahorrada</p>
+                            <div className="flex items-center gap-2">
+                                <p className="text-2xl font-bold text-white">
+                                    ${globalStats.investment.toLocaleString()}
+                                </p>
+                                {globalStats.available > 0 && (
+                                    <button
+                                        onClick={handleInvestSweep}
+                                        title="Invertir todo el disponible"
+                                        className="p-1 px-2 text-[10px] bg-white/20 hover:bg-white/30 rounded-md transition-colors flex items-center gap-1"
+                                    >
+                                        <ArrowRight size={10} /> Invertir
+                                    </button>
+                                )}
+                            </div>
                         </div>
                     </div>
-                    <button
-                        onClick={() => setIsAdjustmentModalOpen(true)}
-                        title="Ajustar saldo manualmente"
-                        className="p-2 bg-white/10 hover:bg-white/20 rounded-lg transition-colors"
-                    >
-                        <Settings size={18} />
-                    </button>
                 </div>
             </div>
 

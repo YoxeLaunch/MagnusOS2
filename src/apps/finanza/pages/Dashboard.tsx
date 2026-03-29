@@ -55,7 +55,7 @@ export const Dashboard: React.FC = () => {
     let expense = 0;
     let investment = 0;
 
-    dailyTransactions.forEach(t => {
+    dailyTransactions.forEach((t: any) => {
       const amountInDOP = convertToDOP(t.amount, t.currency);
       if (isDateInCycle(t.date, currentCycle)) {
         if (t.type === 'income') income += amountInDOP;
@@ -67,22 +67,39 @@ export const Dashboard: React.FC = () => {
     return { income, expense, investment, balance: income - expense - investment, cycleLabel: currentCycle.label };
   }, [dailyTransactions, currencies]);
 
+  // Calculate Global Stats (All Time)
+  const globalStats = useMemo(() => {
+    let income = 0;
+    let expense = 0;
+    let investment = 0;
+
+    dailyTransactions.forEach((t: any) => {
+      const amountInDOP = convertToDOP(t.amount, t.currency);
+      if (t.type === 'income') income += amountInDOP;
+      else if (t.type === 'expense') expense += amountInDOP;
+      else if (t.type === 'investment') investment += amountInDOP;
+    });
+
+    const available = income - expense - investment;
+    return { available, investment };
+  }, [dailyTransactions, currencies]);
+
   // Filter and Summary Calculations
   const { totalIncomeCurrent, totalExpenseCurrent, comparisonData, expenseChartData } = useMemo(() => {
     const START_DATE = new Date('2025-12-21');
 
-    const incomes = (data.incomes || []).filter(t => new Date(t.date || '2025-12-21') >= START_DATE);
-    const expenses = (data.expenses || []).filter(t => new Date(t.date || '2025-12-21') >= START_DATE);
+    const incomes = ((data as any).incomes || []).filter((t: any) => new Date(t.date || '2025-12-21') >= START_DATE);
+    const expenses = ((data as any).expenses || []).filter((t: any) => new Date(t.date || '2025-12-21') >= START_DATE);
 
-    const totalIncome = incomes.reduce((acc, curr) => acc + (calculateAnnualAmount(curr, currencies) / 12), 0);
-    const totalExpense = expenses.reduce((acc, curr) => acc + (calculateAnnualAmount(curr, currencies) / 12), 0);
+    const totalIncome = incomes.reduce((acc: number, curr: any) => acc + (calculateAnnualAmount(curr, currencies) / 12), 0);
+    const totalExpense = expenses.reduce((acc: number, curr: any) => acc + (calculateAnnualAmount(curr, currencies) / 12), 0);
 
     const compData = [
       { name: 'Ingresos', value: totalIncome, fill: '#3b82f6' },
       { name: 'Gastos', value: totalExpense, fill: '#ef4444' }
     ];
 
-    const pieData = Object.values(expenses.reduce((acc: any, curr) => {
+    const pieData = Object.values(expenses.reduce((acc: any, curr: any) => {
       const cat = curr.category || curr.name;
       if (!acc[cat]) acc[cat] = { name: cat, value: 0 };
       acc[cat].value += (calculateAnnualAmount(curr, currencies) / 12);
@@ -141,9 +158,9 @@ export const Dashboard: React.FC = () => {
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
         {/* Wealth Widget */}
         <WealthWidget
-          totalWealth={realStats.balance + realStats.investment}
-          invested={realStats.investment}
-          available={realStats.balance}
+          totalWealth={globalStats.available + globalStats.investment}
+          invested={globalStats.investment}
+          available={globalStats.available}
           monthlyGrowth={0}
         />
 

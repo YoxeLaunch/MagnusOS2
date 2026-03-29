@@ -7,7 +7,7 @@ import { AssetAllocation } from '../components/AssetAllocation';
 import { PortfolioHistory } from '../components/PortfolioHistory';
 
 export const Wealth: React.FC = () => {
-    const { data, wealthHistory } = useData();
+    const { data, dailyTransactions, wealthHistory } = useData();
     const [currentDate, setCurrentDate] = useState(new Date());
 
     // Currency State
@@ -27,23 +27,27 @@ export const Wealth: React.FC = () => {
     // Safety check for data
     if (!data) return <div className="p-8 text-center text-slate-500">Cargando datos financieros...</div>;
 
-    // Mock Cash Flow (In a real app, this comes from transactions in the current month)
-    const monthlyTransactions = data.transactions || [];
-
+    // Fixed calculations with proper types and property checks
+    const monthlyTransactions = (data as any).transactions || [];
     const monthlyIncome = monthlyTransactions
-        .filter(t => t.type === 'income' && t.date.startsWith(currentDate.toISOString().slice(0, 7)))
-        .reduce((sum, t) => sum + t.amount, 0);
+        .filter((t: any) => t.type === 'income' && (t.date || '').startsWith(currentDate.toISOString().slice(0, 7)))
+        .reduce((sum: number, t: any) => sum + t.amount, 0);
 
     const monthlyExpenses = monthlyTransactions
-        .filter(t => t.type === 'expense' && t.date.startsWith(currentDate.toISOString().slice(0, 7)))
-        .reduce((sum, t) => sum + t.amount, 0);
+        .filter((t: any) => t.type === 'expense' && (t.date || '').startsWith(currentDate.toISOString().slice(0, 7)))
+        .reduce((sum: number, t: any) => sum + t.amount, 0);
 
     const cashFlow = monthlyIncome - monthlyExpenses;
     const savingsRate = monthlyIncome > 0 ? (cashFlow / monthlyIncome) * 100 : 0;
 
-    const liquidAssets = data.accounts?.reduce((sum, acc) => sum + acc.balance, 0) || 0;
-    const investedAssets = data.investments?.reduce((sum, inv) => sum + (inv.currentValue || inv.amount), 0) || 0;
-    const materialAssets = data.assets?.reduce((sum, asset) => sum + asset.value, 0) || 0;
+    // Global liquidity and investments calculation (History-aware)
+    const dailyIncome = dailyTransactions.filter((t: any) => t.type === 'income').reduce((sum: number, t: any) => sum + t.amount, 0);
+    const dailyExpense = dailyTransactions.filter((t: any) => t.type === 'expense').reduce((sum: number, t: any) => sum + t.amount, 0);
+    const dailyInvestment = dailyTransactions.filter((t: any) => t.type === 'investment').reduce((sum: number, t: any) => sum + t.amount, 0);
+
+    const liquidAssets = ((data as any).accounts?.reduce((sum: number, acc: any) => sum + (acc.balance || 0), 0) || 0) + (dailyIncome - dailyExpense - dailyInvestment);
+    const investedAssets = (data.investments?.reduce((sum: number, inv: any) => sum + (inv.currentValue || inv.amount || 0), 0) || 0) + dailyInvestment;
+    const materialAssets = ((data as any).assets?.reduce((sum: number, asset: any) => sum + (asset.value || 0), 0) || 0);
 
     return (
         <div className="max-w-[1600px] mx-auto p-6 md:p-8 space-y-8 pb-32">
@@ -160,7 +164,7 @@ export const Wealth: React.FC = () => {
                             <span className="text-emerald-600">{formatCurrency(liquidAssets)}</span>
                         </h4>
                         <div className="space-y-3">
-                            {(data.accounts || []).map(acc => (
+                            {((data as any).accounts || []).map((acc: any) => (
                                 <div key={acc.id} className="flex justify-between items-center text-sm p-2 hover:bg-gray-50 dark:hover:bg-white/5 rounded-lg transition-colors">
                                     <div className="flex items-center gap-3">
                                         <div className="w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center text-blue-600 dark:text-blue-400">
@@ -184,7 +188,7 @@ export const Wealth: React.FC = () => {
                             <span className="text-purple-600">{formatCurrency(investedAssets)}</span>
                         </h4>
                         <div className="space-y-3">
-                            {(data.investments || []).slice(0, 5).map(inv => (
+                            {(data.investments || []).slice(0, 5).map((inv: any) => (
                                 <div key={inv.id} className="flex justify-between items-center text-sm p-2 hover:bg-gray-50 dark:hover:bg-white/5 rounded-lg transition-colors">
                                     <div className="flex items-center gap-3">
                                         <div className="w-8 h-8 rounded-full bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center text-purple-600 dark:text-purple-400">
@@ -213,7 +217,7 @@ export const Wealth: React.FC = () => {
                             <span className="text-amber-600">{formatCurrency(materialAssets)}</span>
                         </h4>
                         <div className="space-y-3">
-                            {(data.assets || []).slice(0, 5).map(asset => (
+                            {((data as any).assets || []).slice(0, 5).map((asset: any) => (
                                 <div key={asset.id} className="flex justify-between items-center text-sm p-2 hover:bg-gray-50 dark:hover:bg-white/5 rounded-lg transition-colors">
                                     <div className="flex items-center gap-3">
                                         <div className="w-8 h-8 rounded-full bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center text-amber-600 dark:text-amber-400">
