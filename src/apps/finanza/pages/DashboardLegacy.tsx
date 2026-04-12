@@ -18,7 +18,7 @@ import { InvestmentAllocation } from '../components/dashboard/InvestmentAllocati
 import { getDaysInMonth, getDaysElapsed } from '../utils/financialMetrics';
 import { DashboardSkeleton } from '../../../shared/components/Skeleton';
 
-export const Dashboard: React.FC = () => {
+export const DashboardLegacy: React.FC = () => {
   const { data, dailyTransactions, currencies, isLoading } = useData();
   const navigate = useNavigate();
   const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);

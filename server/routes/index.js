@@ -7,6 +7,7 @@ import healthRoutes from './health.routes.js';
 import auditorRoutes from './auditor.routes.js';
 import telegramRoutes from './telegram.routes.js';
 import aiRoutes from './ai.routes.js';
+import centroComandoRoutes from './centroComando.routes.js';
 
 const router = Router();
 
@@ -18,5 +19,6 @@ router.use('/', healthRoutes);
 router.use('/auditor', auditorRoutes);
 router.use('/telegram', telegramRoutes);
 router.use('/ai', aiRoutes);
+router.use('/centro-comando', centroComandoRoutes);
 
 export default router;

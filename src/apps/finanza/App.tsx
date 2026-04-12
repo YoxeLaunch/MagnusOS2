@@ -6,7 +6,8 @@ import { ErrorBoundary } from '../../shared/components/ErrorBoundary';
 import { ToastProvider } from '../../shared/context/ToastContext';
 
 // Lazy Load Pages to reduce bundle size
-const Dashboard = lazy(() => import('./pages/Dashboard').then(module => ({ default: module.Dashboard })));
+const CentroComando = lazy(() => import('./pages/CentroComando').then(module => ({ default: module.CentroComando })));
+const DashboardLegacy = lazy(() => import('./pages/DashboardLegacy').then(module => ({ default: module.DashboardLegacy })));
 const CashFlow = lazy(() => import('./pages/CashFlow').then(module => ({ default: module.CashFlow })));
 const Wealth = lazy(() => import('./pages/Wealth').then(module => ({ default: module.Wealth })));
 const Tracking = lazy(() => import('./pages/Tracking').then(module => ({ default: module.Tracking })));
@@ -42,7 +43,8 @@ const App: React.FC = () => {
                 <Layout>
                   <Suspense fallback={<LoadingFallback />}>
                     <Routes>
-                      <Route path="/" element={<Dashboard />} />
+                      <Route path="/" element={<CentroComando />} />
+                      <Route path="legacy" element={<DashboardLegacy />} />
                       <Route path="flujo" element={<CashFlow />} />
                       <Route path="patrimonio" element={<Wealth />} />
                       <Route path="inversiones" element={<Investments />} />
