@@ -8,6 +8,7 @@ import { TransactionTimeline } from '../components/TransactionTimeline';
 import { CategorySummary } from '../components/CategorySummary';
 import { getFinancialCycle, isDateInCycle } from '../utils/financialCycle';
 import { TRANSACTION_META } from '../utils/categoryIcons';
+import { CronologiaHeader } from '../components/CronologiaFinanciera/CronologiaHeader';
 
 export const Tracking: React.FC = () => {
     const { dailyTransactions, isLoading } = useData();
@@ -92,122 +93,18 @@ export const Tracking: React.FC = () => {
 
     return (
         <div className="p-6 md:p-8 space-y-8 max-w-7xl mx-auto animate-in fade-in duration-500">
-            {/* Header Area */}
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                <div>
-                    <h1 className="text-3xl font-bold text-slate-900 dark:text-white flex items-center gap-3">
-                        <div className="p-2 bg-blue-600 rounded-lg shadow-lg shadow-blue-600/20">
-                            <CalendarIcon className="text-white" size={24} />
-                        </div>
-                        Cronología Financiera
-                    </h1>
-                    <p className="text-slate-500 dark:text-slate-400 mt-1 ml-1">
-                        Ciclo Financiero: <span className="text-blue-500 font-bold capitalize">{currentCycle.label}</span>
-                        <span className="text-xs ml-2 opacity-70">
-                            ({currentCycle.start.getDate()} {currentCycle.start.toLocaleDateString('es-ES', { month: 'short' })} - {currentCycle.end.getDate()} {currentCycle.end.toLocaleDateString('es-ES', { month: 'short' })})
-                        </span>
-                    </p>
-                </div>
-
-                {/* Global Stats Card (Redesigned) */}
-                <div className="flex flex-col md:flex-row gap-4">
-                    {/* Cash Disp. */}
-                    <div className="bg-gradient-to-br from-indigo-900 to-purple-900 text-white p-4 rounded-xl shadow-lg border border-indigo-500/30 flex items-center gap-4 min-w-[240px]">
-                        <div className="p-3 rounded-full bg-white/10">
-                            <Wallet size={24} className="text-indigo-300" />
-                        </div>
-                        <div className="flex-1">
-                            <p className="text-[10px] text-indigo-200 uppercase font-bold tracking-wider">Cash Disp. Global</p>
-                            <p className="text-2xl font-bold text-white">
-                                ${globalStats.available.toLocaleString()}
-                            </p>
-                        </div>
-                        <button
-                            onClick={() => setIsAdjustmentModalOpen(true)}
-                            title="Ajustar saldo manualmente"
-                            className="p-2 bg-white/10 hover:bg-white/20 rounded-lg transition-colors"
-                        >
-                            <Settings size={18} />
-                        </button>
-                    </div>
-
-                    {/* Total Invested (Histórico) */}
-                    <div className="bg-gradient-to-br from-emerald-900 to-teal-900 text-white p-4 rounded-xl shadow-lg border border-emerald-500/30 flex items-center gap-4 min-w-[240px]">
-                        <div className="p-3 rounded-full bg-white/10">
-                            <PiggyBank size={24} className="text-yellow-300" />
-                        </div>
-                        <div className="flex-1">
-                            <p className="text-[10px] text-emerald-200 uppercase font-bold tracking-wider">Inversión Ahorrada</p>
-                            <div className="flex items-center gap-2">
-                                <p className="text-2xl font-bold text-white">
-                                    ${globalStats.investment.toLocaleString()}
-                                </p>
-                                {globalStats.available > 0 && (
-                                    <button
-                                        onClick={handleInvestSweep}
-                                        title="Invertir todo el disponible"
-                                        className="p-1 px-2 text-[10px] bg-white/20 hover:bg-white/30 rounded-md transition-colors flex items-center gap-1"
-                                    >
-                                        <ArrowRight size={10} /> Invertir
-                                    </button>
-                                )}
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
+            <CronologiaHeader
+                currentCycle={currentCycle}
+                transactions={currentCycleTransactions}
+                stats={stats}
+                globalStats={globalStats}
+                onAdjustModalOpen={() => setIsAdjustmentModalOpen(true)}
+                onInvestSweep={handleInvestSweep}
+            />
 
             {/* Main Grid Layout */}
             <div className="space-y-8">
 
-                {/* Section 1: Stats & Indicators (Redesigned - 4 Cards) */}
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                    {/* Income */}
-                    <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-white/5 flex items-center gap-4 shadow-sm">
-                        <div className="p-3 rounded-full bg-green-100 text-green-600 dark:bg-green-900/20 dark:text-green-400">
-                            <Wallet size={20} />
-                        </div>
-                        <div>
-                            <p className="text-xs text-slate-500 uppercase font-bold">Entradas</p>
-                            <p className="text-xl font-bold text-slate-900 dark:text-white">${stats.income.toLocaleString()}</p>
-                        </div>
-                    </div>
-
-                    {/* Expense */}
-                    <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-white/5 flex items-center gap-4 shadow-sm">
-                        <div className="p-3 rounded-full bg-red-100 text-red-600 dark:bg-red-900/20 dark:text-red-400">
-                            <TrendingDown size={20} />
-                        </div>
-                        <div>
-                            <p className="text-xs text-slate-500 uppercase font-bold">Salidas</p>
-                            <p className="text-xl font-bold text-slate-900 dark:text-white">${stats.expense.toLocaleString()}</p>
-                        </div>
-                    </div>
-
-                    {/* Investment (New) */}
-                    <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-white/5 flex items-center gap-4 shadow-sm">
-                        <div className="p-3 rounded-full bg-blue-100 text-blue-600 dark:bg-blue-900/20 dark:text-blue-400">
-                            <PieChart size={20} />
-                        </div>
-                        <div>
-                            <p className="text-xs text-slate-500 uppercase font-bold">Invertido</p>
-                            <p className="text-xl font-bold text-slate-900 dark:text-white">${stats.investment.toLocaleString()}</p>
-                        </div>
-                    </div>
-
-                    {/* Available (Liquidity) - Monthly */}
-                    <div className="bg-gradient-to-r from-slate-900 to-slate-800 text-white p-4 rounded-2xl border border-slate-700 flex items-center gap-4 shadow-lg shadow-slate-900/20">
-                        <div className="p-3 rounded-full bg-white/10">
-                            <Target size={20} />
-                        </div>
-                        <div>
-                            <p className="text-xs text-slate-400 uppercase font-bold">Disponible (Mes)</p>
-                            <p className={`text-xl font-bold ${stats.available >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                                ${stats.available.toLocaleString()}
-                            </p>
-                        </div>
-                    </div>
-                </div>
 
                 {/* Section 2: Calendar & Category Summary */}
                 <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
