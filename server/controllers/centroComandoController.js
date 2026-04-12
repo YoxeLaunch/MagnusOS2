@@ -57,12 +57,16 @@ const getCycleFromId = (cycleId) => {
 
 export const getCiclos = async (req, res) => {
     try {
+        const userId = req.user.username;
         const year = parseInt(req.query.year || new Date().getFullYear());
         const startOfYear = new Date(year - 1, 10, 26); // Cover any previous year overlaps
         const endOfYear = new Date(Math.max(year + 1, new Date().getFullYear()), 1, 25); 
 
         const transactions = await DailyTransaction.findAll({
-            where: { date: { [Op.between]: [startOfYear, endOfYear] } },
+            where: { 
+                userId,
+                date: { [Op.between]: [startOfYear, endOfYear] } 
+            },
             attributes: ['date'],
             raw: true
         });
@@ -95,10 +99,14 @@ export const getCiclos = async (req, res) => {
 
 export const getAnual = async (req, res) => {
     try {
+        const userId = req.user.username;
         const year = parseInt(req.query.year || new Date().getFullYear());
         
         // Use all available transactions for YTD calculation of this year
-        const transactions = await DailyTransaction.findAll({ raw: true });
+        const transactions = await DailyTransaction.findAll({ 
+            where: { userId },
+            raw: true 
+        });
         
         const yearTxs = transactions.filter(t => new Date(t.date).getFullYear() === year || getCycleFromId(getCycleId(t.date)).end.getFullYear() === year);
 
@@ -184,6 +192,7 @@ export const getAnual = async (req, res) => {
 
 export const getMensual = async (req, res) => {
     try {
+        const userId = req.user.username;
         const { cicloId } = req.query;
         if (!cicloId) return res.status(400).json({ error: 'cicloId is required' });
 
@@ -197,7 +206,10 @@ export const getMensual = async (req, res) => {
         const prevCicloId = `${prevYear}-${String(prevMonth).padStart(2,'0')}`;
         const prevCycle = getCycleFromId(prevCicloId);
 
-        const transactions = await DailyTransaction.findAll({ raw: true });
+        const transactions = await DailyTransaction.findAll({ 
+            where: { userId },
+            raw: true 
+        });
         
         let entradas = 0; let gastos = 0; let invertido = 0;
         let pEntradas = 0; let pGastos = 0; let pInvertido = 0;
