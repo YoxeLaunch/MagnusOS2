@@ -68,6 +68,6 @@ export const generateToken = (user) => {
     return jwt.sign(
         { username: user.username, role: user.role },
         JWT_SECRET,
-        { expiresIn: '8h' }
+        { expiresIn: '1h' }
     );
 };
