@@ -14,12 +14,12 @@ interface KPICardProps {
 
 export const KPICard: React.FC<KPICardProps> = ({ title, value, subtitle, trendDir, trendText, borderColor }) => {
   return (
-    <div className={`relative bg-neutral-800/40 backdrop-blur-xl border border-white/10 rounded-2xl p-6 shadow-lg overflow-hidden`}>
+    <div className={`relative bg-white/80 dark:bg-neutral-800/40 backdrop-blur-xl border border-slate-200 dark:border-white/10 rounded-2xl p-6 shadow-lg overflow-hidden`}>
       <div className={`absolute bottom-0 left-0 right-0 h-[3px] bg-${borderColor}-500`} style={{ backgroundColor: borderColor }} />
       <div className="flex justify-between items-start mb-2">
-        <h3 className="text-slate-400 font-medium text-sm">{title}</h3>
+        <h3 className="text-slate-500 dark:text-slate-400 font-medium text-sm">{title}</h3>
         {trendText && (
-          <div className={`flex items-center gap-1 text-xs font-bold px-2 py-0.5 rounded-full ${trendDir === 'up' ? 'bg-emerald-500/20 text-emerald-400' : trendDir === 'down' ? 'bg-rose-500/20 text-rose-400' : 'bg-slate-500/20 text-slate-400'}`}>
+          <div className={`flex items-center gap-1 text-xs font-bold px-2 py-0.5 rounded-full ${trendDir === 'up' ? 'bg-emerald-100 text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-400' : trendDir === 'down' ? 'bg-rose-100 text-rose-600 dark:bg-rose-500/20 dark:text-rose-400' : 'bg-slate-100 text-slate-600 dark:bg-slate-500/20 dark:text-slate-400'}`}>
             {trendDir === 'up' && <TrendingUp size={12} />}
             {trendDir === 'down' && <TrendingDown size={12} />}
             {trendDir === 'neutral' && <Minus size={12} />}
@@ -27,8 +27,8 @@ export const KPICard: React.FC<KPICardProps> = ({ title, value, subtitle, trendD
           </div>
         )}
       </div>
-      <p className="text-3xl font-serif font-bold text-white tracking-tight">{value}</p>
-      {subtitle && <p className="text-slate-500 text-xs mt-2">{subtitle}</p>}
+      <p className="text-3xl font-serif font-bold text-slate-900 dark:text-white tracking-tight">{value}</p>
+      {subtitle && <p className="text-slate-400 dark:text-slate-500 text-xs mt-2">{subtitle}</p>}
     </div>
   );
 };

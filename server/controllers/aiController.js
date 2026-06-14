@@ -1,4 +1,4 @@
-import { DailyTransaction } from '../models/index.js';
+import { DailyTransaction, FinancialAnomaly, Account } from '../models/index.js';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import {
     getSnapshot,
@@ -6,6 +6,12 @@ import {
     getLatestSnapshot,
     isStale
 } from '../services/snapshotService.js';
+import {
+    calculateMPC,
+    forecastLiquidity,
+    aggregateMonthly,
+    aggregateDailyFlows
+} from '../services/econometricsService.js';
 
 // ========================================
 // Configuration
@@ -117,6 +123,71 @@ const computeMetrics = (transactions) => {
 };
 
 /**
+ * Builds econometric context string to inject into AI prompts.
+ * Fetches MPC, forecast summary, and pending anomalies.
+ */
+const buildEconometricContext = async (userId) => {
+    try {
+        const transactions = await DailyTransaction.findAll({
+            where: { userId },
+            order: [['date', 'ASC']],
+            raw: true
+        });
+
+        if (transactions.length < 10) return '';
+
+        // MPC
+        const monthlyData = aggregateMonthly(transactions);
+        const mpc = calculateMPC(monthlyData);
+
+        // Forecast summary
+        const dailyFlows = aggregateDailyFlows(transactions);
+        let currentBalance = 0;
+        try {
+            const accounts = await Account.findAll({
+                where: { userId, status: 'active' },
+                attributes: ['currentBalanceMinor'],
+                raw: true
+            });
+            currentBalance = accounts.reduce((sum, a) => sum + (a.currentBalanceMinor || 0) / 100, 0);
+        } catch { /* fallback */ }
+        const forecast = forecastLiquidity(dailyFlows, currentBalance);
+
+        // Pending anomalies
+        const pendingCount = await FinancialAnomaly.count({
+            where: { userId, status: 'pending' }
+        });
+
+        let ctx = '\n\nDATOS ECONOMÉTRICOS EMPÍRICOS (calculados por el motor estadístico):\n';
+        ctx += `- Propensión Marginal al Consumo (β): ${mpc.beta} (de cada peso extra, ${(mpc.beta * 100).toFixed(0)} centavos se gastan)\n`;
+        ctx += `- Propensión Marginal al Ahorro: ${mpc.mps} (${(mpc.mps * 100).toFixed(0)}% de cada peso extra se ahorra)\n`;
+        ctx += `- R² del modelo PMC: ${mpc.rSquared} (${mpc.rSquared > 0.7 ? 'alta confianza' : mpc.rSquared > 0.4 ? 'confianza moderada' : 'baja confianza'})\n`;
+        ctx += `- ${mpc.interpretation}\n`;
+
+        if (forecast.summary) {
+            ctx += `- Balance mínimo proyectado (30 días): RD$${forecast.summary.minBalance}\n`;
+            if (forecast.summary.riskDate) {
+                ctx += `- ⚠️ ALERTA: El saldo podría caer al límite de seguridad el ${forecast.summary.riskDate}\n`;
+            }
+            if (forecast.summary.daysUntilCritical) {
+                ctx += `- Pista de efectivo estimada: ${forecast.summary.daysUntilCritical} días\n`;
+            }
+        }
+
+        if (pendingCount > 0) {
+            ctx += `- ⚠️ ${pendingCount} fugas financieras (anomalías estadísticas) pendientes de revisión\n`;
+        }
+
+        ctx += '\nINSTRUCCIÓN PARA EL MENTOR: Evalúa estos resultados estadísticos empíricos y explícaselos al usuario integrando los principios de disciplina, planificación estratégica y el principio del 80/20 de Brian Tracy. Basa tus consejos en la ciencia de datos demostrable.\n';
+
+        return ctx;
+    } catch (err) {
+        console.error('[AI] Error building econometric context:', err.message);
+        return '';
+    }
+};
+
+/**
  * Mode 'chat': Lightweight context — only last 3 transactions.
  * ~250 tokens. Ideal for conversational messages ("Hola", "¿cuánto tengo?")
  */
@@ -184,7 +255,8 @@ const buildQuickContext = async (userId, message, period) => {
 
     const systemPrompt = `Eres el Analista Financiero de MagnusOS. Responde en español de forma profesional y detallada.
 Aquí tienes el resumen del período para análisis:
-${metricsContext}`;
+${metricsContext}
+${await buildEconometricContext(userId)}`;
 
     return { systemPrompt, userPrompt: message };
 };
@@ -237,7 +309,8 @@ INSTRUCCIONES ESTRICTAS:
 2. No uses Markdown para el análisis principal.
 3. Genera INSIGHTS cualitativos, alertas de desviaciones y recomendaciones de optimización.
 4. El usuario se identifica como 'Soberano'.
-5. Tu respuesta debe ser un objeto JSON válido.`;
+5. Tu respuesta debe ser un objeto JSON válido.
+${await buildEconometricContext(userId)}`;
 
     return { cached: false, systemPrompt, userPrompt: message, computed_metrics };
 };

@@ -8,6 +8,7 @@ import auditorRoutes from './auditor.routes.js';
 import telegramRoutes from './telegram.routes.js';
 import aiRoutes from './ai.routes.js';
 import centroComandoRoutes from './centroComando.routes.js';
+import econometricsRoutes from './econometrics.routes.js';
 
 const router = Router();
 
@@ -20,5 +21,6 @@ router.use('/auditor', auditorRoutes);
 router.use('/telegram', telegramRoutes);
 router.use('/ai', aiRoutes);
 router.use('/centro-comando', centroComandoRoutes);
+router.use('/econometrics', econometricsRoutes);
 
 export default router;

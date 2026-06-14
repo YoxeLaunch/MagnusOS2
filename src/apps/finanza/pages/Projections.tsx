@@ -1,7 +1,7 @@
 
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Legend, LineChart, Line } from 'recharts';
-import { TrendingUp, ShieldCheck, Target, Award, Calendar, Info } from 'lucide-react';
+import { TrendingUp, ShieldCheck, Target, Award, Calendar, Info, Gauge, AlertTriangle } from 'lucide-react';
 import { useData } from '../context/DataContext';
 import { calculateTrend } from '../utils/prediction';
 import { getFinancialCycle, getCycleId, getCycleFromId } from '../utils/financialCycle';
@@ -15,10 +15,64 @@ import { ScenarioSimulator } from '../components/ScenarioSimulator';
 import { CategoryCohort } from '../components/CategoryCohort';
 import { SpendingHeatmap } from '../components/SpendingHeatmap';
 import { ManualEventInput, ManualEvent } from '../components/ManualEventInput';
+import { useAuth } from '../../../shared/context/AuthContext';
+import { apiFetch } from '../../../shared/utils/apiFetch';
+
+interface ForecastPoint {
+    date: string;
+    dayOfWeek: number;
+    predictedFlow: number;
+    balance: number;
+    upperBound: number;
+    lowerBound: number;
+    horizon: number;
+}
+
+interface ForecastSummary {
+    minBalance: number;
+    riskDate: string | null;
+    avgDailyBurn: number;
+    daysUntilCritical: number | null;
+    confidence: string;
+}
 
 export const Projections: React.FC = () => {
     const { dailyTransactions } = useData();
+    const { user } = useAuth();
     const [manualEvents, setManualEvents] = useState<ManualEvent[]>([]);
+
+    // Econometric data states
+    const [forecastData, setForecastData] = useState<ForecastPoint[]>([]);
+    const [forecastSummary, setForecastSummary] = useState<ForecastSummary | null>(null);
+    const [mpcBeta, setMpcBeta] = useState<number | null>(null);
+    const [mpcInterpretation, setMpcInterpretation] = useState('');
+    const [mpcMps, setMpcMps] = useState(0);
+
+    // Fetch econometric data from backend
+    useEffect(() => {
+        if (!user?.username) return;
+
+        // Forecast
+        apiFetch(`/api/econometrics/forecast?userId=${user.username}`)
+            .then(r => r.json())
+            .then(data => {
+                if (data?.forecast) setForecastData(data.forecast);
+                if (data?.summary) setForecastSummary(data.summary);
+            })
+            .catch(() => {});
+
+        // MPC Dashboard
+        apiFetch(`/api/econometrics/dashboard?userId=${user.username}`)
+            .then(r => r.json())
+            .then(data => {
+                if (data?.mpc) {
+                    setMpcBeta(data.mpc.beta);
+                    setMpcInterpretation(data.mpc.interpretation);
+                    setMpcMps(data.mpc.mps);
+                }
+            })
+            .catch(() => {});
+    }, [user?.username]);
 
     // Combined projection memo that returns both projection data and confidence info
     const { projectionData, modelConfidence, trends } = useMemo(() => {
@@ -342,6 +396,134 @@ export const Projections: React.FC = () => {
                             </ResponsiveContainer>
                         </div>
                     </div>
+                </div>
+            </div>
+
+            {/* SECTION 3: ECONOMETRIC MODELS */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+
+                {/* 30-Day Liquidity Forecast with Confidence Bands (2/3 width) */}
+                <div className="lg:col-span-2 bg-white/80 dark:bg-black/40 backdrop-blur-xl p-6 rounded-2xl border border-slate-200 dark:border-white/10 shadow-sm hover:border-cyan-500/30 transition-all duration-300">
+                    <div className="flex items-center justify-between mb-6">
+                        <h3 className="text-lg font-serif font-bold text-slate-800 dark:text-white flex items-center gap-2">
+                            <AlertTriangle className="text-cyan-500" size={20} />
+                            Previsión de Liquidez — 30 Días
+                        </h3>
+                        {forecastSummary && (
+                            <span className={`text-xs px-3 py-1 rounded-full font-bold ${
+                                forecastSummary.confidence === 'high' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400'
+                                : forecastSummary.confidence === 'medium' ? 'bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400'
+                                : 'bg-slate-100 text-slate-500 dark:bg-white/10 dark:text-slate-400'
+                            }`}>
+                                Confianza: {forecastSummary.confidence === 'high' ? 'Alta' : forecastSummary.confidence === 'medium' ? 'Media' : 'Baja'}
+                            </span>
+                        )}
+                    </div>
+
+                    {forecastData.length > 0 ? (
+                        <div className="h-[350px]">
+                            <ResponsiveContainer width="100%" height="100%">
+                                <AreaChart data={forecastData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                                    <defs>
+                                        <linearGradient id="colorBandUpper" x1="0" y1="0" x2="0" y2="1">
+                                            <stop offset="5%" stopColor="#06b6d4" stopOpacity={0.15} />
+                                            <stop offset="95%" stopColor="#06b6d4" stopOpacity={0} />
+                                        </linearGradient>
+                                        <linearGradient id="colorBalance" x1="0" y1="0" x2="0" y2="1">
+                                            <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.3} />
+                                            <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0} />
+                                        </linearGradient>
+                                    </defs>
+                                    <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.1} />
+                                    <XAxis dataKey="date" stroke="#9CA3AF" fontSize={10} tickLine={false} axisLine={false}
+                                        tickFormatter={(val) => new Date(val + 'T12:00:00').toLocaleDateString('es-DO', { day: 'numeric', month: 'short' })} />
+                                    <YAxis stroke="#9CA3AF" fontSize={11} tickLine={false} axisLine={false}
+                                        tickFormatter={(value) => `$${(value / 1000).toFixed(0)}k`} />
+                                    <Tooltip
+                                        contentStyle={{ backgroundColor: 'rgba(17, 24, 39, 0.95)', borderColor: 'rgba(255,255,255,0.1)', borderRadius: '12px' }}
+                                        formatter={(value: number, name: string) => [
+                                            `RD$${value.toLocaleString()}`,
+                                            name === 'upperBound' ? 'Límite Superior (95%)'
+                                            : name === 'lowerBound' ? 'Límite Inferior (95%)'
+                                            : 'Balance Proyectado'
+                                        ]}
+                                        labelFormatter={(label) => new Date(label + 'T12:00:00').toLocaleDateString('es-DO', { weekday: 'long', day: 'numeric', month: 'long' })}
+                                    />
+                                    <Area type="monotone" dataKey="upperBound" name="upperBound" stroke="#06b6d4" strokeWidth={1} strokeDasharray="4 4" fillOpacity={0.3} fill="url(#colorBandUpper)" />
+                                    <Area type="monotone" dataKey="lowerBound" name="lowerBound" stroke="#06b6d4" strokeWidth={1} strokeDasharray="4 4" fillOpacity={0} fill="transparent" />
+                                    <Area type="monotone" dataKey="balance" name="balance" stroke="#8b5cf6" strokeWidth={3} fillOpacity={1} fill="url(#colorBalance)" />
+                                </AreaChart>
+                            </ResponsiveContainer>
+                        </div>
+                    ) : (
+                        <div className="h-[350px] flex items-center justify-center text-slate-400 text-sm">
+                            Se requieren al menos 14 días de datos para generar la previsión.
+                        </div>
+                    )}
+
+                    {forecastSummary?.riskDate && (
+                        <div className="mt-4 flex items-center gap-2 text-xs bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400 p-3 rounded-xl">
+                            <AlertTriangle size={14} />
+                            <span className="font-bold">Alerta:</span> El saldo podría caer al límite de seguridad el {new Date(forecastSummary.riskDate + 'T12:00:00').toLocaleDateString('es-DO', { day: 'numeric', month: 'long' })}.
+                        </div>
+                    )}
+                </div>
+
+                {/* MPC Gauge (1/3 width) */}
+                <div className="bg-white/80 dark:bg-black/40 backdrop-blur-xl p-6 rounded-2xl border border-slate-200 dark:border-white/10 shadow-sm hover:border-purple-500/30 transition-all duration-300">
+                    <h3 className="text-lg font-serif font-bold text-slate-800 dark:text-white flex items-center gap-2 mb-6">
+                        <Gauge className="text-purple-500" size={20} />
+                        Coeficiente β (PMC)
+                    </h3>
+                    {mpcBeta !== null ? (
+                        <div className="text-center">
+                            <div className="relative w-40 h-40 mx-auto mb-6">
+                                <svg viewBox="0 0 36 36" className="w-full h-full transform -rotate-90">
+                                    <circle cx="18" cy="18" r="15.5" fill="none" stroke="currentColor" strokeWidth="2.5"
+                                        className="text-slate-100 dark:text-white/5" />
+                                    <circle cx="18" cy="18" r="15.5" fill="none"
+                                        strokeWidth="2.5" strokeLinecap="round"
+                                        strokeDasharray={`${mpcBeta * 97.4} 97.4`}
+                                        className={mpcBeta >= 0.85 ? 'text-red-500' : mpcBeta >= 0.65 ? 'text-amber-500' : 'text-emerald-500'}
+                                        stroke="currentColor"
+                                        style={{ transition: 'stroke-dasharray 1s ease-out' }}
+                                    />
+                                </svg>
+                                <div className="absolute inset-0 flex flex-col items-center justify-center">
+                                    <span className={`text-3xl font-bold ${
+                                        mpcBeta >= 0.85 ? 'text-red-500' : mpcBeta >= 0.65 ? 'text-amber-500' : 'text-emerald-500'
+                                    }`}>
+                                        {(mpcBeta * 100).toFixed(0)}%
+                                    </span>
+                                    <span className="text-[10px] text-slate-400 font-mono mt-1">β = {mpcBeta}</span>
+                                </div>
+                            </div>
+                            <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed mb-4 px-2">
+                                {mpcInterpretation}
+                            </p>
+                            <div className="grid grid-cols-2 gap-4 text-center">
+                                <div className="bg-slate-50 dark:bg-white/5 rounded-xl p-3">
+                                    <p className="text-[10px] text-slate-400 uppercase tracking-wider">Consumo</p>
+                                    <p className={`text-lg font-bold ${
+                                        mpcBeta >= 0.85 ? 'text-red-500' : mpcBeta >= 0.65 ? 'text-amber-500' : 'text-emerald-500'
+                                    }`}>{(mpcBeta * 100).toFixed(0)}¢</p>
+                                    <p className="text-[10px] text-slate-400">por cada ₱1</p>
+                                </div>
+                                <div className="bg-slate-50 dark:bg-white/5 rounded-xl p-3">
+                                    <p className="text-[10px] text-slate-400 uppercase tracking-wider">Ahorro</p>
+                                    <p className="text-lg font-bold text-emerald-500">{(mpcMps * 100).toFixed(0)}¢</p>
+                                    <p className="text-[10px] text-slate-400">por cada ₱1</p>
+                                </div>
+                            </div>
+                            <p className="text-[10px] text-slate-400 mt-4">
+                                Objetivo: Reducir β progresivamente para maximizar la capitalización.
+                            </p>
+                        </div>
+                    ) : (
+                        <div className="text-center text-sm text-slate-400 py-12">
+                            Cargando datos econométricos...
+                        </div>
+                    )}
                 </div>
             </div>
 

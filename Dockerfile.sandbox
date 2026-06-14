@@ -14,7 +14,9 @@ RUN pip install --no-cache-dir \
     numpy \
     matplotlib \
     requests \
-    flask
+    flask \
+    statsmodels \
+    scipy
 
 # Set workspace
 WORKDIR /sandbox

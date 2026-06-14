@@ -29,24 +29,24 @@ const CustomTooltip = ({ active, payload, label }: any) => {
   if (active && payload && payload.length) {
     const data = payload[0].payload as CicloData;
     return (
-      <div className="bg-black/90 backdrop-blur-xl border border-white/10 rounded-xl p-4 shadow-2xl">
-        <p className="text-white font-bold mb-3 border-b border-white/10 pb-2">{data.label}</p>
+      <div className="bg-white/90 dark:bg-black/90 backdrop-blur-xl border border-slate-200 dark:border-white/10 rounded-xl p-4 shadow-2xl">
+        <p className="text-slate-900 dark:text-white font-bold mb-3 border-b border-slate-200 dark:border-white/10 pb-2">{data.label}</p>
         <div className="space-y-1.5 flex flex-col font-mono text-sm">
            <div className="flex justify-between gap-6">
-             <span className="text-emerald-400">Entradas:</span>
-             <span className="text-white">{formatCurrency(data.entradas)}</span>
+             <span className="text-emerald-500 dark:text-emerald-400">Entradas:</span>
+             <span className="text-slate-900 dark:text-white">{formatCurrency(data.entradas)}</span>
            </div>
            <div className="flex justify-between gap-6">
-             <span className="text-rose-400">Gastos:</span>
-             <span className="text-white">{formatCurrency(data.gastos)}</span>
+             <span className="text-rose-500 dark:text-rose-400">Gastos:</span>
+             <span className="text-slate-900 dark:text-white">{formatCurrency(data.gastos)}</span>
            </div>
            <div className="flex justify-between gap-6">
-             <span className="text-indigo-400">Invertido:</span>
-             <span className="text-white">{formatCurrency(data.invertido)}</span>
+             <span className="text-indigo-500 dark:text-indigo-400">Invertido:</span>
+             <span className="text-slate-900 dark:text-white">{formatCurrency(data.invertido)}</span>
            </div>
-           <div className="flex justify-between gap-6 font-bold pt-1 border-t border-white/10 mt-1">
-             <span className="text-emerald-500">Ahorro Neto:</span>
-             <span className="text-emerald-500">{formatCurrency(data.ahorroNeto)}</span>
+           <div className="flex justify-between gap-6 font-bold pt-1 border-t border-slate-200 dark:border-white/10 mt-1">
+             <span className="text-emerald-600 dark:text-emerald-500">Ahorro Neto:</span>
+             <span className="text-emerald-600 dark:text-emerald-500">{formatCurrency(data.ahorroNeto)}</span>
            </div>
            <div className="flex justify-between gap-6 mt-1 text-xs">
              <span className="text-slate-400">Tasa Ahorro:</span>
@@ -71,8 +71,8 @@ export const PatrimonioBarChart: React.FC<Props> = ({ ciclos }) => {
   const activeCicloId = ciclos.length > 0 ? ciclos[ciclos.length - 1].cicloId : ''; // Default to most recent
 
   return (
-    <div className="bg-neutral-900/50 backdrop-blur-xl border border-white/10 rounded-2xl p-6 shadow-xl h-[350px] w-full mt-8">
-      <h3 className="font-serif font-bold text-lg text-white mb-6">Evolución de Flujo y Ahorro en el Año</h3>
+    <div className="bg-white/80 dark:bg-neutral-900/50 backdrop-blur-xl border border-slate-200 dark:border-white/10 rounded-2xl p-6 shadow-xl h-[350px] w-full mt-8">
+      <h3 className="font-serif font-bold text-lg text-slate-900 dark:text-white mb-6">Evolución de Flujo y Ahorro en el Año</h3>
       <ResponsiveContainer width="100%" height="100%">
         <BarChart
           data={ciclos}

@@ -10,6 +10,7 @@ import { Category, Payee } from './category.js';
 import { LedgerTransaction, TransactionLine } from './ledger.js';
 import { SavingsGoal, SavingsContribution } from './savingsGoal.js';
 import { MonthlySnapshot } from './monthlySnapshot.js';
+import { FinancialAnomaly } from './anomaly.js';
 
 // ========================================
 // Legacy Associations (to be deprecated)
@@ -41,6 +42,10 @@ LedgerTransaction.belongsTo(Payee, { foreignKey: 'payee_id', as: 'payee' });
 // SavingsGoal -> Account (optional link)
 Account.hasMany(SavingsGoal, { foreignKey: 'linked_account_id', as: 'savingsGoals' });
 SavingsGoal.belongsTo(Account, { foreignKey: 'linked_account_id', as: 'linkedAccount' });
+
+// FinancialAnomaly -> User
+User.hasMany(FinancialAnomaly, { foreignKey: 'user_id', sourceKey: 'username', as: 'anomalies' });
+FinancialAnomaly.belongsTo(User, { foreignKey: 'user_id', targetKey: 'username', as: 'user' });
 
 // ========================================
 // Database Initialization
@@ -134,6 +139,9 @@ export {
 
     // AI Analytics Models (v2.0)
     MonthlySnapshot,
+
+    // Econometrics Models (v2.1)
+    FinancialAnomaly,
 
     // Helpers
     toMinorUnits,

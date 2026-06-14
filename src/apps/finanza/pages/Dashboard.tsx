@@ -3,11 +3,11 @@ import { Link } from 'react-router-dom';
 import { useData } from '../context/DataContext';
 import { calculateTotalAnnual, calculateAnnualAmount, formatCurrency } from '../utils/calculations';
 import { getFinancialCycle, isDateInCycle } from '../utils/financialCycle';
-import { Printer, Activity, PieChart as PieChartIcon, TrendingUp, Receipt, PiggyBank, Flag, Wallet } from 'lucide-react';
+import { Printer, Activity, PieChart as PieChartIcon, TrendingUp, Receipt, PiggyBank, Flag, Wallet, Gauge } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, PieChart, Pie } from 'recharts';
 import { PrintOptionsModal, PrintOptions } from '../components/PrintOptionsModal';
 import { useNavigate } from 'react-router-dom';
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 
 import { BudgetVsRealityChart } from '../components/BudgetVsRealityChart';
 import { HealthIndicators } from '../components/dashboard/HealthIndicators';
@@ -15,13 +15,30 @@ import { UpcomingBills } from '../components/dashboard/UpcomingBills';
 import { MoneyInsight } from '../components/dashboard/MoneyInsight';
 import { WealthWidget } from '../components/dashboard/WealthWidget';
 import { InvestmentAllocation } from '../components/dashboard/InvestmentAllocation';
+import { FugasAlerts } from '../components/dashboard/FugasAlerts';
 import { getDaysInMonth, getDaysElapsed } from '../utils/financialMetrics';
 import { DashboardSkeleton } from '../../../shared/components/Skeleton';
+import { useAuth } from '../../../shared/context/AuthContext';
+import { apiFetch } from '../../../shared/utils/apiFetch';
 
 export const Dashboard: React.FC = () => {
   const { data, dailyTransactions, currencies, isLoading } = useData();
+  const { user } = useAuth();
   const navigate = useNavigate();
   const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
+
+  // Econometric MPC state
+  const [mpcData, setMpcData] = useState<{ beta: number; mps: number; interpretation: string } | null>(null);
+
+  useEffect(() => {
+    if (!user?.username) return;
+    apiFetch(`/api/econometrics/dashboard?userId=${user.username}`)
+      .then(r => r.json())
+      .then(data => {
+        if (data?.mpc) setMpcData(data.mpc);
+      })
+      .catch(() => { /* econometrics not critical for dashboard load */ });
+  }, [user?.username]);
 
   const handlePrint = (options: PrintOptions) => {
     setIsPrintModalOpen(false);
@@ -241,7 +258,65 @@ export const Dashboard: React.FC = () => {
         </div>
       </div>
 
-      {/* ROW 4: BUDGET VS REALITY */}
+      {/* ROW 4: ECONOMETRIC INSIGHTS */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        {/* Fugas Financieras (Anomaly Detection) */}
+        <div className="lg:col-span-2">
+          <FugasAlerts />
+        </div>
+
+        {/* MPC Micro Widget */}
+        <div className="bg-white/80 dark:bg-black/40 backdrop-blur-xl border border-slate-200 dark:border-white/10 rounded-2xl p-6 shadow-xl">
+          <h3 className="text-lg font-serif font-bold text-slate-900 dark:text-white flex items-center gap-2 mb-4">
+            <Gauge className="text-purple-500" size={20} />
+            Propensión al Consumo
+          </h3>
+          {mpcData ? (
+            <div className="text-center">
+              {/* Gamified Gauge */}
+              <div className="relative w-32 h-32 mx-auto mb-4">
+                <svg viewBox="0 0 36 36" className="w-full h-full transform -rotate-90">
+                  <circle cx="18" cy="18" r="15.5" fill="none" stroke="currentColor" strokeWidth="3"
+                    className="text-slate-100 dark:text-white/5" />
+                  <circle cx="18" cy="18" r="15.5" fill="none"
+                    strokeWidth="3" strokeLinecap="round"
+                    strokeDasharray={`${mpcData.beta * 97.4} 97.4`}
+                    className={mpcData.beta >= 0.85 ? 'text-red-500' : mpcData.beta >= 0.65 ? 'text-amber-500' : 'text-emerald-500'}
+                    stroke="currentColor"
+                  />
+                </svg>
+                <div className="absolute inset-0 flex flex-col items-center justify-center">
+                  <span className={`text-2xl font-bold ${
+                    mpcData.beta >= 0.85 ? 'text-red-500' : mpcData.beta >= 0.65 ? 'text-amber-500' : 'text-emerald-500'
+                  }`}>
+                    {(mpcData.beta * 100).toFixed(0)}%
+                  </span>
+                  <span className="text-[10px] text-slate-400 font-mono">β = {mpcData.beta}</span>
+                </div>
+              </div>
+              <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                {mpcData.interpretation}
+              </p>
+              <div className="mt-3 flex justify-center gap-4 text-[11px]">
+                <div>
+                  <span className="text-slate-400">Consumo</span>
+                  <p className="font-bold text-slate-800 dark:text-white">{(mpcData.beta * 100).toFixed(0)}¢/₱</p>
+                </div>
+                <div>
+                  <span className="text-slate-400">Ahorro</span>
+                  <p className="font-bold text-emerald-600">{(mpcData.mps * 100).toFixed(0)}¢/₱</p>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="text-center text-sm text-slate-400 py-8">
+              Cargando datos econométricos...
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ROW 5: BUDGET VS REALITY */}
       <div className="animate-in fade-in duration-500 slide-in-from-bottom-4">
         <BudgetVsRealityChart
           budget={Math.round(totalExpenseCurrent)}
