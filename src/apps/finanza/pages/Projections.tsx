@@ -110,12 +110,17 @@ export const Projections: React.FC = () => {
         // We identify the current cycle ID based on today's date
         const currentCycleId = getCycleId(new Date().toISOString().slice(0, 10));
 
+        // For income: only include cycles that actually had income (exclude zero-income cycles
+        // which are typically partial/transition cycles and skew averages downward)
         const incomePoints = Object.entries(cycleTotals)
-            .filter(([id]) => id !== currentCycleId) // Exclude current incomplete cycle
+            .filter(([id]) => id !== currentCycleId)
+            .filter(([_, v]) => v.income > 0) // Only cycles with real income data
             .map(([_, v]) => ({ date: v.date, value: v.income }));
 
+        // For expenses: include all non-current cycles (even zero-expense cycles are valid)
         const expensePoints = Object.entries(cycleTotals)
             .filter(([id]) => id !== currentCycleId)
+            .filter(([_, v]) => v.expense > 0) // Only cycles with real expense data
             .map(([_, v]) => ({ date: v.date, value: v.expense }));
 
         // 3. Calculate Trends AND extract confidence
@@ -141,6 +146,15 @@ export const Projections: React.FC = () => {
             // Baseline if no data (Manual fallback for cold start)
             let predIncome = incomeTrend ? incomeTrend.predict(cycle.end) : 4500;
             let predExpense = expenseTrend ? expenseTrend.predict(cycle.end) : 2800;
+
+            // Safety floor: if trend predicts 0 or negative income (can happen with sparse data),
+            // fall back to a minimum baseline so downstream metrics don't break
+            if (predIncome <= 0 && incomeTrend?.average && incomeTrend.average > 0) {
+                predIncome = incomeTrend.average;
+            } else if (predIncome <= 0) {
+                predIncome = 4500; // cold-start baseline
+            }
+            if (predExpense < 0) predExpense = 0;
 
             // Apply Manual Events
             const monthEvents = manualEvents.filter(e => e.monthOffset === i);
