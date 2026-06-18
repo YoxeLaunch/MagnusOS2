@@ -89,14 +89,7 @@ export const Projections: React.FC = () => {
             console.warn('[Projections] Data quality warnings:', warnings);
         }
 
-        // Safety check for empty data after sanitization
-        if (cleanTransactions.length === 0) {
-            return {
-                projectionData: [],
-                modelConfidence: { income: 0, expense: 0, average: 0, method: 'none' as const },
-                trends: { incomeSlope: 0, expenseSlope: 0 }
-            };
-        }
+        // We removed the early return for empty cleanTransactions so the fallback baseline logic runs.
 
         // 1. Aggregate Transactions into Cycle Totals
         const cycleTotals: Record<string, { income: number, expense: number, investment: number, date: Date }> = {};
@@ -161,7 +154,7 @@ export const Projections: React.FC = () => {
                 ingresos: Math.round(predIncome),
                 gastos: Math.round(predExpense),
                 ahorro: Math.round(predIncome - predExpense),
-                savingsRate: Math.max(0, Math.round(((predIncome - predExpense) / predIncome) * 100))
+                savingsRate: predIncome > 0 ? Math.max(0, Math.round(((predIncome - predExpense) / predIncome) * 100)) : 0
             });
         }
 
@@ -189,7 +182,7 @@ export const Projections: React.FC = () => {
         const avgIncome = projectionData.reduce((acc, curr) => acc + curr.ingresos, 0) / projectionData.length;
         const avgExpense = projectionData.reduce((acc, curr) => acc + curr.gastos, 0) / projectionData.length; // Consumption Expense
 
-        if (avgIncome === 0) return 0;
+        if (!avgIncome || avgIncome <= 0) return 0;
         // Calculation: (Income - Consumption) / Income = Savings Rate
         return Math.max(0, Math.round(((avgIncome - avgExpense) / avgIncome) * 100));
     }, [projectionData]);
@@ -236,7 +229,7 @@ export const Projections: React.FC = () => {
         // Since we don't have a "Total Balance" prop yet, we use projected accumulation + any manual investment logic if needed
         const estimatedSavings = projectionData.reduce((acc, curr) => acc + (curr.ahorro > 0 ? curr.ahorro : 0), 0);
 
-        if (avgMonthlyExpense === 0) return 0;
+        if (!avgMonthlyExpense || avgMonthlyExpense <= 0) return 0;
         return Number((estimatedSavings / avgMonthlyExpense).toFixed(1));
     }, [projectionData]);
 
