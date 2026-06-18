@@ -81,15 +81,22 @@ export const isDateInCycle = (dateStr: string, cycle: FinancialCycle): boolean =
  * Example: Dec 26 2024 -> Jan 25 2025 Cycle -> ID: "2025-01"
  */
 export const getCycleId = (dateStr: string): string => {
-    const date = new Date(dateStr);
+    // Parse date components manually to avoid timezone ambiguity.
+    // new Date("YYYY-MM-DD") is UTC midnight, but getDate()/getMonth() are LOCAL time,
+    // which causes 1-day offsets in timezones west of UTC (e.g. UTC-4 in DR).
+    const parts = dateStr.split('-').map(Number);
+    const year = parts[0];
+    const month = parts[1] - 1; // 0-indexed
+    const day = parts[2];
 
-    // Use the getFinancialCycle logic to find the cycle, then derive ID
-    const cycle = getFinancialCycle(date);
+    // Use a local-time date to correctly resolve the cycle
+    const localDate = new Date(year, month, day);
+    const cycle = getFinancialCycle(localDate);
 
-    // Robust way: Use cycle.end
-    const year = cycle.end.getFullYear();
-    const month = cycle.end.getMonth() + 1; // 1-12
-    return `${year}-${String(month).padStart(2, '0')}`;
+    // Derive ID from cycle end date
+    const cycleYear = cycle.end.getFullYear();
+    const cycleMonth = cycle.end.getMonth() + 1; // 1-12
+    return `${cycleYear}-${String(cycleMonth).padStart(2, '0')}`;
 };
 
 /**

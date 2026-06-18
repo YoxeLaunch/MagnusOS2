@@ -107,8 +107,10 @@ export const Projections: React.FC = () => {
         });
 
         // 2. Convert to arrays and exclude current (incomplete) cycle
-        // We identify the current cycle ID based on today's date
-        const currentCycleId = getCycleId(new Date().toISOString().slice(0, 10));
+        // Use local date components (NOT toISOString which is UTC and can differ by 1 day)
+        const today = new Date();
+        const localDateStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+        const currentCycleId = getCycleId(localDateStr);
 
         // For income: only include cycles that actually had income (exclude zero-income cycles
         // which are typically partial/transition cycles and skew averages downward)
