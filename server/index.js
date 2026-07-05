@@ -10,6 +10,7 @@ import { initDockerSocket } from './socket/dockerSocket.js';
 import routes from './routes/index.js';
 import { initSystemDb } from './models/system/index.js';
 import { securityHeaders, apiLimiter } from './middleware/security.js';
+import { scheduleCurrencyRateJob, fetchAndStoreRates } from './jobs/currencyRateJob.js';
 import { fileURLToPath } from 'url';
 import path from 'path';
 
@@ -99,6 +100,10 @@ const startServer = async () => {
             });
             console.log('-----------------------------\n');
         });
+
+        // Auto-actualización diaria de tasas de cambio (USD/EUR -> DOP)
+        scheduleCurrencyRateJob();
+        fetchAndStoreRates(); // Refresco inicial al arrancar el servidor
 
         // Initialize Socket
         initSocket(io);

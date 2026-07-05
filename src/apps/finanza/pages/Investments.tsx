@@ -20,7 +20,8 @@ import {
     ArrowUpRight,
     ArrowDownRight,
     PieChart,
-    Briefcase
+    Briefcase,
+    RefreshCw
 } from 'lucide-react';
 
 // Categorías de inversión
@@ -34,9 +35,22 @@ const INVESTMENT_CATEGORIES = [
 ];
 
 export const Investments: React.FC = () => {
-    const { data, addTransaction, removeTransaction, updateTransaction, dailyTransactions } = useData();
+    const { data, addTransaction, removeTransaction, updateTransaction, dailyTransactions, currencies, refreshCurrencies } = useData();
     const [isAdding, setIsAdding] = useState(false);
     const [editingId, setEditingId] = useState<string | null>(null);
+    const [refreshing, setRefreshing] = useState(false);
+
+    const convertToDOP = (amount: number, currency?: string) => {
+        if (currency === 'USD' && currencies?.usd) return amount * currencies.usd.rate;
+        if (currency === 'EUR' && currencies?.eur) return amount * currencies.eur.rate;
+        return amount;
+    };
+
+    const handleRefreshRates = () => {
+        setRefreshing(true);
+        refreshCurrencies();
+        setTimeout(() => setRefreshing(false), 800);
+    };
 
     // Form state
     const [formData, setFormData] = useState({
@@ -69,18 +83,18 @@ export const Investments: React.FC = () => {
         let current = 0;
 
         data.investments.forEach(inv => {
-            invested += inv.amount;
-            current += (inv.currentValue ?? inv.amount);
+            invested += convertToDOP(inv.amount, inv.currency);
+            current += convertToDOP(inv.currentValue ?? inv.amount, inv.currency);
         });
 
         const pnl = current - invested;
         const pnlPercent = invested > 0 ? (pnl / invested) * 100 : 0;
 
-        // Include cash in total portfolio value
+        // Include cash in total portfolio value (cash is always DOP)
         const totalPortfolioValue = current + globalCashAvailable;
 
         return { invested, current, pnl, pnlPercent, totalPortfolioValue };
-    }, [data.investments, globalCashAvailable]);
+    }, [data.investments, globalCashAvailable, currencies]);
 
     const resetForm = () => {
         setFormData({
@@ -164,7 +178,19 @@ export const Investments: React.FC = () => {
                         Gestiona y monitorea el rendimiento de tus activos financieros a largo plazo.
                     </p>
                 </div>
-                <div>
+                <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 text-xs">
+                        <span className="font-bold text-slate-500 dark:text-gray-400">USD {currencies.usd.rate.toFixed(2)}</span>
+                        <span className="text-slate-300 dark:text-gray-600">•</span>
+                        <span className="font-bold text-slate-500 dark:text-gray-400">EUR {currencies.eur.rate.toFixed(2)}</span>
+                        <button
+                            onClick={handleRefreshRates}
+                            title="Actualizar tasa de cambio"
+                            className="p-1 rounded-lg text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition-colors"
+                        >
+                            <RefreshCw size={14} className={refreshing ? 'animate-spin' : ''} />
+                        </button>
+                    </div>
                     <button
                         onClick={() => setIsAdding(true)}
                         className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold shadow-lg shadow-emerald-500/20 transition-all active:scale-95"
@@ -330,16 +356,16 @@ export const Investments: React.FC = () => {
                                             <div className="text-right">
                                                 <p className="text-[10px] font-bold text-gray-400 uppercase">Costo Base</p>
                                                 <p className="font-bold text-gray-600 dark:text-gray-300 font-mono">
-                                                    {formatCurrency(inv.amount)}
+                                                    {formatCurrency(inv.amount, inv.currency)}
                                                 </p>
                                             </div>
 
                                             <div className="text-right">
                                                 <p className="text-[10px] font-bold text-gray-400 uppercase">Valor Actual</p>
-                                                <p className="font-extrabold text-gray-900 dark:text-white text-lg font-mono">{formatCurrency(currentVal)}</p>
+                                                <p className="font-extrabold text-gray-900 dark:text-white text-lg font-mono">{formatCurrency(currentVal, inv.currency)}</p>
                                                 {inv.currentValue && (
                                                     <p className={`text-xs font-bold ${gain >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
-                                                        {gain >= 0 ? '+' : ''}{gainPercent.toFixed(1)}% ({gain >= 0 ? '+' : ''}{formatCurrency(gain)})
+                                                        {gain >= 0 ? '+' : ''}{gainPercent.toFixed(1)}% ({gain >= 0 ? '+' : ''}{formatCurrency(gain, inv.currency)})
                                                     </p>
                                                 )}
                                             </div>

@@ -1,6 +1,6 @@
 import React from 'react';
 import { CentroComandoMode, CicloOption } from '../../hooks/useCentroComandoData';
-import { ShieldAlert, Calendar } from 'lucide-react';
+import { ShieldAlert, Calendar, Printer } from 'lucide-react';
 
 interface Props {
   mode: CentroComandoMode;
@@ -8,6 +8,7 @@ interface Props {
   cicloActivo?: string;
   onCicloChange: (id: string) => void;
   ciclosDisponibles: CicloOption[];
+  onPrint: () => void;
 }
 
 export const CentroComandoHeader: React.FC<Props> = ({
@@ -16,6 +17,7 @@ export const CentroComandoHeader: React.FC<Props> = ({
   cicloActivo,
   onCicloChange,
   ciclosDisponibles,
+  onPrint,
 }) => {
   const selectedCiclo = ciclosDisponibles.find((c) => c.id === cicloActivo);
   let subTitle = 'Estado Financiero del Imperio';
@@ -38,6 +40,16 @@ export const CentroComandoHeader: React.FC<Props> = ({
       </header>
 
       <div className="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto">
+        {/* Botón Imprimir Informe */}
+        <button
+          onClick={onPrint}
+          title="Imprimir Informe Financiero"
+          className="flex items-center gap-2 px-4 py-2 bg-slate-900 dark:bg-white/10 text-white rounded-xl hover:bg-slate-700 dark:hover:bg-white/20 transition-all shadow-lg shadow-slate-900/10 border border-transparent hover:border-slate-600 dark:hover:border-white/20 text-sm font-bold"
+        >
+          <Printer size={17} />
+          <span className="hidden sm:inline">Imprimir Informe</span>
+        </button>
+
         {/* Toggle Mode */}
         <div className="flex items-center bg-slate-200/50 dark:bg-slate-800/50 rounded-lg p-1 border border-slate-300/50 dark:border-white/5">
           <button

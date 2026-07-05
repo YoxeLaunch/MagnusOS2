@@ -1,6 +1,19 @@
 import { DailyTransaction, WealthSnapshot, CurrencyHistory } from '../models/index.js';
 import { Op } from 'sequelize';
 
+// Convert a transaction amount to DOP using the latest known exchange rate for its currency.
+const getLatestRates = async () => {
+    const [usdRow] = await CurrencyHistory.findAll({ where: { code: 'USD' }, order: [['date', 'DESC'], ['id', 'DESC']], limit: 1 });
+    const [eurRow] = await CurrencyHistory.findAll({ where: { code: 'EUR' }, order: [['date', 'DESC'], ['id', 'DESC']], limit: 1 });
+    return { usd: usdRow?.rate || 60.00, eur: eurRow?.rate || 65.00 };
+};
+
+const toDOP = (amount, currency, rates) => {
+    if (currency === 'USD') return amount * rates.usd;
+    if (currency === 'EUR') return amount * rates.eur;
+    return amount;
+};
+
 // Financial Cycle helpers ported from frontend
 const getFinancialCycle = (referenceDate) => {
     const year = referenceDate.getFullYear();
@@ -110,6 +123,8 @@ export const getAnual = async (req, res) => {
         
         const yearTxs = transactions.filter(t => new Date(t.date).getFullYear() === year || getCycleFromId(getCycleId(t.date)).end.getFullYear() === year);
 
+        const rates = await getLatestRates();
+
         let totalEntradas = 0;
         let totalGastos = 0;
         let totalInvertido = 0;
@@ -119,7 +134,7 @@ export const getAnual = async (req, res) => {
         const allCycles = new Set();
 
         yearTxs.forEach(t => {
-            const amount = Number(t.amount);
+            const amount = toDOP(Number(t.amount), t.currency, rates);
             const type = t.type;
             const cycleId = getCycleId(t.date);
             const cycleEndYear = getCycleFromId(cycleId).end.getFullYear();
@@ -163,7 +178,7 @@ export const getAnual = async (req, res) => {
         // Cash global
         let cashGlobal = 0;
         transactions.forEach(t => {
-             const amt = Number(t.amount);
+             const amt = toDOP(Number(t.amount), t.currency, rates);
              if (t.type==='income') cashGlobal += amt;
              else if(t.type==='expense'||t.type==='gasto') cashGlobal -= amt;
              else if(t.type==='investment'||t.type==='inversion') cashGlobal -= amt;
@@ -206,11 +221,13 @@ export const getMensual = async (req, res) => {
         const prevCicloId = `${prevYear}-${String(prevMonth).padStart(2,'0')}`;
         const prevCycle = getCycleFromId(prevCicloId);
 
-        const transactions = await DailyTransaction.findAll({ 
+        const transactions = await DailyTransaction.findAll({
             where: { userId },
-            raw: true 
+            raw: true
         });
-        
+
+        const rates = await getLatestRates();
+
         let entradas = 0; let gastos = 0; let invertido = 0;
         let pEntradas = 0; let pGastos = 0; let pInvertido = 0;
         let gastosCatMap = {};
@@ -220,7 +237,7 @@ export const getMensual = async (req, res) => {
         let inversionAcumulada = 0;
 
         transactions.forEach(t => {
-            const amt = Number(t.amount);
+            const amt = toDOP(Number(t.amount), t.currency, rates);
             const type = t.type;
             const tDate = new Date(t.date);
             const tCycleId = getCycleId(t.date);

@@ -5,10 +5,12 @@ import { PatrimonioBarChart } from '../components/CentroComando/PatrimonioBarCha
 import { useCentroComandoData, CentroComandoMode } from '../hooks/useCentroComandoData';
 import { DashboardSkeleton } from '../../../shared/components/Skeleton';
 import { formatCurrency } from '../utils/calculations';
+import { PrintOptionsModal, PrintOptions } from '../components/PrintOptionsModal';
 
 export const CentroComando: React.FC = () => {
     const [mode, setMode] = useState<CentroComandoMode>('anual');
     const [cicloActivo, setCicloActivo] = useState<string>('');
+    const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
 
     const { ciclosDisponibles, anualData, mensualData, isLoading } = useCentroComandoData(mode, cicloActivo);
 
@@ -18,6 +20,21 @@ export const CentroComando: React.FC = () => {
             setCicloActivo(ciclosDisponibles[0].id); // The first one is the most recent
         }
     }, [ciclosDisponibles, cicloActivo]);
+
+    const handlePrint = (options: PrintOptions) => {
+        setIsPrintModalOpen(false);
+        const params = new URLSearchParams();
+        if (options.includeSummary) params.append('summary', 'true');
+        if (options.includeBudget) params.append('budget', 'true');
+        if (options.includeInvestments) params.append('investments', 'true');
+        if (options.includeForecast) params.append('forecast', 'true');
+        if (options.includeAccountStatement) {
+            params.append('daily', 'true');
+            if (options.startDate) params.append('start', options.startDate);
+            if (options.endDate) params.append('end', options.endDate);
+        }
+        window.open(`/finanza/print?${params.toString()}`, '_blank');
+    };
 
     if (isLoading || (mode === 'anual' && !anualData) || (mode === 'mensual' && !mensualData)) {
         return <DashboardSkeleton />;
@@ -31,6 +48,14 @@ export const CentroComando: React.FC = () => {
                 cicloActivo={cicloActivo}
                 onCicloChange={setCicloActivo}
                 ciclosDisponibles={ciclosDisponibles || []}
+                onPrint={() => setIsPrintModalOpen(true)}
+            />
+
+            {/* Print Modal */}
+            <PrintOptionsModal
+                isOpen={isPrintModalOpen}
+                onClose={() => setIsPrintModalOpen(false)}
+                onPrint={handlePrint}
             />
 
             {mode === 'anual' && anualData ? (

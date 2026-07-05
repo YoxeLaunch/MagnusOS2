@@ -43,7 +43,10 @@ export const CashFlow: React.FC = () => {
 
     const handlePrint = (options: PrintOptions) => {
         const params = new URLSearchParams();
+        if (options.includeSummary) params.append('summary', 'true');
         if (options.includeBudget) params.append('budget', 'true');
+        if (options.includeInvestments) params.append('investments', 'true');
+        if (options.includeForecast) params.append('forecast', 'true');
         if (options.includeAccountStatement) {
             params.append('daily', 'true');
             if (options.startDate) params.append('start', options.startDate);
