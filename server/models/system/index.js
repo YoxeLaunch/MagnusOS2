@@ -5,6 +5,7 @@ import { Mentor } from '../mentor.js';
 import { UserChecklist, UserCalendar } from '../userData.js';
 import { Message } from '../message.js';
 import { CurriculumModule, Mission } from './Curriculum.js';
+import { Publication } from './Publication.js';
 import TelegramLink from '../TelegramLink.js';
 
 export const initSystemDb = async () => {
@@ -28,6 +29,7 @@ export {
     Message,
     CurriculumModule,
     Mission,
+    Publication,
     TelegramLink,
     sequelizeSystem
 };

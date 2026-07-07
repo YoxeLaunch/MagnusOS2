@@ -21,6 +21,9 @@ const server = http.createServer(app);
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 app.use(express.static(path.join(__dirname, '../dist'))); // Serve public folder
+// Fallback a public/: archivos subidos en runtime (mentores, publicaciones)
+// que no existen dentro de dist/ porque se generan después del build
+app.use(express.static(path.join(__dirname, '../public')));
 
 const io = new Server(server, {
     cors: {

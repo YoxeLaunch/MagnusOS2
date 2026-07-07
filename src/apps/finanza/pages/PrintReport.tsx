@@ -3,7 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { useData } from '../context/DataContext';
 import { useAuth } from '../../../shared/context/AuthContext';
 import { Crown, Shield, CheckCircle, PieChart, TrendingUp, Activity, DollarSign, Calendar, ArrowRight, Wallet, Target, AlertTriangle, BarChart2 } from 'lucide-react';
-import { calculateAnnualAmountV2, formatCurrency } from '../utils/calculations';
+import { calculateAnnualAmountV2, calculateCurrentMonthlyAmount, isTransactionCurrentlyValid, formatCurrency } from '../utils/calculations';
 import { Transaction } from '../../../shared/types';
 import { getFinancialCycle, isDateInCycle } from '../utils/financialCycle';
 
@@ -28,8 +28,10 @@ export const PrintReport: React.FC = () => {
         return amount;
     }, [currencies]);
 
+    // Monto mensual vigente HOY: un salario cuyo ciclo terminó (validTo) aporta 0,
+    // así el viejo y el nuevo no se suman como dos ingresos simultáneos.
     const calculateMonthlyAmount = (t: Transaction | any) => {
-        return calculateAnnualAmountV2(t, currencies) / 12;
+        return calculateCurrentMonthlyAmount(t, currencies);
     };
 
     // --- DATA CALCULATIONS ---
@@ -485,7 +487,7 @@ export const PrintReport: React.FC = () => {
                         <SectionTitle icon={DollarSign} title="Fuentes de Ingreso" color="text-emerald-600" />
                         {data.incomes.some((inc: any) => inc.validFrom || inc.validTo) && (
                             <p className="text-[10px] text-slate-400 italic mb-2">
-                                * Los montos reflejan períodos de vigencia (validFrom/validTo) cuando aplica, ej. un mismo ingreso que cambió de valor durante el año no se cuenta dos veces.
+                                * El Monto Mensual solo incluye ingresos vigentes hoy: los ciclos finalizados (ej. un salario anterior) aparecen como "Finalizado" y no suman al total. El Impacto Anual sí prorratea los meses en que cada uno estuvo activo.
                             </p>
                         )}
                         <table className="w-full text-sm mb-2">
@@ -500,18 +502,27 @@ export const PrintReport: React.FC = () => {
                             </thead>
                             <tbody className="divide-y divide-slate-100">
                                 {data.incomes.map(inc => {
+                                    const isActive = isTransactionCurrentlyValid(inc);
                                     const monthly = calculateMonthlyAmount(inc);
                                     const annual = calculateAnnualAmountV2(inc, currencies);
                                     const pct = totalIncome > 0 ? (monthly / totalIncome) * 100 : 0;
+                                    const isFuture = !isActive && !!inc.validFrom && inc.validFrom.slice(0, 10) > new Date().toISOString().slice(0, 10);
                                     return (
-                                        <tr key={inc.id} className="hover:bg-slate-50">
-                                            <td className="px-3 py-2 font-medium text-slate-700">{inc.name}</td>
+                                        <tr key={inc.id} className={isActive ? 'hover:bg-slate-50' : 'opacity-60'}>
+                                            <td className="px-3 py-2 font-medium text-slate-700">
+                                                {inc.name}
+                                                {!isActive && (
+                                                    <span className="ml-2 px-1.5 py-0.5 bg-slate-200 text-slate-500 rounded text-[9px] font-bold uppercase align-middle">
+                                                        {isFuture ? 'Programado' : 'Finalizado'}
+                                                    </span>
+                                                )}
+                                            </td>
                                             <td className="px-3 py-2 text-center">
                                                 <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full text-xs">{inc.frequency}</span>
                                             </td>
-                                            <td className="px-3 py-2 text-right text-emerald-700 font-mono">{formatCurrency(monthly)}</td>
+                                            <td className="px-3 py-2 text-right text-emerald-700 font-mono">{isActive ? formatCurrency(monthly) : '—'}</td>
                                             <td className="px-3 py-2 text-right text-slate-500 font-mono text-xs">{formatCurrency(annual)}</td>
-                                            <td className="px-3 py-2 text-right text-slate-500">{pct.toFixed(1)}%</td>
+                                            <td className="px-3 py-2 text-right text-slate-500">{isActive ? `${pct.toFixed(1)}%` : '—'}</td>
                                         </tr>
                                     );
                                 })}
@@ -542,22 +553,28 @@ export const PrintReport: React.FC = () => {
                             </thead>
                             <tbody className="divide-y divide-slate-100">
                                 {data.expenses.map(exp => {
+                                    const isActive = isTransactionCurrentlyValid(exp);
                                     const amount = calculateMonthlyAmount(exp);
                                     const annual = calculateAnnualAmountV2(exp, currencies);
                                     const percent = totalIncome > 0 ? (amount / totalIncome) * 100 : 0;
-                                    const isCritical = percent > 20;
+                                    const isCritical = isActive && percent > 20;
                                     return (
-                                        <tr key={exp.id} className={isCritical ? 'bg-red-50/50' : ''}>
+                                        <tr key={exp.id} className={isCritical ? 'bg-red-50/50' : !isActive ? 'opacity-60' : ''}>
                                             <td className="px-3 py-2 text-slate-700 font-medium flex items-center gap-1.5">
                                                 {isCritical && <AlertTriangle size={12} className="text-red-400 flex-shrink-0" />}
                                                 {exp.name}
+                                                {!isActive && (
+                                                    <span className="px-1.5 py-0.5 bg-slate-200 text-slate-500 rounded text-[9px] font-bold uppercase">
+                                                        Finalizado
+                                                    </span>
+                                                )}
                                             </td>
                                             <td className="px-3 py-2 text-center">
                                                 <span className="px-2 py-0.5 bg-orange-100 text-orange-700 rounded-full text-xs">{exp.frequency}</span>
                                             </td>
-                                            <td className="px-3 py-2 text-right font-mono text-slate-700">{formatCurrency(amount)}</td>
+                                            <td className="px-3 py-2 text-right font-mono text-slate-700">{isActive ? formatCurrency(amount) : '—'}</td>
                                             <td className="px-3 py-2 text-right font-mono text-xs text-slate-500">{formatCurrency(annual)}</td>
-                                            <td className={`px-3 py-2 text-right font-bold ${isCritical ? 'text-red-500' : 'text-slate-500'}`}>{percent.toFixed(1)}%</td>
+                                            <td className={`px-3 py-2 text-right font-bold ${isCritical ? 'text-red-500' : 'text-slate-500'}`}>{isActive ? `${percent.toFixed(1)}%` : '—'}</td>
                                         </tr>
                                     );
                                 })}

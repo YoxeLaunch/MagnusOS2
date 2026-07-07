@@ -90,6 +90,37 @@ export const calculateAnnualAmountV2 = (t: Transaction, currencies?: CurrencySta
 };
 
 /**
+ * Indica si una transacción recurrente está vigente en la fecha de referencia,
+ * según sus fechas de validez (validFrom/validTo, formato YYYY-MM-DD).
+ * Sin fechas de validez se considera siempre vigente.
+ * @param t - La transacción a evaluar.
+ * @param refDate - Fecha de referencia (default: hoy).
+ */
+export const isTransactionCurrentlyValid = (t: Transaction, refDate: Date = new Date()): boolean => {
+  // Comparación por string local YYYY-MM-DD para evitar desfases de zona horaria
+  const ref = `${refDate.getFullYear()}-${String(refDate.getMonth() + 1).padStart(2, '0')}-${String(refDate.getDate()).padStart(2, '0')}`;
+  if (t.validFrom && t.validFrom.slice(0, 10) > ref) return false;
+  if (t.validTo && t.validTo.slice(0, 10) < ref) return false;
+  return true;
+};
+
+/**
+ * Calcula el monto mensual VIGENTE de una transacción recurrente.
+ * A diferencia de calculateAnnualAmountV2/12 (que prorratea el año y por tanto
+ * reparte un salario viejo y uno nuevo como dos fracciones simultáneas),
+ * aquí solo cuenta la transacción cuyo ciclo está activo hoy: si su vigencia
+ * terminó (validTo pasado) o aún no inicia (validFrom futuro), retorna 0.
+ * @param t - La transacción a calcular.
+ * @param currencies - Tasas de cambio (opcional).
+ * @param refDate - Fecha de referencia (default: hoy).
+ * @returns Monto mensual en DOP, o 0 si no está vigente.
+ */
+export const calculateCurrentMonthlyAmount = (t: Transaction, currencies?: CurrencyState, refDate: Date = new Date()): number => {
+  if (!isTransactionCurrentlyValid(t, refDate)) return 0;
+  return calculateAnnualAmount(t, currencies) / 12;
+};
+
+/**
  * @deprecated Use Array.prototype.reduce with calculateAnnualAmountV2 instead.
  * Calcula el total anual de una lista de transacciones.
  * @param transactions - Lista de transacciones.

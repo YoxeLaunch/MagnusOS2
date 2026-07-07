@@ -24,10 +24,41 @@ interface AdminPanelProps {
     onClose: () => void;
 }
 
+type TabId = 'users' | 'economy' | 'mentors' | 'curriculum' | 'system' | 'broadcast' | 'updates' | 'landing';
+
+// Menú del panel: mismas 8 secciones de siempre, agrupadas como panel de administración
+const NAV_GROUPS: { group: string; items: { id: TabId; icon: any; label: string; description: string }[] }[] = [
+    {
+        group: 'Comunidad',
+        items: [
+            { id: 'users', icon: Users, label: 'Usuarios', description: 'Gestión de cuentas, roles y privilegios VIP' },
+            { id: 'mentors', icon: Calendar, label: 'Mentores', description: 'Calendario y asignación de mentores del año' },
+            { id: 'curriculum', icon: BookOpen, label: 'Pensum', description: 'Currículum, módulos y misiones del sistema' },
+        ]
+    },
+    {
+        group: 'Operación',
+        items: [
+            { id: 'economy', icon: DollarSign, label: 'Economía', description: 'Indicadores y configuración económica' },
+            { id: 'system', icon: Activity, label: 'Sistema', description: 'Monitor de recursos y estado del servidor' },
+        ]
+    },
+    {
+        group: 'Comunicación',
+        items: [
+            { id: 'broadcast', icon: LucideRadio, label: 'Comms', description: 'Transmisiones y mensajes globales' },
+            { id: 'updates', icon: TrendingUp, label: 'Novedades', description: 'Changelog y anuncios del sistema' },
+            { id: 'landing', icon: Image, label: 'Portada', description: 'Contenido de la página de bienvenida' },
+        ]
+    }
+];
+
+const ALL_NAV_ITEMS = NAV_GROUPS.flatMap(g => g.items);
+
 export const AdminPanel: React.FC<AdminPanelProps> = ({ currentUser, onClose }) => {
     const toast = useToast();
     const [users, setUsers] = useState<User[]>([]);
-    const [activeTab, setActiveTab] = useState<'users' | 'economy' | 'mentors' | 'curriculum' | 'system' | 'broadcast' | 'updates' | 'landing'>('users');
+    const [activeTab, setActiveTab] = useState<TabId>('users');
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
     const debouncedSearchTerm = useDebounce(searchTerm, 300);
@@ -48,6 +79,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ currentUser, onClose }) 
     ]);
 
     const isSoberano = currentUser?.username.toLowerCase() === 'soberano';
+    const activeItem = ALL_NAV_ITEMS.find(item => item.id === activeTab) || ALL_NAV_ITEMS[0];
 
     useEffect(() => {
         loadUsers();
@@ -144,40 +176,113 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ currentUser, onClose }) 
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-0 md:p-4 animate-in fade-in duration-200">
-            <div className="bg-white dark:bg-slate-900 rounded-none md:rounded-2xl w-full max-w-7xl h-full md:h-[90vh] flex flex-col shadow-2xl border border-slate-200 dark:border-white/10 overflow-hidden">
+            <div className="bg-white dark:bg-slate-900 rounded-none md:rounded-2xl w-full max-w-7xl h-full md:h-[92vh] flex shadow-2xl border border-slate-200 dark:border-white/10 overflow-hidden">
 
-                {/* Header */}
-                <div className="flex items-center justify-between p-6 border-b border-slate-200 dark:border-white/10 bg-slate-50/50 dark:bg-white/5">
-                    <div className="flex items-center gap-3">
-                        <div className="p-2 bg-theme-gold rounded-lg shadow-lg shadow-theme-gold/20">
-                            <Crown className="w-6 h-6 text-black" />
+                {/* ==================== SIDEBAR ==================== */}
+                <aside className="w-16 lg:w-64 flex-shrink-0 bg-slate-950 border-r border-white/5 flex flex-col">
+                    {/* Brand */}
+                    <div className="flex items-center gap-3 p-4 lg:p-5 border-b border-white/5">
+                        <div className="p-2 bg-theme-gold rounded-lg shadow-lg shadow-theme-gold/20 flex-shrink-0">
+                            <Crown className="w-5 h-5 text-black" />
                         </div>
-                        <div>
-                            <h2 className="text-xl font-bold font-serif text-slate-900 dark:text-white">Panel de Soberanía</h2>
-                            <p className="text-sm text-slate-500">Gestión Centralizada del Sistema Magnus</p>
+                        <div className="hidden lg:block min-w-0">
+                            <h2 className="text-sm font-bold font-serif text-white truncate">Panel de Soberanía</h2>
+                            <p className="text-[10px] text-slate-500 uppercase tracking-wider truncate">Sistema Magnus</p>
                         </div>
                     </div>
-                    <button onClick={onClose} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors">
-                        <X className="w-6 h-6 text-slate-500" />
-                    </button>
-                </div>
 
-                {/* Tabs Toolbar */}
-                <div className="p-4 border-b border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-slate-800/50 flex flex-col xl:flex-row gap-4 justify-between items-start xl:items-center">
-                    <div className="flex gap-2 overflow-x-auto pb-2 xl:pb-0 w-full xl:w-auto no-scrollbar mask-linear-fade">
-                        <TabButton id="users" icon={Users} label="Usuarios" activeTab={activeTab} setActiveTab={setActiveTab} />
-                        <TabButton id="mentors" icon={Calendar} label="Mentores" activeTab={activeTab} setActiveTab={setActiveTab} />
-                        <TabButton id="curriculum" icon={BookOpen} label="Pensum" activeTab={activeTab} setActiveTab={setActiveTab} />
-                        <TabButton id="economy" icon={DollarSign} label="Economía" activeTab={activeTab} setActiveTab={setActiveTab} />
-                        <TabButton id="system" icon={Activity} label="Sistema" activeTab={activeTab} setActiveTab={setActiveTab} />
-                        <TabButton id="broadcast" icon={LucideRadio} label="Comms" activeTab={activeTab} setActiveTab={setActiveTab} />
-                        <TabButton id="updates" icon={TrendingUp} label="Novedades" activeTab={activeTab} setActiveTab={setActiveTab} />
-                        <TabButton id="landing" icon={Image} label="Portada" activeTab={activeTab} setActiveTab={setActiveTab} />
+                    {/* Nav Groups */}
+                    <nav className="flex-1 overflow-y-auto py-4 space-y-5 no-scrollbar">
+                        {NAV_GROUPS.map(group => (
+                            <div key={group.group}>
+                                <p className="hidden lg:block px-5 mb-2 text-[9px] font-bold text-slate-600 uppercase tracking-[0.25em]">
+                                    {group.group}
+                                </p>
+                                <div className="space-y-0.5 px-2 lg:px-3">
+                                    {group.items.map(item => {
+                                        const isActive = activeTab === item.id;
+                                        return (
+                                            <button
+                                                key={item.id}
+                                                onClick={() => setActiveTab(item.id)}
+                                                title={item.label}
+                                                className={`w-full flex items-center gap-3 px-2.5 lg:px-3 py-2.5 rounded-lg text-sm transition-all justify-center lg:justify-start ${isActive
+                                                    ? 'bg-theme-gold/10 text-theme-gold border border-theme-gold/20 font-bold'
+                                                    : 'text-slate-400 border border-transparent hover:bg-white/5 hover:text-white'
+                                                    }`}
+                                            >
+                                                <item.icon size={17} strokeWidth={isActive ? 2.5 : 2} className="flex-shrink-0" />
+                                                <span className="hidden lg:inline truncate">{item.label}</span>
+                                                {isActive && <span className="hidden lg:block ml-auto w-1.5 h-1.5 rounded-full bg-theme-gold" />}
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        ))}
+                    </nav>
+
+                    {/* User footer */}
+                    <div className="p-3 lg:p-4 border-t border-white/5 flex items-center gap-3 justify-center lg:justify-start">
+                        <div className="w-8 h-8 rounded-full bg-theme-gold/15 border border-theme-gold/30 text-theme-gold flex items-center justify-center text-xs font-bold flex-shrink-0 uppercase">
+                            {currentUser.name?.charAt(0) || 'S'}
+                        </div>
+                        <div className="hidden lg:block min-w-0">
+                            <p className="text-xs font-bold text-white truncate">{currentUser.name}</p>
+                            <p className="text-[10px] text-theme-gold uppercase tracking-wider">Soberano</p>
+                        </div>
                     </div>
+                </aside>
 
+                {/* ==================== MAIN ==================== */}
+                <div className="flex-1 flex flex-col min-w-0">
+
+                    {/* Section Header */}
+                    <header className="flex items-center justify-between gap-4 px-5 lg:px-8 py-4 border-b border-slate-200 dark:border-white/10 bg-slate-50/50 dark:bg-white/5">
+                        <div className="flex items-center gap-3 min-w-0">
+                            <div className="p-2 rounded-lg bg-theme-gold/10 text-theme-gold flex-shrink-0">
+                                <activeItem.icon size={18} />
+                            </div>
+                            <div className="min-w-0">
+                                <h3 className="text-base lg:text-lg font-bold text-slate-900 dark:text-white leading-tight truncate">
+                                    {activeItem.label}
+                                </h3>
+                                <p className="text-[11px] text-slate-500 truncate hidden sm:block">{activeItem.description}</p>
+                            </div>
+                        </div>
+
+                        <div className="flex items-center gap-3 flex-shrink-0">
+                            {/* Toolbar contextual de Usuarios */}
+                            {activeTab === 'users' && (
+                                <div className="hidden md:flex gap-3 animate-in slide-in-from-right-4 duration-300">
+                                    <div className="relative w-48 xl:w-64">
+                                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                                        <input
+                                            type="text"
+                                            placeholder="Buscar usuario..."
+                                            value={searchTerm}
+                                            onChange={(e) => setSearchTerm(e.target.value)}
+                                            className="w-full pl-10 pr-4 py-2 rounded-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-slate-900 focus:outline-none focus:border-theme-gold focus:ring-1 focus:ring-theme-gold transition-all text-sm"
+                                        />
+                                    </div>
+                                    <button
+                                        onClick={() => exportToCSV(users, 'usuarios-magnus')}
+                                        className="px-4 py-2 bg-theme-gold/10 text-theme-gold hover:bg-theme-gold hover:text-black border border-theme-gold/20 rounded-lg text-sm font-bold transition-all whitespace-nowrap"
+                                    >
+                                        Exportar
+                                    </button>
+                                </div>
+                            )}
+                            <button onClick={onClose} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors">
+                                <X className="w-5 h-5 text-slate-500" />
+                            </button>
+                        </div>
+                    </header>
+
+                    {/* Búsqueda de usuarios en móvil (el header la oculta) */}
                     {activeTab === 'users' && (
-                        <div className="flex w-full xl:w-auto gap-3 animate-in slide-in-from-right-4 duration-300">
-                            <div className="relative w-full xl:w-64">
+                        <div className="md:hidden px-5 pt-3">
+                            <div className="relative">
                                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                                 <input
                                     type="text"
@@ -187,75 +292,69 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ currentUser, onClose }) 
                                     className="w-full pl-10 pr-4 py-2 rounded-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-slate-900 focus:outline-none focus:border-theme-gold focus:ring-1 focus:ring-theme-gold transition-all text-sm"
                                 />
                             </div>
-                            <button
-                                onClick={() => exportToCSV(users, 'usuarios-magnus')}
-                                className="px-4 py-2 bg-theme-gold/10 text-theme-gold hover:bg-theme-gold hover:text-black border border-theme-gold/20 rounded-lg text-sm font-bold transition-all whitespace-nowrap"
-                            >
-                                Exportar
-                            </button>
                         </div>
                     )}
-                </div>
 
-                {/* Main Content Area */}
-                <div className="flex-1 overflow-y-auto bg-slate-50/30 dark:bg-black/20">
-                    <Suspense fallback={<LoadingSpinner />}>
-                        {activeTab === 'users' && (
-                            <div className="p-4">
-                                <UsersTab
-                                    users={users}
-                                    currentUser={currentUser}
-                                    loading={loading}
-                                    searchTerm={searchTerm}
-                                    setSearchTerm={setSearchTerm}
-                                    debouncedSearchTerm={debouncedSearchTerm}
-                                    onToggleVIP={handleToggleVIP}
-                                    onDelete={setDeleteConfirmUser}
-                                />
-                            </div>
-                        )}
+                    {/* Content Area */}
+                    <div className="flex-1 overflow-y-auto bg-slate-50/30 dark:bg-black/20">
+                        <Suspense fallback={<LoadingSpinner />}>
+                            {activeTab === 'users' && (
+                                <div className="p-4">
+                                    <UsersTab
+                                        users={users}
+                                        currentUser={currentUser}
+                                        loading={loading}
+                                        searchTerm={searchTerm}
+                                        setSearchTerm={setSearchTerm}
+                                        debouncedSearchTerm={debouncedSearchTerm}
+                                        onToggleVIP={handleToggleVIP}
+                                        onDelete={setDeleteConfirmUser}
+                                    />
+                                </div>
+                            )}
 
-                        {activeTab === 'mentors' && (
-                            <div className="p-4 h-full">
-                                <MentorsTab
-                                    mentors={mentors}
-                                    setMentors={setMentors}
-                                    availableMentors={availableMentors}
-                                    saveMentors={saveMentors}
-                                />
-                            </div>
-                        )}
+                            {activeTab === 'mentors' && (
+                                <div className="p-4 h-full">
+                                    <MentorsTab
+                                        mentors={mentors}
+                                        setMentors={setMentors}
+                                        availableMentors={availableMentors}
+                                        saveMentors={saveMentors}
+                                    />
+                                </div>
+                            )}
 
-                        {activeTab === 'landing' && (
-                            <div className="p-6 h-full">
-                                <LandingTab loading={loading} setLoading={setLoading} />
-                            </div>
-                        )}
+                            {activeTab === 'landing' && (
+                                <div className="p-6 h-full">
+                                    <LandingTab loading={loading} setLoading={setLoading} />
+                                </div>
+                            )}
 
-                        {activeTab === 'economy' && (
-                            <EconomyTab currentUser={currentUser} isSoberano={isSoberano} />
-                        )}
+                            {activeTab === 'economy' && (
+                                <EconomyTab currentUser={currentUser} isSoberano={isSoberano} />
+                            )}
 
-                        {activeTab === 'curriculum' && (
-                            <div className="p-6 h-full">
-                                <CurriculumTab isSoberano={isSoberano} />
-                            </div>
-                        )}
+                            {activeTab === 'curriculum' && (
+                                <div className="p-6 h-full">
+                                    <CurriculumTab isSoberano={isSoberano} />
+                                </div>
+                            )}
 
-                        {activeTab === 'broadcast' && (
-                            <BroadcastTab />
-                        )}
+                            {activeTab === 'broadcast' && (
+                                <BroadcastTab />
+                            )}
 
-                        {activeTab === 'updates' && (
-                            <div className="p-6 h-full">
-                                <UpdatesTab />
-                            </div>
-                        )}
+                            {activeTab === 'updates' && (
+                                <div className="p-6 h-full">
+                                    <UpdatesTab />
+                                </div>
+                            )}
 
-                        {activeTab === 'system' && (
-                            <SystemMonitor />
-                        )}
-                    </Suspense>
+                            {activeTab === 'system' && (
+                                <SystemMonitor />
+                            )}
+                        </Suspense>
+                    </div>
                 </div>
 
                 {/* Modals */}
@@ -305,17 +404,3 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ currentUser, onClose }) 
         </div>
     );
 };
-
-// Helper Component for Tabs
-const TabButton = ({ id, icon: Icon, label, activeTab, setActiveTab }: any) => (
-    <button
-        onClick={() => setActiveTab(id)}
-        className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-bold transition-all whitespace-nowrap ${activeTab === id
-            ? 'bg-theme-gold text-black shadow-md shadow-theme-gold/20'
-            : 'text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
-            }`}
-    >
-        <Icon size={16} strokeWidth={activeTab === id ? 2.5 : 2} />
-        <span>{label}</span>
-    </button>
-);

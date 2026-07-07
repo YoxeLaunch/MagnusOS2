@@ -3,7 +3,8 @@ import { BrowserRouter, Routes, Route, Navigate, useNavigate } from "react-route
 
 const FinanzaApp = lazy(() => import("./apps/finanza/App"));
 const MagnusApp = lazy(() => import("./apps/magnus/App"));
-const AuditorApp = lazy(() => import("./apps/auditor/App"));
+// Auditoría deshabilitada temporalmente (ver ruta /auditor más abajo)
+// const AuditorApp = lazy(() => import("./apps/auditor/App"));
 const ServerAdminApp = lazy(() => import("./apps/server-admin/App"));
 import { Login } from "./shared/components/auth/Login";
 import { Register } from "./shared/components/auth/Register";
@@ -89,13 +90,9 @@ function AppContent() {
                     ) : <Navigate to="/login" />
                 } />
 
-                <Route path="/auditor/*" element={
-                    user ? (
-                        <Suspense fallback={<div className="flex items-center justify-center min-h-screen text-lg">Cargando Auditoría...</div>}>
-                            <AuditorApp />
-                        </Suspense>
-                    ) : <Navigate to="/login" />
-                } />
+                {/* Auditoría deshabilitada temporalmente: el módulo sigue en src/apps/auditor.
+                    Para reactivarla, restaurar aquí <AuditorApp /> dentro de <Suspense>. */}
+                <Route path="/auditor/*" element={<Navigate to="/home" replace />} />
 
                 <Route path="/admin/*" element={
                     user ? (

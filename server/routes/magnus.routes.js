@@ -1,7 +1,9 @@
 import { Router } from 'express';
 import * as magnusController from '../controllers/magnusController.js';
+import * as publicationController from '../controllers/publicationController.js';
 import { updatePassword } from '../controllers/authController.js';
-import { verifyJWT } from '../middleware/auth.js';
+import { verifyJWT, requireSoberano } from '../middleware/auth.js';
+import fs from 'fs';
 
 const router = Router();
 
@@ -56,5 +58,35 @@ router.post('/curriculum/mission', magnusController.createMission);
 router.put('/curriculum/mission', magnusController.updateMission);
 router.delete('/curriculum/mission', magnusController.deleteMission);
 router.post('/upload', upload.single('image'), magnusController.uploadImage);
+
+// ========================================
+// Publicaciones (Blog de Mentoría)
+// Lectura para todos los usuarios autenticados; escritura solo soberano/admin
+// ========================================
+const publicationStorage = multer.diskStorage({
+    destination: (req, file, cb) => {
+        fs.mkdirSync(publicationController.UPLOADS_DIR, { recursive: true });
+        cb(null, publicationController.UPLOADS_DIR);
+    },
+    filename: (req, file, cb) => {
+        const name = file.originalname.toLowerCase().replace(/[^a-z0-9.]/g, '-');
+        cb(null, `pub-${Date.now()}-${name}`);
+    }
+});
+const publicationUpload = multer({
+    storage: publicationStorage,
+    limits: { fileSize: 15 * 1024 * 1024 }, // 15MB
+    fileFilter: (req, file, cb) => {
+        const allowed = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'application/pdf'];
+        if (allowed.includes(file.mimetype)) cb(null, true);
+        else cb(new Error('Solo se permiten imágenes (JPG, PNG, WEBP, GIF) y PDF'));
+    }
+});
+
+router.get('/publications', publicationController.getPublications);
+router.post('/publications', requireSoberano, publicationController.createPublication);
+router.put('/publications/:id', requireSoberano, publicationController.updatePublication);
+router.delete('/publications/:id', requireSoberano, publicationController.deletePublication);
+router.post('/publications/upload', requireSoberano, publicationUpload.single('file'), publicationController.uploadPublicationFile);
 
 export default router;

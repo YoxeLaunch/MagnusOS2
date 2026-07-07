@@ -4,6 +4,7 @@ import { Sidebar } from './components/Sidebar';
 // Lazy load components
 const Dashboard = lazy(() => import('./components/Dashboard').then(module => ({ default: module.Dashboard })));
 const MentorshipRoom = lazy(() => import('./components/MentorshipRoom').then(module => ({ default: module.MentorshipRoom })));
+const Publications = lazy(() => import('./components/Publications').then(module => ({ default: module.Publications })));
 const Laboratory = lazy(() => import('./components/Laboratory').then(module => ({ default: module.Laboratory })));
 const StyleLab = lazy(() => import('./pages/StyleLab').then(module => ({ default: module.StyleLab })));
 // const AdminPanel = lazy(() => import('./components/admin/AdminPanel').then(module => ({ default: module.AdminPanel })));
@@ -60,6 +61,8 @@ function App() {
               return <Dashboard onNavigate={(view) => setCurrentView(view)} />;
             case ViewState.WAR_ROOM:
               return <MentorshipRoom user={user} />;
+            case ViewState.PUBLICATIONS:
+              return <Publications user={user} />;
             case ViewState.LABORATORY:
               return <Laboratory />;
             case ViewState.STYLE_LAB:

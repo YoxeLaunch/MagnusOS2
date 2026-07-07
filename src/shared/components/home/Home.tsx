@@ -196,30 +196,26 @@ export const Home = ({ user, onLogout }: { user: User, onLogout: () => void }) =
                         </div>
                     </Link>
 
-                    {/* Auditor Card */}
-                    <Link to="/auditor" className="group relative">
-                        <div className="absolute inset-0 bg-emerald-500/10 dark:bg-emerald-500/5 rounded-[32px] blur-xl opacity-0 group-hover:opacity-100 transition-opacity duration-700"></div>
-                        <div className="relative h-full bg-white/80 dark:bg-[#111] border border-slate-200 dark:border-white/5 rounded-[32px] p-8 flex flex-col items-center text-center transition-all duration-500 hover:border-emerald-500/50 dark:hover:border-emerald-500/30 hover:bg-white dark:hover:bg-[#161616] hover:-translate-y-2 hover:shadow-2xl hover:shadow-emerald-500/10 dark:hover:shadow-emerald-500/5 overflow-hidden backdrop-blur-sm">
+                    {/* Auditor Card — acceso deshabilitado, el módulo sigue en src/apps/auditor */}
+                    <div className="group relative opacity-60 hover:opacity-100 grayscale transition-all duration-500 cursor-default">
+                        <div className="relative h-full bg-white/80 dark:bg-[#111] border border-dashed border-slate-300 dark:border-white/10 rounded-[32px] p-8 flex flex-col items-center text-center backdrop-blur-sm">
 
-                            {/* Inner Glow */}
-                            <div className="absolute top-0 right-0 w-64 h-64 bg-emerald-500/10 dark:bg-emerald-500/5 rounded-full blur-3xl -mr-20 -mt-20 opacity-0 group-hover:opacity-100 transition-opacity duration-700"></div>
-
-                            <div className="w-16 h-16 rounded-2xl bg-white dark:bg-[#0a0a0a] border border-slate-100 dark:border-white/5 flex items-center justify-center text-emerald-500 dark:text-emerald-400 mb-6 shadow-md dark:shadow-inner relative z-10 group-hover:scale-110 transition-transform duration-500">
-                                <Shield size={32} />
+                            <div className="w-16 h-16 rounded-2xl bg-slate-200 dark:bg-slate-800 flex items-center justify-center text-slate-400 mb-6 relative z-10">
+                                <Construction size={32} />
                             </div>
 
-                            <h2 className="text-2xl font-serif font-bold text-slate-800 dark:text-slate-200 mb-3 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors relative z-10">
-                                Auditoría
+                            <h2 className="text-2xl font-serif font-bold text-slate-400 dark:text-slate-500 mb-3 relative z-10">
+                                En Construcción
                             </h2>
-                            <p className="text-xs text-slate-500 leading-relaxed mb-6 relative z-10 font-light">
-                                Registro, control y gestión de expedientes.
+                            <p className="text-xs text-slate-400 dark:text-slate-500 leading-relaxed mb-6 relative z-10 font-light">
+                                Próximamente nueva sección disponible.
                             </p>
 
-                            <div className="mt-auto flex items-center text-[10px] font-bold text-emerald-500 dark:text-emerald-400 uppercase tracking-[0.2em] gap-2 opacity-60 group-hover:opacity-100 transition-all relative z-10">
-                                Acceder <ArrowRight size={12} className="group-hover:translate-x-1 transition-transform" />
+                            <div className="mt-auto flex items-center text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em] gap-2 relative z-10">
+                                Próximamente
                             </div>
                         </div>
-                    </Link>
+                    </div>
 
                 </div>
 

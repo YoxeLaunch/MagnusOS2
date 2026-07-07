@@ -3,6 +3,7 @@ import { LucideIcon } from 'lucide-react';
 export enum ViewState {
   DASHBOARD = 'DASHBOARD',
   WAR_ROOM = 'WAR_ROOM',
+  PUBLICATIONS = 'PUBLICATIONS',
   LABORATORY = 'LABORATORY',
   MINDSET = 'MINDSET',
   STYLE_LAB = 'STYLE_LAB'

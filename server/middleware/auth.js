@@ -61,6 +61,20 @@ export const optionalJWT = (req, res, next) => {
 };
 
 /**
+ * Middleware que restringe la ruta al usuario soberano (o rol admin).
+ * Debe usarse SIEMPRE después de verifyJWT.
+ */
+export const requireSoberano = (req, res, next) => {
+    const isSoberano = req.user &&
+        (req.user.role === 'admin' || req.user.username?.toLowerCase() === 'soberano');
+
+    if (!isSoberano) {
+        return res.status(403).json({ error: 'Acceso restringido al soberano.' });
+    }
+    next();
+};
+
+/**
  * Helper para generar un token JWT
  */
 export const generateToken = (user) => {
