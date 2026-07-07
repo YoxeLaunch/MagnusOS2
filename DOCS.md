@@ -421,7 +421,7 @@ Users
 
 CurrencyHistory (global, sin userId)
 Auditor (base de datos separada — registros de auditoría)
-System (base de datos separada — curriculum, misiones, mentores, checklist)
+System (base de datos separada — curriculum, misiones, mentores, checklist, publicaciones)
 \`\`\`
 
 ### 4.2 Tablas Principales (PostgreSQL)
@@ -555,11 +555,20 @@ GET/POST             /api/finanza/rates
 GET                  /api/finanza/rates/history
 \`\`\`
 
+### Publicaciones (Blog de Mentoría)
+\`\`\`
+GET    /api/publications                ← lectura: todo usuario autenticado
+POST   /api/publications                ← solo soberano/admin
+PUT    /api/publications/:id            ← solo soberano/admin
+DELETE /api/publications/:id            ← solo soberano/admin
+POST   /api/publications/upload         ← solo soberano/admin (multipart, imágenes y PDF, máx. 15MB)
+\`\`\`
+
 ### Sistema y Otros
 \`\`\`
 GET    /api/health             ← healthcheck Docker
 POST   /api/magnus/*           ← módulo personal
-GET    /api/auditor/*          ← auditoría contable
+GET    /api/auditor/*          ← auditoría contable (rutas activas en backend; sin acceso desde el menú del frontend)
 GET    /api/system/*           ← panel soberano
 POST   /api/econometrics/*     ← análisis econométrico
 /socket.io                     ← WebSocket endpoint (Socket.IO)

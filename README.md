@@ -25,13 +25,21 @@ El nombre "OS2" indica que es la **segunda generación** del sistema (evolución
 | Módulo | Descripción |
 |--------|-------------|
 | 💰 **Finanzas** | Ledger de doble entrada, flujo de caja, presupuesto, inversiones, metas de ahorro, proyecciones de fin de mes |
-| 📊 **Auditor** | Módulo de auditoría contable y reconciliación de cuentas |
 | 🤖 **Magnus / Lab IA** | Panel personal, mentores IA, centro de comando, econometría |
-| 🛡️ **Panel Soberano** | Control administrativo, métricas de hardware, gestión de usuarios, Docker API |
+| 📰 **Publicaciones** | Blog interno de Mentoría: el soberano publica entradas con PDFs e imágenes; el resto de usuarios las lee |
+| 🛡️ **Panel Soberano** | Panel de administración con sidebar (Usuarios, Mentores, Pensum, Economía, Sistema, Comms, Novedades, Portada), métricas de hardware, Docker API |
+| 📊 **Auditor** | Módulo de auditoría contable y reconciliación de cuentas — *temporalmente deshabilitado en el menú, el código se conserva para reactivarlo* |
 | 🌐 **Internacionalización** | Sistema multi-idiomas con i18next |
 | ⚡ **Tiempo Real** | WebSocket (Socket.IO) para notificaciones y actualizaciones en vivo |
 | 🐍 **Sandbox Python** | Contenedor aislado para analítica avanzada y ML (futuro) |
 | 🧠 **Ollama IA Local** | LLM hospedado localmente sin envío de datos a terceros |
+
+### 🆕 Actualizaciones Recientes
+
+- **Blog de Publicaciones (Mentoría):** el usuario soberano crea entradas con imágenes de portada, contenido y adjuntos (PDF/imágenes hasta 15MB); el resto de usuarios solo lee.
+- **Panel Soberano rediseñado:** de modal con pestañas horizontales a un layout de panel de administración con sidebar lateral agrupado por Comunidad / Operación / Comunicación.
+- **Auditoría deshabilitada temporalmente:** la tarjeta en Home y la ruta `/auditor` quedan inactivas; el módulo sigue en `src/apps/auditor` listo para reactivarse.
+- **Fix de impresión:** el reporte PDF ya no suma un salario "viejo" y uno "nuevo" como si coexistieran — respeta las fechas de vigencia (`validFrom`/`validTo`) y solo cuenta el ingreso activo hoy.
 
 ---
 
@@ -156,8 +164,8 @@ Magnus-OS2/
 ├── src/                       # Frontend React/TypeScript
 │   ├── apps/
 │   │   ├── finanza/           # Módulo financiero principal
-│   │   ├── magnus/            # Dashboard + Lab IA + Centro Comando
-│   │   ├── auditor/           # Auditoría contable
+│   │   ├── magnus/            # Dashboard + Lab IA + Centro Comando + Publicaciones
+│   │   ├── auditor/           # Auditoría contable (deshabilitado en el menú, código conservado)
 │   │   └── server-admin/      # Panel soberano de administración
 │   ├── context/               # React Context providers
 │   └── shared/                # Componentes y utils compartidos
