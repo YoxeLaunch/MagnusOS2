@@ -9,8 +9,8 @@ import { AdminPanel } from '../../../apps/magnus/components/admin/AdminPanel';
 import { ParticlesBackground } from '../ui/ParticlesBackground';
 import { WelcomeIntro } from './WelcomeIntro';
 import { HomeHeader } from './HomeHeader';
-import { UpdatesWidget } from './UpdatesWidget';
-import { ServerServices } from './ServerServices';
+// import { UpdatesWidget } from './UpdatesWidget'; // Moved to WelcomeIntro panel
+// import { ServerServices } from './ServerServices'; // Hidden — preserved for future use
 import { useChat } from '../../context/ChatContext';
 import { useTime } from '../../../context/TimeContext';
 
@@ -219,11 +219,11 @@ export const Home = ({ user, onLogout }: { user: User, onLogout: () => void }) =
 
                 </div>
 
-                {/* Server Services Quick Links */}
-                <ServerServices />
+                {/* Server Services Quick Links — hidden, preserved for future use */}
+                {/* <ServerServices /> */}
 
-                {/* Updates / Changelog Section */}
-                <UpdatesWidget />
+                {/* Updates / Changelog — moved to WelcomeIntro panel */}
+                {/* <UpdatesWidget /> */}
             </div>
 
             {/* Footer Signature */}

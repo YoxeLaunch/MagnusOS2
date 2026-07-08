@@ -3,6 +3,7 @@ import gradient from 'gradient-string';
 import boxen from 'boxen';
 import chalk from 'chalk';
 import os from 'os';
+import Docker from 'dockerode';
 
 // --- UI HELPERS ---
 const printHeader = () => {
@@ -48,6 +49,70 @@ ${localAccessLines.trim()}
     }));
 };
 
+const cleanContainerName = (raw) => {
+    const name = raw.replace(/^\//, '');
+    // Strip Docker Swarm-style suffix: name.<replica>.<taskid>
+    const swarmMatch = name.match(/^(.+)\.(\d+)\.[a-z0-9]{20,}$/i);
+    return swarmMatch ? `${swarmMatch[1]} #${swarmMatch[2]}` : name;
+};
+
+const statusStyle = (state, status) => {
+    if (state === 'running') {
+        if (/unhealthy/i.test(status)) return { icon: chalk.yellow('●'), text: chalk.yellow(status) };
+        if (/health: starting/i.test(status)) return { icon: chalk.cyan('●'), text: chalk.cyan(status) };
+        return { icon: chalk.green('●'), text: chalk.green(status) };
+    }
+    if (state === 'restarting') return { icon: chalk.yellow('◐'), text: chalk.yellow(status) };
+    return { icon: chalk.red('○'), text: chalk.dim.red(status) };
+};
+
+const printDockerStatus = async () => {
+    let containers;
+    try {
+        const docker = new Docker();
+        containers = await docker.listContainers({ all: true });
+    } catch (err) {
+        console.log(boxen(chalk.red('Docker no disponible en este host.'), {
+            padding: 1, margin: 1, borderStyle: 'round', borderColor: 'red',
+            title: ' CONTENEDORES DOCKER ', titleAlignment: 'center'
+        }));
+        return;
+    }
+
+    if (containers.length === 0) {
+        console.log(boxen(chalk.dim('No hay contenedores.'), {
+            padding: 1, margin: 1, borderStyle: 'round', borderColor: 'gray',
+            title: ' CONTENEDORES DOCKER ', titleAlignment: 'center'
+        }));
+        return;
+    }
+
+    containers.sort((a, b) => (a.State === 'running' ? 0 : 1) - (b.State === 'running' ? 0 : 1));
+
+    const runningCount = containers.filter(c => c.State === 'running').length;
+    const nameWidth = Math.min(28, Math.max(...containers.map(c => cleanContainerName(c.Names[0]).length)));
+
+    const lines = containers.map((c) => {
+        const name = cleanContainerName(c.Names[0]).padEnd(nameWidth).slice(0, nameWidth);
+        const { icon, text } = statusStyle(c.State, c.Status);
+        const ports = (c.Ports || [])
+            .filter(p => p.PublicPort)
+            .map(p => p.PublicPort)
+            .filter((v, i, arr) => arr.indexOf(v) === i)
+            .join(', ');
+        const portsText = ports ? chalk.dim(`  :${ports}`) : '';
+        return `${icon} ${chalk.white(name)}  ${text}${portsText}`;
+    });
+
+    const summary = chalk.bold.white(`${runningCount}/${containers.length} en ejecución`);
+
+    console.log(boxen(`${lines.join('\n')}\n\n${summary}`, {
+        padding: 1, margin: 1, borderStyle: 'round', borderColor: runningCount === containers.length ? 'green' : 'yellow',
+        title: ' CONTENEDORES DOCKER ', titleAlignment: 'center'
+    }));
+};
+
 // --- MAIN EXECUTION ---
 printHeader();
 printStatusBox();
+await printDockerStatus();
