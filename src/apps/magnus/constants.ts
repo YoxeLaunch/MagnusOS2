@@ -8,11 +8,11 @@ import {
 import { NavItem, ViewState, StrategyScenario } from './types';
 
 export const NAV_ITEMS: NavItem[] = [
-  { id: ViewState.DASHBOARD, label: 'Panel Principal', icon: LayoutDashboard },
-  { id: ViewState.WAR_ROOM, label: 'Sala de Mentorías', icon: Book },
+  // { id: ViewState.DASHBOARD, label: 'Panel Principal', icon: LayoutDashboard },
+  // { id: ViewState.WAR_ROOM, label: 'Sala de Mentorías', icon: Book },
   { id: ViewState.PUBLICATIONS, label: 'Publicaciones', icon: Newspaper },
-  { id: ViewState.LABORATORY, label: 'Laboratorio', icon: FlaskConical },
-  { id: ViewState.MINDSET, label: 'Mentalidad Fénix', icon: User },
+  // { id: ViewState.LABORATORY, label: 'Laboratorio', icon: FlaskConical },
+  // { id: ViewState.MINDSET, label: 'Mentalidad Fénix', icon: User },
 ];
 
 export const SCENARIOS: StrategyScenario[] = [

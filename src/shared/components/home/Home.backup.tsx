@@ -153,8 +153,8 @@ export const Home = ({ user, onLogout }: { user: User, onLogout: () => void }) =
                                 <MagnusIcon size={32} />
                             </div>
 
-                            <h2 className="text-2xl font-serif font-bold text-slate-900 dark:text-white mb-3 group-hover:text-theme-gold transition-colors relative z-10">
-                                Mentoria Magnus
+                            <h2 className="text-2xl font-serif font-bold text-slate-800 dark:text-slate-200 mb-3 group-hover:text-theme-gold transition-colors relative z-10">
+                                Conocimientos Magnus
                             </h2>
                             <p className="text-sm text-slate-500 dark:text-slate-400 mb-6 leading-relaxed relative z-10">
                                 Sistema operativo personal. Gestión de estrategia, mapas mentales y mentorías.

@@ -159,7 +159,7 @@ export const Home = ({ user, onLogout }: { user: User, onLogout: () => void }) =
                             </div>
 
                             <h2 className="text-2xl font-serif font-bold text-slate-800 dark:text-slate-200 mb-3 group-hover:text-theme-gold transition-colors relative z-10">
-                                Mentoria
+                                Conocimientos Magnus
                             </h2>
                             <p className="text-xs text-slate-500 leading-relaxed mb-6 relative z-10 font-light">
                                 Estrategia, conocimiento y mapas mentales.

@@ -152,10 +152,10 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
                                         <Home size={20} />
                                         <span className="text-[10px] mt-1 font-bold">Inicio</span>
                                     </Link>
-                                    <Link to={currentApp === 'auditor' ? '/magnus' : '/auditor'} className="flex flex-col items-center justify-center p-3 rounded-xl bg-slate-50 dark:bg-white/5 text-slate-500 hover:text-emerald-500 border border-slate-200 dark:border-white/5 transition-colors">
+                                    {/* <Link to={currentApp === 'auditor' ? '/magnus' : '/auditor'} className="flex flex-col items-center justify-center p-3 rounded-xl bg-slate-50 dark:bg-white/5 text-slate-500 hover:text-emerald-500 border border-slate-200 dark:border-white/5 transition-colors">
                                         <ShieldCheck size={20} />
                                         <span className="text-[10px] mt-1 font-bold">Auditoría</span>
-                                    </Link>
+                                    </Link> */}
                                     <Link to={switchAppTarget} className="flex flex-col items-center justify-center p-3 rounded-xl bg-slate-50 dark:bg-white/5 text-slate-500 hover:text-theme-gold border border-slate-200 dark:border-white/5 transition-colors">
                                         <SwitchIcon size={20} />
                                         <span className="text-[10px] mt-1 font-bold">Cambiar</span>

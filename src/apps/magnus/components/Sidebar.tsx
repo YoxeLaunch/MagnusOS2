@@ -53,7 +53,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               </div>
               <div className="hidden lg:block ml-4">
                 <h1 className="font-serif font-bold text-xl tracking-widest text-slate-900 dark:text-white">
-                  MENTORIA <span className="text-theme-gold drop-shadow-[0_0_10px_rgba(212,175,55,0.5)]">MAGNUS</span>
+                  CONOCIMIENTOS <span className="text-theme-gold drop-shadow-[0_0_10px_rgba(212,175,55,0.5)]">MAGNUS</span>
                 </h1>
               </div>
             </div>
@@ -114,13 +114,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <Wallet size={18} className="group-hover:rotate-12 transition-transform" />
             </Link>
 
-            <Link
+            {/* <Link
               to="/auditor"
               className="flex items-center justify-center p-2 rounded-xl bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 text-slate-500 hover:text-emerald-500 hover:border-emerald-500/30 transition-all shadow-sm group"
               title="Ir a Auditoría"
             >
               <ShieldCheck size={18} className="group-hover:scale-110 transition-transform" />
-            </Link>
+            </Link> */}
           </div>
 
           <button

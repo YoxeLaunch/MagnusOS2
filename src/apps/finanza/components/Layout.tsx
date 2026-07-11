@@ -95,9 +95,9 @@ const Sidebar = ({ isDark, toggleTheme }: any) => {
             <Link to="/magnus" className="flex items-center justify-center p-2 rounded-xl bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 text-slate-500 hover:text-theme-gold hover:border-theme-gold/30 transition-all shadow-sm group" title="Ir a Mentoría Magnus">
               <Brain size={18} className="group-hover:rotate-12 transition-transform" />
             </Link>
-            <Link to="/auditor" className="flex items-center justify-center p-2 rounded-xl bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 text-slate-500 hover:text-emerald-500 hover:border-emerald-500/30 transition-all shadow-sm group" title="Ir a Auditoría">
+            {/* <Link to="/auditor" className="flex items-center justify-center p-2 rounded-xl bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 text-slate-500 hover:text-emerald-500 hover:border-emerald-500/30 transition-all shadow-sm group" title="Ir a Auditoría">
               <ShieldCheck size={18} className="group-hover:scale-110 transition-transform" />
-            </Link>
+            </Link> */}
           </div>
 
           <button onClick={toggleTheme} className="w-full flex items-center justify-center gap-3 px-4 py-3 rounded-xl text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-white/5 hover:text-slate-900 dark:hover:text-white transition-all duration-200 group border border-transparent hover:border-slate-200 dark:hover:border-white/5">
