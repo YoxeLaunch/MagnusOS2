@@ -36,7 +36,7 @@ const MOCK_UPDATES: Update[] = [
         id: '3',
         title: 'Integración con Gemini',
         date: '28 de Diciembre, 2025',
-        description: 'La inteligencia artificial ahora potencia tus análisis estratégicos en Conocimientos Magnus.',
+        description: 'La inteligencia artificial ahora potencia tus análisis estratégicos en Sabiduría Magnus.',
         tag: 'IA'
     }
 ];

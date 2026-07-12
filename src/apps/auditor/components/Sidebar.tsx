@@ -105,7 +105,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                         <Link
                             to="/magnus"
                             className="flex items-center justify-center p-2 rounded-xl bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 text-slate-500 hover:text-theme-gold hover:border-theme-gold/30 transition-all shadow-sm group"
-                            title="Ir a Conocimientos Magnus"
+                            title="Ir a Sabiduría Magnus"
                         >
                             <Brain size={18} className="group-hover:rotate-12 transition-transform" />
                         </Link>

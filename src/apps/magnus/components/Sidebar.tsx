@@ -53,7 +53,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               </div>
               <div className="hidden lg:block ml-4">
                 <h1 className="font-serif font-bold text-xl tracking-widest text-slate-900 dark:text-white">
-                  CONOCIMIENTOS <span className="text-theme-gold drop-shadow-[0_0_10px_rgba(212,175,55,0.5)]">MAGNUS</span>
+                  SABIDURÍA <span className="text-theme-gold drop-shadow-[0_0_10px_rgba(212,175,55,0.5)]">MAGNUS</span>
                 </h1>
               </div>
             </div>
