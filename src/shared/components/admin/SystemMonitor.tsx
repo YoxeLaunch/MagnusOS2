@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Activity, Database, Server, Clock, Cpu, HardDrive } from 'lucide-react';
+import { apiFetch } from '../../utils/apiFetch';
 
 interface SystemStats {
     uptime: number;
@@ -26,7 +27,7 @@ export const SystemMonitor: React.FC = () => {
 
     const fetchStats = async () => {
         try {
-            const response = await fetch(`/api/system/stats`);
+            const response = await apiFetch(`/api/system/stats`);
             if (response.ok) {
                 const data = await response.json();
                 setStats(data);
