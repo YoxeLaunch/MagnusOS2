@@ -543,15 +543,21 @@ export const Projections: React.FC = () => {
 
 
             {/* Advanced Analysis Section */}
-            <div className="grid grid-cols-1 space-y-8">
+            <div className="space-y-8">
                 <MonteCarloRisk />
-                <ScenarioSimulator />
+
+                {/* Scenario Simulator + Manual Events side by side: neither needs full width */}
+                <div className="grid grid-cols-1 xl:grid-cols-2 gap-8 items-start">
+                    <ScenarioSimulator />
+                    <ManualEventInput
+                        events={manualEvents}
+                        onAddEvent={(e) => setManualEvents(prev => [...prev, e])}
+                        onRemoveEvent={(id) => setManualEvents(prev => prev.filter(e => e.id !== id))}
+                    />
+                </div>
+
+                {/* Heatmap and Sankey need horizontal room, kept full width */}
                 <SpendingHeatmap />
-                <ManualEventInput
-                    events={manualEvents}
-                    onAddEvent={(e) => setManualEvents(prev => [...prev, e])}
-                    onRemoveEvent={(id) => setManualEvents(prev => prev.filter(e => e.id !== id))}
-                />
                 <FinancialSankey />
             </div>
 

@@ -12,6 +12,7 @@
 
 import React, { useMemo, useState, useEffect } from 'react';
 import { Flame, TrendingUp, Target, Clock, DollarSign, Percent, Settings } from 'lucide-react';
+import { formatCurrency } from '../utils/calculations';
 
 // ============================================================================
 // TYPES
@@ -268,14 +269,6 @@ export const FIRECalculator: React.FC<FIRECalculatorProps> = ({
             safeWithdrawalRate: swr
         });
     }, [currentPortfolio, annualExpenses, annualSavings, expectedReturn, swr]);
-
-    const formatCurrency = (value: number) => {
-        return new Intl.NumberFormat('es-MX', {
-            style: 'currency',
-            currency: 'MXN',
-            maximumFractionDigits: 0
-        }).format(value);
-    };
 
     return (
         <div className="bg-white/80 dark:bg-black/40 backdrop-blur-xl rounded-2xl border border-slate-200 dark:border-white/10 shadow-sm overflow-hidden">

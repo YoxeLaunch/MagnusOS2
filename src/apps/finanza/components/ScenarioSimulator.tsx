@@ -9,6 +9,7 @@ import React, { useState, useMemo, useCallback } from 'react';
 import { Sliders, TrendingUp, TrendingDown, RotateCcw, Info } from 'lucide-react';
 import { useData } from '../context/DataContext';
 import { getCycleId } from '../utils/financialCycle';
+import { formatCurrency } from '../utils/calculations';
 
 interface ScenarioState {
     incomeMultiplier: number; // 0.5 to 2.0 (50% to 200%)
@@ -30,16 +31,6 @@ const DEFAULT_SCENARIO: ScenarioState = {
     incomeMultiplier: 1.0,
     expenseMultiplier: 1.0,
     savingsRate: 0
-};
-
-// Helper to format currency
-const formatCurrency = (value: number): string => {
-    return new Intl.NumberFormat('es-MX', {
-        style: 'currency',
-        currency: 'USD',
-        minimumFractionDigits: 0,
-        maximumFractionDigits: 0
-    }).format(value);
 };
 
 // Custom Slider Component
