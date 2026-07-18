@@ -3,6 +3,10 @@ import { BrowserRouter, Routes, Route, Navigate, useNavigate } from "react-route
 
 const FinanzaApp = lazy(() => import("./apps/finanza/App"));
 const MagnusApp = lazy(() => import("./apps/magnus/App"));
+const LandingApp = lazy(() => import("./apps/landing/App"));
+const Privacidad = lazy(() => import("./apps/landing/legal/Privacidad"));
+const Terminos = lazy(() => import("./apps/landing/legal/Terminos"));
+const Seguridad = lazy(() => import("./apps/landing/legal/Seguridad"));
 // Auditoría deshabilitada temporalmente (ver ruta /auditor más abajo)
 // const AuditorApp = lazy(() => import("./apps/auditor/App"));
 const ServerAdminApp = lazy(() => import("./apps/server-admin/App"));
@@ -42,8 +46,33 @@ function AppContent() {
     return (
         <>
             <Routes>
-                {/* Public Landing (Disabled) */}
-                <Route path="/" element={<Navigate to="/login" replace />} />
+                {/* Public Landing */}
+                <Route path="/" element={
+                    !user ? (
+                        <Suspense fallback={<div className="flex items-center justify-center min-h-screen text-lg">Cargando...</div>}>
+                            <LandingApp />
+                        </Suspense>
+                    ) : (
+                        <Navigate to="/home" replace />
+                    )
+                } />
+
+                {/* Public legal pages (marketing site) */}
+                <Route path="/privacidad" element={
+                    <Suspense fallback={<div className="flex items-center justify-center min-h-screen text-lg">Cargando...</div>}>
+                        <Privacidad />
+                    </Suspense>
+                } />
+                <Route path="/terminos" element={
+                    <Suspense fallback={<div className="flex items-center justify-center min-h-screen text-lg">Cargando...</div>}>
+                        <Terminos />
+                    </Suspense>
+                } />
+                <Route path="/seguridad" element={
+                    <Suspense fallback={<div className="flex items-center justify-center min-h-screen text-lg">Cargando...</div>}>
+                        <Seguridad />
+                    </Suspense>
+                } />
 
                 {/* Auth Routes */}
                 <Route path="/login" element={

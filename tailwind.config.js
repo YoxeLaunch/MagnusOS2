@@ -26,14 +26,24 @@ export default {
                 "card-dark": "#121212",
                 theme: {
                     gold: '#D4AF37',
+                    "gold-dark": '#B5952F',
                     dark: '#000000',
                     card: '#050505',
                     sidebar: '#000000',
                     accent: '#111111'
                 },
+
+                // Landing page (marketing site) palette
+                "accent-green": "#00C853",
+                "accent-blue": "#2962FF",
+                "accent-orange": "#FF6D00",
+                "accent-purple": "#6200EA",
+                "surface-dark": "#121418",
+                "surface-light": "#FFFFFF",
             },
             fontFamily: {
                 sans: ["Manrope", "sans-serif"],
+                display: ["Playfair Display", "serif"],
             },
         },
     },

@@ -18,7 +18,7 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             if (savedTheme === 'dark' || savedTheme === 'light') {
                 return savedTheme;
             }
-            return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+            return 'dark'; // Magnus is designed dark-first; ignore OS preference until the user explicitly toggles
         }
         return 'dark'; // Default to dark preference for this user profile if unsure
     });
