@@ -94,13 +94,24 @@ export const calculateFlowData = (transactions: DailyTransaction[]): FlowData | 
     nodes.push({ name: 'Ingresos Totales', value: avgIncome, type: 'source', color: '#10B981' });
 
     // Target Nodes: Expense Categories
-    // Sort categories by size
+    // Sort categories by size, keep only the top ones and group the rest into "Otros"
+    // so the diagram stays readable and doesn't grow unbounded in height.
+    const MAX_CATEGORIES = 8;
     const sortedCategories = Object.entries(avgExpenses).sort((a, b) => b[1] - a[1]);
+    const topCategories = sortedCategories.slice(0, MAX_CATEGORIES);
+    const restCategories = sortedCategories.slice(MAX_CATEGORIES);
 
-    sortedCategories.forEach(([cat, amount]) => {
+    topCategories.forEach(([cat, amount]) => {
         nodes.push({ name: cat, value: amount, type: 'target', color: '#EF4444' });
         links.push({ source: 'Ingresos Totales', target: cat, value: amount });
     });
+
+    if (restCategories.length > 0) {
+        const otherAmount = restCategories.reduce((sum, [, amount]) => sum + amount, 0);
+        const otherLabel = `Otros (${restCategories.length})`;
+        nodes.push({ name: otherLabel, value: otherAmount, type: 'target', color: '#EF4444' });
+        links.push({ source: 'Ingresos Totales', target: otherLabel, value: otherAmount });
+    }
 
     // Savings / Deficit Node
     const balance = avgIncome - totalAvgExpense;

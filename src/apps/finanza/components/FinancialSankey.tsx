@@ -13,9 +13,10 @@ export const FinancialSankey: React.FC = () => {
 
     const { nodes, links, totalIncome } = data;
 
-    // Canvas dimensions
+    // Canvas dimensions (capped so the diagram never dominates the page,
+    // regardless of how many expense categories the user has)
     const width = 800;
-    const height = Math.max(400, links.length * 60);
+    const height = Math.min(560, Math.max(400, links.length * 60));
     const padding = 40;
     const columnWidth = 150;
     const nodeWidth = 10;
