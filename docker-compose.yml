@@ -48,6 +48,7 @@ services:
       - "4000:4000"
     volumes:
       - ./server/data:/app/server/data
+      - /home/osvaldo/backups/magnus-os2:/app/server/data/backups
     depends_on:
       postgres:
         condition: service_healthy

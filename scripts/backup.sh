@@ -8,9 +8,9 @@
 set -e
 
 # Configuration
-BACKUP_DIR="${BACKUP_DIR:-/backups}"
+BACKUP_DIR="${BACKUP_DIR:-/home/osvaldo/backups/magnus-os2}"
 RETENTION_DAYS="${RETENTION_DAYS:-14}"
-POSTGRES_CONTAINER="${POSTGRES_CONTAINER:-magnus_os2_postgres}"
+POSTGRES_CONTAINER="${POSTGRES_CONTAINER:-magnus_postgres}"
 POSTGRES_DB="${POSTGRES_DB:-magnus}"
 POSTGRES_USER="${POSTGRES_USER:-magnus}"
 

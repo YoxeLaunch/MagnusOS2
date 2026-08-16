@@ -1,4 +1,5 @@
 import { listContainers, getContainerStats, getDockerInstance } from '../services/dockerService.js';
+import { getGlobalStats } from '../services/systemService.js';
 
 export const initDockerSocket = (io) => {
     const dockerNamespace = io.of('/docker');
@@ -6,6 +7,7 @@ export const initDockerSocket = (io) => {
     dockerNamespace.on('connection', (socket) => {
         console.log('[DockerSocket] Client connected:', socket.id);
         let statusInterval = null;
+        let systemInterval = null;
         let stream = null;
 
         // --- Container Management ---
@@ -13,6 +15,21 @@ export const initDockerSocket = (io) => {
             const containers = await listContainers();
             if (typeof callback === 'function') callback(containers);
             else socket.emit('containers-list', containers);
+        });
+
+        // --- Global System Stats (HUD) ---
+        socket.on('subscribe-system-stats', () => {
+            if (systemInterval) clearInterval(systemInterval);
+
+            socket.emit('system-stats', getGlobalStats());
+            systemInterval = setInterval(() => {
+                socket.emit('system-stats', getGlobalStats());
+            }, 4000);
+        });
+
+        socket.on('unsubscribe-system-stats', () => {
+            if (systemInterval) clearInterval(systemInterval);
+            systemInterval = null;
         });
 
         // --- Stats Streaming ---
@@ -94,6 +111,7 @@ export const initDockerSocket = (io) => {
         socket.on('disconnect', () => {
             console.log('[DockerSocket] Client disconnected');
             if (statusInterval) clearInterval(statusInterval);
+            if (systemInterval) clearInterval(systemInterval);
             if (stream) stream.end();
         });
     });

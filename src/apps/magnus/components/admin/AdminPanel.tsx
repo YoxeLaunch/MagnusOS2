@@ -1,5 +1,5 @@
 import React, { useEffect, useState, lazy, Suspense } from 'react';
-import { Crown, X, Users, Calendar, BookOpen, DollarSign, Activity, Bell, Image, Radio as LucideRadio, Search, AlertTriangle, TrendingUp } from 'lucide-react';
+import { Crown, X, Users, Calendar, BookOpen, DollarSign, Activity, Bell, Image, Radio as LucideRadio, Search, AlertTriangle, TrendingUp, HardDrive } from 'lucide-react';
 import { useToast } from '../../../../shared/context/ToastContext';
 import { useDebounce } from '../../../../shared/hooks/useDebounce';
 import { User } from '../../types';
@@ -17,6 +17,7 @@ const EconomyTab = lazy(() => import('./tabs/EconomyTab').then(module => ({ defa
 const CurriculumTab = lazy(() => import('./tabs/CurriculumTab').then(module => ({ default: module.CurriculumTab })));
 const BroadcastTab = lazy(() => import('./tabs/BroadcastTab').then(module => ({ default: module.BroadcastTab })));
 const UpdatesTab = lazy(() => import('./tabs/UpdatesTab').then(module => ({ default: module.UpdatesTab })));
+const BackupTab = lazy(() => import('./tabs/BackupTab').then(module => ({ default: module.BackupTab })));
 
 
 interface AdminPanelProps {
@@ -24,7 +25,7 @@ interface AdminPanelProps {
     onClose: () => void;
 }
 
-type TabId = 'users' | 'economy' | 'mentors' | 'curriculum' | 'system' | 'broadcast' | 'updates' | 'landing';
+type TabId = 'users' | 'economy' | 'mentors' | 'curriculum' | 'system' | 'broadcast' | 'updates' | 'landing' | 'backup';
 
 // Menú del panel: mismas 8 secciones de siempre, agrupadas como panel de administración
 const NAV_GROUPS: { group: string; items: { id: TabId; icon: any; label: string; description: string }[] }[] = [
@@ -41,6 +42,7 @@ const NAV_GROUPS: { group: string; items: { id: TabId; icon: any; label: string;
         items: [
             { id: 'economy', icon: DollarSign, label: 'Economía', description: 'Indicadores y configuración económica' },
             { id: 'system', icon: Activity, label: 'Sistema', description: 'Monitor de recursos y estado del servidor' },
+            { id: 'backup', icon: HardDrive, label: 'Backups', description: 'Copias de seguridad de la base de datos' },
         ]
     },
     {
@@ -352,6 +354,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ currentUser, onClose }) 
 
                             {activeTab === 'system' && (
                                 <SystemMonitor />
+                            )}
+
+                            {activeTab === 'backup' && (
+                                <BackupTab />
                             )}
                         </Suspense>
                     </div>

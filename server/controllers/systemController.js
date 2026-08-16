@@ -3,6 +3,8 @@ import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
+import { spawn } from 'child_process';
+import zlib from 'zlib';
 import { SystemUpdate, AppSettings } from '../models/system/index.js';
 
 // ... imports ...
@@ -145,37 +147,126 @@ export const sendBroadcast = (req, res) => {
 };
 
 // --- BACKUP ---
+// Respalda la base de datos Postgres directamente vía red (pg_dump | gzip), sin
+// depender del socket de Docker. Comparte carpeta con scripts/backup.sh (cron del host)
+// mediante el volumen /home/osvaldo/backups/magnus-os2 -> /app/server/data/backups.
+const BACKUP_DIR = path.join(__dirname, '../data/backups');
+const SAFE_BACKUP_NAME = /^magnus_[\w-]+\.sql\.gz$/;
+let isBackingUp = false;
+
+const ensureBackupDir = () => {
+    if (!fs.existsSync(BACKUP_DIR)) {
+        fs.mkdirSync(BACKUP_DIR, { recursive: true });
+    }
+};
+
 export const backupDatabase = (req, res) => {
-    try {
-        const backupDir = path.join(__dirname, '../../backups');
-        if (!fs.existsSync(backupDir)) {
-            fs.mkdirSync(backupDir, { recursive: true });
+    if (isBackingUp) {
+        return res.status(409).json({ error: 'Ya hay un proceso de backup en curso.' });
+    }
+
+    ensureBackupDir();
+
+    const databaseUrl = process.env.DATABASE_URL;
+    if (!databaseUrl) {
+        return res.status(500).json({ error: 'DATABASE_URL no configurada' });
+    }
+
+    isBackingUp = true;
+
+    // Mismo formato que scripts/backup.sh (date +%Y-%m-%d_%H-%M-%S) para listar ambos orígenes de forma consistente.
+    const timestamp = new Date().toISOString().slice(0, 19).replace('T', '_').replace(/:/g, '-');
+    const filename = `magnus_${timestamp}.sql.gz`;
+    const destPath = path.join(BACKUP_DIR, filename);
+
+    const dump = spawn('pg_dump', [databaseUrl]);
+    const out = fs.createWriteStream(destPath);
+    let stderr = '';
+    let responded = false;
+    let exitCode = null;
+    let fileFinished = false;
+
+    dump.stderr.on('data', chunk => { stderr += chunk.toString(); });
+
+    const fail = (message, details) => {
+        isBackingUp = false;
+        if (responded) return;
+        responded = true;
+        fs.unlink(destPath, () => {});
+        console.error('[BACKUP]', message, details || '');
+        res.status(500).json({ error: message, details });
+    };
+
+    const finalize = () => {
+        if (responded || exitCode === null || !fileFinished) return;
+        if (exitCode !== 0) {
+            return fail('Backup falló', stderr);
         }
-
-        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-        const dbs = ['finanza.db', 'magnus_system.db'];
-        const results = [];
-
-        dbs.forEach(dbName => {
-            const dbPath = path.join(__dirname, '..', dbName);
-            if (fs.existsSync(dbPath)) {
-                const destPath = path.join(backupDir, `${dbName.replace('.db', '')}-${timestamp}.db`);
-                fs.copyFileSync(dbPath, destPath);
-                results.push({
-                    original: dbName,
-                    backup: path.basename(destPath)
-                });
-            }
-        });
-
+        const stats = fs.statSync(destPath);
+        if (stats.size === 0) {
+            return fail('El archivo de backup generado está vacío');
+        }
+        isBackingUp = false;
+        responded = true;
         res.json({
             success: true,
-            message: `Created ${results.length} backups`,
-            backups: results
+            message: 'Backup creado correctamente',
+            backup: { name: filename, size: stats.size, createdAt: stats.mtime }
         });
+    };
+
+    dump.on('error', err => fail('pg_dump no disponible en el contenedor', err.message));
+    dump.on('close', code => { exitCode = code; finalize(); });
+
+    dump.stdout.pipe(zlib.createGzip()).pipe(out);
+    out.on('finish', () => { fileFinished = true; finalize(); });
+    out.on('error', err => fail('Error escribiendo el archivo de backup', err.message));
+};
+
+export const listBackups = (req, res) => {
+    try {
+        ensureBackupDir();
+        const backups = fs.readdirSync(BACKUP_DIR)
+            .filter(f => f.endsWith('.sql.gz'))
+            .map(f => {
+                const stats = fs.statSync(path.join(BACKUP_DIR, f));
+                return { name: f, size: stats.size, createdAt: stats.mtime };
+            })
+            .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+        res.json({ backups });
     } catch (error) {
-        console.error('[BACKUP] Error:', error);
-        res.status(500).json({ error: 'Backup failed internal server error' });
+        console.error('[BACKUP] Error listando:', error);
+        res.status(500).json({ error: 'Error listando backups' });
+    }
+};
+
+export const downloadBackup = (req, res) => {
+    const { filename } = req.params;
+    if (!SAFE_BACKUP_NAME.test(filename)) {
+        return res.status(400).json({ error: 'Nombre de archivo inválido' });
+    }
+    const filePath = path.join(BACKUP_DIR, filename);
+    if (!fs.existsSync(filePath)) {
+        return res.status(404).json({ error: 'Backup no encontrado' });
+    }
+    res.download(filePath, filename);
+};
+
+export const deleteBackup = (req, res) => {
+    const { filename } = req.params;
+    if (!SAFE_BACKUP_NAME.test(filename)) {
+        return res.status(400).json({ error: 'Nombre de archivo inválido' });
+    }
+    const filePath = path.join(BACKUP_DIR, filename);
+    if (!fs.existsSync(filePath)) {
+        return res.status(404).json({ error: 'Backup no encontrado' });
+    }
+    try {
+        fs.unlinkSync(filePath);
+        res.json({ success: true, message: 'Backup eliminado correctamente' });
+    } catch (error) {
+        console.error('[BACKUP] Error eliminando:', error);
+        res.status(500).json({ error: 'Error eliminando el archivo de backup' });
     }
 };
 

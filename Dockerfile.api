@@ -15,6 +15,9 @@ RUN npm run build
 FROM node:20-alpine
 WORKDIR /app
 
+# pg_dump (16.x, igual que el servidor postgres:16-alpine) para backups desde el panel admin
+RUN apk add --no-cache postgresql16-client
+
 # Install production dependencies only
 COPY package*.json ./
 RUN npm ci --only=production --legacy-peer-deps
