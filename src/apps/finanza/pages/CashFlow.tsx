@@ -3,10 +3,12 @@ import { useTranslation } from 'react-i18next';
 import { useData } from '../context/DataContext';
 import { calculateAnnualAmount, calculateAnnualAmountV2, formatCurrency, calculateTotalAnnual } from '../utils/calculations';
 import { calculateISR, calculateNetSalary, SUGGESTED_RATES } from '../utils/salaryCalculations';
-import { getIncomeIcon, getExpenseIcon, INCOME_CATEGORIES, EXPENSE_CATEGORIES } from '../utils/categoryIcons';
+import { getCategoryIcon, INCOME_CATEGORIES, EXPENSE_CATEGORIES, EXPENSE_CATEGORY_GROUPS } from '../utils/categoryIcons';
+import { CategoryPicker } from '../components/CategoryPicker';
 import {
     Plus, Trash2, TrendingUp, TrendingDown, Calendar, Save, X, Trophy, Pencil,
-    ArrowRightLeft, ArrowDownCircle, ArrowUpCircle, Printer, HeartPulse, CreditCard, Shirt, Coins
+    ArrowRightLeft, ArrowDownCircle, ArrowUpCircle, Printer, HeartPulse, CreditCard, Shirt, Coins,
+    ArrowUpRight, ChevronDown, ChevronRight, FileText, Tag, CalendarClock, ShieldCheck
 } from 'lucide-react';
 import { Transaction } from '../types';
 import { exportToCSV } from '../../../shared/utils/csvExport';
@@ -34,6 +36,81 @@ interface ModalProps {
     children: React.ReactNode;
     color: 'green' | 'red';
 }
+
+// Previsualiza el impacto anual de un borrador de ingreso/gasto mientras se edita en el modal,
+// usando la misma lógica que la columna "Impacto Anual" de la tabla.
+const estimateAnnualImpact = (draft: Partial<Transaction>, currencies: any): number => {
+    if (!draft.amount || !draft.frequency) return 0;
+    const deductionAmount = draft.deductions ? (draft.deductions.afp || 0) + (draft.deductions.sfs || 0) + (draft.deductions.isr || 0) + (draft.deductions.others?.reduce((s, o) => s + o.amount, 0) || 0) : 0;
+    const netAmount = draft.amount - deductionAmount;
+    return calculateAnnualAmountV2({
+        id: 'preview', name: draft.name || '', amount: netAmount, frequency: draft.frequency,
+        category: draft.category || '', currency: draft.currency || 'DOP', type: draft.type || 'expense',
+        validFrom: draft.validFrom, validTo: draft.validTo
+    } as Transaction, currencies);
+};
+
+// Tarjeta con encabezado propio para agrupar secciones del formulario (Datos Básicos, Categoría, etc.)
+const SectionCard: React.FC<{ title: string; icon: React.ElementType; children: React.ReactNode }> = ({ title, icon: Icon, children }) => (
+    <div className="p-4 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm space-y-3">
+        <h4 className="text-[11px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider flex items-center gap-1.5 pb-2 border-b border-gray-100 dark:border-gray-700/70">
+            <Icon size={13} /> {title}
+        </h4>
+        {children}
+    </div>
+);
+
+const SummaryPreview: React.FC<{ draft: Partial<Transaction>; currencies: any; accent: 'green' | 'red'; totalForShare?: number }> = ({ draft, currencies, accent, totalForShare }) => {
+    const annualImpact = estimateAnnualImpact(draft, currencies);
+    const monthlyEquivalent = annualImpact / 12;
+    const CatIcon = getCategoryIcon(draft.category, draft.type as any);
+    const share = totalForShare && totalForShare > 0 ? Math.min(100, (annualImpact / totalForShare) * 100) : null;
+    const tint = accent === 'green'
+        ? { bg: 'bg-green-50 dark:bg-green-900/20', border: 'border-green-200 dark:border-green-800', text: 'text-success dark:text-green-400', barBg: 'bg-green-200 dark:bg-green-900/40', bar: 'bg-green-500' }
+        : { bg: 'bg-red-50 dark:bg-red-900/20', border: 'border-red-200 dark:border-red-800', text: 'text-error dark:text-red-400', barBg: 'bg-red-200 dark:bg-red-900/40', bar: 'bg-red-500' };
+    return (
+        <div className={`p-5 rounded-xl border space-y-4 self-start ${tint.bg} ${tint.border}`}>
+            <div className="flex items-center gap-3">
+                <div className="w-11 h-11 rounded-xl bg-card flex items-center justify-center shrink-0">
+                    <CatIcon size={20} className={tint.text} />
+                </div>
+                <div className="min-w-0">
+                    <div className={`font-bold truncate ${tint.text}`}>{draft.category || 'Sin categoría'}</div>
+                    <div className={`text-xs truncate opacity-80 ${tint.text}`}>{draft.name || 'Nuevo concepto'}</div>
+                </div>
+            </div>
+
+            <div>
+                <div className={`text-xs uppercase font-semibold opacity-80 ${tint.text}`}>Impacto Anual Estimado</div>
+                <div className={`text-3xl font-bold ${tint.text}`}>{formatCurrency(annualImpact)}</div>
+            </div>
+            <div className={`h-1.5 w-full rounded-full overflow-hidden ${tint.barBg}`}>
+                <div className={`h-full rounded-full ${tint.bar}`} style={{ width: '100%' }}></div>
+            </div>
+
+            <div className="space-y-1.5 text-sm">
+                <div className="flex justify-between items-center">
+                    <span className={`text-xs opacity-80 ${tint.text}`}>Equivalente Mensual</span>
+                    <span className={`font-medium ${tint.text}`}>{formatCurrency(monthlyEquivalent)}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                    <span className={`text-xs opacity-80 ${tint.text}`}>Frecuencia</span>
+                    <span className={`font-medium ${tint.text}`}>{draft.frequency || '—'}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                    <span className={`text-xs opacity-80 ${tint.text}`}>Vigencia</span>
+                    <span className={`font-medium text-right ${tint.text}`}>{draft.validFrom || 'Todo el año'}{draft.validTo ? ` a ${draft.validTo}` : ''}</span>
+                </div>
+            </div>
+
+            {share !== null && (
+                <div className={`pt-3 border-t text-xs ${tint.border} ${tint.text} opacity-90`}>
+                    Este {accent === 'green' ? 'ingreso' : 'gasto'} representa el <strong>{share.toFixed(1)}%</strong> de tu presupuesto anual {accent === 'green' ? 'de ingresos' : 'de gastos'}
+                </div>
+            )}
+        </div>
+    );
+};
 
 export const CashFlow: React.FC = () => {
     const { t } = useTranslation(['cashflow', 'common']);
@@ -124,8 +201,15 @@ const IncomesView: React.FC<{ onPrint: () => void }> = ({ onPrint }) => {
         deductions: { afp: 0, sfs: 0, isr: 0, others: [] }, validFrom: '', validTo: ''
     });
 
-    const getIcon = getIncomeIcon;
     const CATEGORIES = INCOME_CATEGORIES;
+    const [raiseSource, setRaiseSource] = useState<Transaction | null>(null);
+    const [expandedConcepts, setExpandedConcepts] = useState<Set<string>>(new Set());
+
+    const recentCategoryIds = useMemo(() => {
+        const counts: Record<string, number> = {};
+        (data.incomes || []).forEach(i => { if (i.category) counts[i.category] = (counts[i.category] || 0) + 1; });
+        return Object.entries(counts).sort(([, a], [, b]) => b - a).slice(0, 6).map(([id]) => id);
+    }, [data.incomes]);
 
     const totalIncome = useMemo(() => {
         return data.incomes.reduce((acc, curr) => acc + calculateAnnualAmountV2(curr, currencies), 0);
@@ -153,8 +237,62 @@ const IncomesView: React.FC<{ onPrint: () => void }> = ({ onPrint }) => {
     }, [data.incomes, currencies]);
     const monthlyAvg = useMemo(() => netTotalIncome / 12, [netTotalIncome]);
 
+    // Agrupa versiones de un mismo concepto (ej. aumentos de salario) por conceptId.
+    // Filas sin conceptId se muestran igual que siempre, una por una.
+    const displayIncomes = useMemo(() => {
+        const byConceptId: Record<string, Transaction[]> = {};
+        const standalone: Transaction[] = [];
+        (data.incomes || []).forEach(income => {
+            if (income.conceptId) {
+                (byConceptId[income.conceptId] ||= []).push(income);
+            } else {
+                standalone.push(income);
+            }
+        });
+        const groups = Object.values(byConceptId).map(versions => {
+            const sorted = [...versions].sort((a, b) => (a.validFrom || '').localeCompare(b.validFrom || ''));
+            const active = sorted.find(v => !v.validTo) || sorted[sorted.length - 1];
+            const history = sorted.filter(v => v.id !== active.id);
+            return { active, history };
+        });
+        return [
+            ...standalone.map(income => ({ active: income, history: [] as Transaction[] })),
+            ...groups
+        ];
+    }, [data.incomes]);
+
+    const resetIncomeForm = () => setNewIncome({ name: '', amount: 0, frequency: 'Mensual', category: 'Salario', currency: 'DOP', type: 'income', deductions: { afp: 0, sfs: 0, isr: 0, others: [] }, validFrom: '', validTo: '' });
+
     const handleAdd = () => {
         if (!newIncome.name || !newIncome.amount) return;
+
+        // "Registrar cambio de monto": cierra la versión anterior y crea una nueva enlazada por conceptId
+        if (raiseSource) {
+            const effectiveDate = newIncome.validFrom || new Date().toISOString().slice(0, 10);
+            const prevDay = new Date(effectiveDate + 'T12:00:00');
+            prevDay.setDate(prevDay.getDate() - 1);
+            const conceptId = raiseSource.conceptId || raiseSource.id;
+
+            updateTransaction({ ...raiseSource, conceptId, validTo: prevDay.toISOString().slice(0, 10) });
+            addTransaction({
+                id: Date.now().toString(),
+                name: raiseSource.name,
+                amount: Number(newIncome.amount),
+                frequency: newIncome.frequency as Transaction['frequency'],
+                category: raiseSource.category || 'Salario',
+                currency: newIncome.currency as Transaction['currency'],
+                type: 'income',
+                deductions: raiseSource.category === 'Salario' ? newIncome.deductions : undefined,
+                validFrom: effectiveDate,
+                validTo: undefined,
+                conceptId
+            });
+            setRaiseSource(null);
+            setIsAdding(false);
+            resetIncomeForm();
+            return;
+        }
+
         const transactionData = {
             name: newIncome.name, amount: Number(newIncome.amount), frequency: newIncome.frequency as Transaction['frequency'],
             category: newIncome.category || 'Salario', currency: newIncome.currency as Transaction['currency'], type: 'income' as const,
@@ -169,7 +307,7 @@ const IncomesView: React.FC<{ onPrint: () => void }> = ({ onPrint }) => {
             addTransaction({ id: Date.now().toString(), ...transactionData });
         }
         setIsAdding(false);
-        setNewIncome({ name: '', amount: 0, frequency: 'Mensual', category: 'Salario', currency: 'DOP', type: 'income', deductions: { afp: 0, sfs: 0, isr: 0, others: [] }, validFrom: '', validTo: '' });
+        resetIncomeForm();
     };
 
     const handleEdit = (income: Transaction) => {
@@ -181,13 +319,35 @@ const IncomesView: React.FC<{ onPrint: () => void }> = ({ onPrint }) => {
             validTo: income.validTo || ''
         });
         setEditingId(income.id);
+        setRaiseSource(null);
         setIsAdding(true);
+    };
+
+    const handleRaise = (income: Transaction) => {
+        setRaiseSource(income);
+        setNewIncome({
+            name: income.name, amount: 0, frequency: income.frequency,
+            category: income.category || 'Salario', currency: income.currency || 'DOP', type: 'income',
+            deductions: income.deductions || { afp: 0, sfs: 0, isr: 0, others: [] },
+            validFrom: '', validTo: ''
+        });
+        setEditingId(null);
+        setIsAdding(true);
+    };
+
+    const toggleExpanded = (conceptId: string) => {
+        setExpandedConcepts(prev => {
+            const next = new Set(prev);
+            if (next.has(conceptId)) next.delete(conceptId); else next.add(conceptId);
+            return next;
+        });
     };
 
     const cancelEdit = () => {
         setIsAdding(false);
         setEditingId(null);
-        setNewIncome({ name: '', amount: 0, frequency: 'Mensual', category: 'Salario', currency: 'DOP', type: 'income', deductions: { afp: 0, sfs: 0, isr: 0, others: [] }, validFrom: '', validTo: '' });
+        setRaiseSource(null);
+        resetIncomeForm();
     };
 
     return (
@@ -240,28 +400,40 @@ const IncomesView: React.FC<{ onPrint: () => void }> = ({ onPrint }) => {
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                            {(data.incomes || []).map((income) => {
-                                const Icon = getIcon(income.name);
+                            {displayIncomes.map(({ active: income, history }) => {
+                                const Icon = getCategoryIcon(income.category, 'income');
                                 const totalDeductions = income.deductions ? (income.deductions.afp || 0) + (income.deductions.sfs || 0) + (income.deductions.isr || 0) + (income.deductions.others?.reduce((s, o) => s + o.amount, 0) || 0) : 0;
                                 const netAmount = income.amount - totalDeductions;
+                                const conceptKey = income.conceptId || income.id;
+                                const isExpanded = expandedConcepts.has(conceptKey);
 
                                 return (
                                     <React.Fragment key={income.id}>
                                         <tr className="hover:bg-gray-50 dark:hover:bg-gray-800/30 transition-colors group">
                                             <td className="px-6 py-4 flex items-center gap-3">
-                                                <div className="w-10 h-10 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center text-success dark:text-green-300 group-hover:scale-110 transition-transform">
+                                                {history.length > 0 ? (
+                                                    <button onClick={() => toggleExpanded(conceptKey)} aria-label={isExpanded ? 'Ocultar historial' : 'Ver historial'} className="text-gray-400 hover:text-gray-600 shrink-0">
+                                                        {isExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                                                    </button>
+                                                ) : <span className="w-4 shrink-0" />}
+                                                <div className="w-10 h-10 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center text-success dark:text-green-300 group-hover:scale-110 transition-transform shrink-0">
                                                     <Icon size={18} />
                                                 </div>
                                                 <div>
                                                     <div className="font-medium text-text">
                                                         {income.name}
-                                                        {(income.validFrom || income.validTo) && (
+                                                        {history.length > 0 && (
+                                                            <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300">
+                                                                {history.length + 1} versiones
+                                                            </span>
+                                                        )}
+                                                        {history.length === 0 && (income.validFrom || income.validTo) && (
                                                             <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300">
                                                                 Temporal
                                                             </span>
                                                         )}
                                                     </div>
-                                                    <div className="text-xs text-gray-500">{income.category || 'Varios'}</div>
+                                                    <div className="text-xs text-gray-500">{income.category || 'Varios'}{income.validFrom ? ` · vigente desde ${income.validFrom}` : ''}</div>
                                                 </div>
                                             </td>
                                             <td className="px-6 py-4"><span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300">{income.frequency}</span></td>
@@ -270,11 +442,25 @@ const IncomesView: React.FC<{ onPrint: () => void }> = ({ onPrint }) => {
                                                 {totalDeductions > 0 && <div className="text-xs text-gray-400 line-through">{formatCurrency(income.amount)}</div>}
                                             </td>
                                             <td className="px-6 py-4 text-right font-bold text-success dark:text-green-400">{formatCurrency(calculateAnnualAmountV2({ ...income, amount: netAmount }, currencies))}</td>
-                                            <td className="px-6 py-4 text-center">
+                                            <td className="px-6 py-4 text-center whitespace-nowrap">
+                                                <button onClick={() => handleRaise(income)} aria-label={`Registrar cambio de monto para ${income.name}`} title="Registrar cambio de monto" className="text-gray-400 hover:text-success mr-2 p-2 rounded-full hover:bg-green-50 dark:hover:bg-green-900/20 transition-all"><ArrowUpRight size={18} aria-hidden="true" /></button>
                                                 <button onClick={() => handleEdit(income)} aria-label={`${t('common:edit')} ${income.name}`} className="text-gray-400 hover:text-blue-500 mr-2 p-2 rounded-full hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-all"><Pencil size={18} aria-hidden="true" /></button>
                                                 <button onClick={() => removeTransaction(income.id)} aria-label={`${t('common:delete')} ${income.name}`} className="text-gray-400 hover:text-error p-2 rounded-full hover:bg-red-50 dark:hover:bg-red-900/20 transition-all"><Trash2 size={18} aria-hidden="true" /></button>
                                             </td>
                                         </tr>
+                                        {isExpanded && history.map(version => (
+                                            <tr key={version.id} className="bg-gray-50/50 dark:bg-gray-800/20 text-gray-500 dark:text-gray-400">
+                                                <td className="px-6 py-2 pl-16 text-sm">
+                                                    {version.validFrom || '—'} a {version.validTo || '—'}
+                                                </td>
+                                                <td className="px-6 py-2 text-sm">{version.frequency}</td>
+                                                <td className="px-6 py-2 text-right text-sm">{formatCurrency(version.amount, version.currency || 'DOP')}</td>
+                                                <td className="px-6 py-2 text-right text-sm">{formatCurrency(calculateAnnualAmountV2(version, currencies))}</td>
+                                                <td className="px-6 py-2 text-center">
+                                                    <button onClick={() => removeTransaction(version.id)} aria-label={`${t('common:delete')} versión`} className="text-gray-400 hover:text-error p-1.5 rounded-full hover:bg-red-50 dark:hover:bg-red-900/20 transition-all"><Trash2 size={14} aria-hidden="true" /></button>
+                                                </td>
+                                            </tr>
+                                        ))}
                                         {totalDeductions > 0 && income.deductions && (
                                             <tr className="bg-gray-50/50 dark:bg-gray-800/20">
                                                 <td colSpan={5} className="px-6 py-2">
@@ -330,56 +516,54 @@ const IncomesView: React.FC<{ onPrint: () => void }> = ({ onPrint }) => {
             {/* Modal */}
             {isAdding && (
                 <Modal
-                    title={editingId ? t('cashflow:edit_income') : t('cashflow:new_income')}
+                    title={raiseSource ? `Registrar cambio de monto: ${raiseSource.name}` : (editingId ? t('cashflow:edit_income') : t('cashflow:new_income'))}
                     onClose={cancelEdit}
                     onSave={handleAdd}
-                    saveLabel={t('common:save')}
+                    saveLabel={raiseSource ? 'Registrar' : t('common:save')}
                     color="green"
                 >
-                    <div className="space-y-4">
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <InputGroup label={t('common:concept')}>
-                                <input type="text" className="w-full p-3 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700/50 dark:text-white outline-none focus:ring-2 focus:ring-green-500" value={newIncome.name} onChange={e => setNewIncome({ ...newIncome, name: e.target.value })} autoFocus placeholder="Ej. Salario" />
-                            </InputGroup>
-                            <InputGroup label={t('common:amount')}>
-                                <div className="flex gap-2">
-                                    <input type="number" className="w-full p-3 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700/50 dark:text-white outline-none focus:ring-2 focus:ring-green-500" value={newIncome.amount || ''} onChange={e => setNewIncome({ ...newIncome, amount: parseFloat(e.target.value) })} placeholder="0.00" />
-                                    <select className="p-3 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700/50 dark:text-white outline-none font-bold" value={newIncome.currency || 'DOP'} onChange={e => setNewIncome({ ...newIncome, currency: e.target.value as any })}>
-                                        <option value="DOP">DOP</option><option value="USD">USD</option><option value="EUR">EUR</option>
-                                    </select>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                        <div className="space-y-4">
+                            {raiseSource && (
+                                <div className="p-3 rounded-xl bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 text-sm text-green-700 dark:text-green-300">
+                                    Nueva versión de <strong>{raiseSource.name}</strong>. La versión anterior se cerrará automáticamente en la fecha "Válido Desde" que indiques.
                                 </div>
-                            </InputGroup>
-                        </div>
-                        <InputGroup label={t('common:category')}>
-                            <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
-                                {CATEGORIES.map((cat) => (
-                                    <button key={cat.id} onClick={() => setNewIncome({ ...newIncome, category: cat.id })} className={`flex flex-col items-center justify-center p-3 rounded-xl border transition-all ${newIncome.category === cat.id ? 'bg-green-50 dark:bg-green-900/20 border-green-500 text-success dark:text-green-400 ring-1 ring-green-500' : 'bg-card border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300'}`}>
-                                        <cat.icon size={20} className="mb-1" /><span className="text-xs font-medium">{cat.label}</span>
-                                    </button>
-                                ))}
-                            </div>
-                        </InputGroup>
-                        <InputGroup label={t('common:frequency')}>
-                            <div className="flex bg-gray-100 dark:bg-gray-700 p-1 rounded-xl">
-                                {['Mensual', 'Trimestral', 'Anual'].map((freq) => (
-                                    <button key={freq} onClick={() => setNewIncome({ ...newIncome, frequency: freq as any })} className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${newIncome.frequency === freq ? 'bg-white dark:bg-gray-600 text-slate-900 dark:text-white shadow-sm' : 'text-gray-500 dark:text-gray-400'}`}>{freq}</button>
-                                ))}
-                            </div>
-                        </InputGroup>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <InputGroup label="Válido Desde (Opcional)">
-                                <DatePicker value={newIncome.validFrom || ''} onChange={date => setNewIncome({ ...newIncome, validFrom: date })} />
-                            </InputGroup>
-                            <InputGroup label="Válido Hasta (Opcional)">
-                                <DatePicker value={newIncome.validTo || ''} onChange={date => setNewIncome({ ...newIncome, validTo: date })} />
-                            </InputGroup>
-                        </div>
+                            )}
+                            <SectionCard title="Datos Básicos" icon={FileText}>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <InputGroup label={t('common:concept')}>
+                                        <input type="text" disabled={!!raiseSource} className="w-full p-3 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700/50 dark:text-white outline-none focus:ring-2 focus:ring-green-500 disabled:opacity-60" value={newIncome.name} onChange={e => setNewIncome({ ...newIncome, name: e.target.value })} autoFocus placeholder="Ej. Salario" />
+                                    </InputGroup>
+                                    <InputGroup label={t('common:amount')}>
+                                        <div className="flex gap-2">
+                                            <input type="number" className="w-full p-3 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700/50 dark:text-white outline-none focus:ring-2 focus:ring-green-500" value={newIncome.amount || ''} onChange={e => setNewIncome({ ...newIncome, amount: parseFloat(e.target.value) })} placeholder="0.00" />
+                                            <select className="p-3 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700/50 dark:text-white outline-none font-bold" value={newIncome.currency || 'DOP'} onChange={e => setNewIncome({ ...newIncome, currency: e.target.value as any })}>
+                                                <option value="DOP">DOP</option><option value="USD">USD</option><option value="EUR">EUR</option>
+                                            </select>
+                                        </div>
+                                    </InputGroup>
+                                </div>
+                            </SectionCard>
+
+                            <SectionCard title="Frecuencia y Vigencia" icon={CalendarClock}>
+                                <div className="flex bg-white dark:bg-gray-700 p-1 rounded-xl mb-3">
+                                    {['Mensual', 'Trimestral', 'Anual'].map((freq) => (
+                                        <button key={freq} onClick={() => setNewIncome({ ...newIncome, frequency: freq as any })} className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${newIncome.frequency === freq ? 'bg-gray-100 dark:bg-gray-600 text-slate-900 dark:text-white shadow-sm' : 'text-gray-500 dark:text-gray-400'}`}>{freq}</button>
+                                    ))}
+                                </div>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <InputGroup label={raiseSource ? 'Vigente Desde' : 'Válido Desde (Opcional)'}>
+                                        <DatePicker value={newIncome.validFrom || ''} onChange={date => setNewIncome({ ...newIncome, validFrom: date })} />
+                                    </InputGroup>
+                                    <InputGroup label="Válido Hasta (Opcional)">
+                                        <DatePicker value={newIncome.validTo || ''} onChange={date => setNewIncome({ ...newIncome, validTo: date })} />
+                                    </InputGroup>
+                                </div>
+                            </SectionCard>
+
                         {newIncome.category === 'Salario' && (
-                            <div className="p-4 bg-gray-50 dark:bg-gray-800/50 rounded-xl border border-gray-200 dark:border-gray-700 space-y-3">
-                                <h4 className="text-sm font-bold text-gray-700 dark:text-gray-300 flex items-center gap-2">
-                                    <TrendingUp size={16} /> Deducciones de Ley (RD)
-                                </h4>
-                                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                            <SectionCard title="Deducciones de Ley (RD)" icon={ShieldCheck}>
+                                <div className="grid grid-cols-2 gap-3">
                                     <InputGroup label="AFP (2.87%)">
                                         <div className="relative">
                                             <input type="number" className="w-full p-2 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-sm"
@@ -454,14 +638,34 @@ const IncomesView: React.FC<{ onPrint: () => void }> = ({ onPrint }) => {
                                     </div>
                                 </div>
 
-                                <div className="pt-2 border-t border-gray-200 dark:border-gray-700 flex justify-between items-center">
-                                    <span className="text-sm font-bold text-gray-600 dark:text-gray-400">Salario Neto Estimado:</span>
-                                    <span className="text-lg font-bold text-success">
-                                        {formatCurrency((newIncome.amount || 0) - ((newIncome.deductions?.afp || 0) + (newIncome.deductions?.sfs || 0) + (newIncome.deductions?.isr || 0) + (newIncome.deductions?.others?.reduce((a, b) => a + b.amount, 0) || 0)))}
-                                    </span>
+                                <div className="pt-2 border-t border-gray-200 dark:border-gray-700 space-y-1.5">
+                                    <div className="flex justify-between items-center">
+                                        <span className="text-sm font-bold text-gray-600 dark:text-gray-400">Salario Neto Estimado:</span>
+                                        <span className="text-lg font-bold text-success">
+                                            {formatCurrency((newIncome.amount || 0) - ((newIncome.deductions?.afp || 0) + (newIncome.deductions?.sfs || 0) + (newIncome.deductions?.isr || 0) + (newIncome.deductions?.others?.reduce((a, b) => a + b.amount, 0) || 0)))}
+                                        </span>
+                                    </div>
+                                    <div className="flex justify-between items-center">
+                                        <span className="text-xs text-gray-500 uppercase font-semibold">Impacto Anual Estimado</span>
+                                        <span className="text-sm font-bold text-success">{formatCurrency(estimateAnnualImpact(newIncome, currencies))}</span>
+                                    </div>
                                 </div>
-                            </div>
+                            </SectionCard>
                         )}
+                        </div>
+                        <div className="space-y-5">
+                            <SummaryPreview draft={newIncome} currencies={currencies} accent="green" totalForShare={netTotalIncome} />
+                            <SectionCard title="Categoría" icon={Tag}>
+                                <CategoryPicker
+                                    categories={CATEGORIES}
+                                    value={newIncome.category}
+                                    onChange={id => setNewIncome({ ...newIncome, category: id })}
+                                    recentIds={recentCategoryIds}
+                                    disabled={!!raiseSource}
+                                    accent="green"
+                                />
+                            </SectionCard>
+                        </div>
                     </div>
                 </Modal>
             )}
@@ -498,11 +702,70 @@ const ExpensesView: React.FC = () => {
         return data.expenses.reduce((acc, curr) => acc + calculateAnnualAmountV2(curr, currencies), 0);
     }, [data.expenses, currencies]);
 
-    const getIcon = getExpenseIcon;
     const CATEGORIES = EXPENSE_CATEGORIES;
+    const [raiseSource, setRaiseSource] = useState<Transaction | null>(null);
+    const [expandedConcepts, setExpandedConcepts] = useState<Set<string>>(new Set());
+
+    const recentCategoryIds = useMemo(() => {
+        const counts: Record<string, number> = {};
+        (data.expenses || []).forEach(e => { if (e.category) counts[e.category] = (counts[e.category] || 0) + 1; });
+        return Object.entries(counts).sort(([, a], [, b]) => b - a).slice(0, 6).map(([id]) => id);
+    }, [data.expenses]);
+
+    // Agrupa versiones de un mismo concepto (ej. aumento de alquiler, cambio de precio de una suscripción)
+    const displayExpenses = useMemo(() => {
+        const byConceptId: Record<string, Transaction[]> = {};
+        const standalone: Transaction[] = [];
+        (data.expenses || []).forEach(expense => {
+            if (expense.conceptId) {
+                (byConceptId[expense.conceptId] ||= []).push(expense);
+            } else {
+                standalone.push(expense);
+            }
+        });
+        const groups = Object.values(byConceptId).map(versions => {
+            const sorted = [...versions].sort((a, b) => (a.validFrom || '').localeCompare(b.validFrom || ''));
+            const active = sorted.find(v => !v.validTo) || sorted[sorted.length - 1];
+            const history = sorted.filter(v => v.id !== active.id);
+            return { active, history };
+        });
+        return [
+            ...standalone.map(expense => ({ active: expense, history: [] as Transaction[] })),
+            ...groups
+        ];
+    }, [data.expenses]);
+
+    const resetExpenseForm = () => setNewExpense({ name: '', amount: 0, frequency: 'Mensual', category: 'General', currency: 'DOP', type: 'expense', validFrom: '', validTo: '' });
 
     const handleAdd = () => {
         if (!newExpense.name || !newExpense.amount) return;
+
+        // "Registrar cambio de monto": cierra la versión anterior y crea una nueva enlazada por conceptId
+        if (raiseSource) {
+            const effectiveDate = newExpense.validFrom || new Date().toISOString().slice(0, 10);
+            const prevDay = new Date(effectiveDate + 'T12:00:00');
+            prevDay.setDate(prevDay.getDate() - 1);
+            const conceptId = raiseSource.conceptId || raiseSource.id;
+
+            updateTransaction({ ...raiseSource, conceptId, validTo: prevDay.toISOString().slice(0, 10) });
+            addTransaction({
+                id: Date.now().toString(),
+                name: raiseSource.name,
+                amount: Number(newExpense.amount),
+                frequency: newExpense.frequency as Transaction['frequency'],
+                category: raiseSource.category || 'General',
+                currency: newExpense.currency as Transaction['currency'],
+                type: 'expense',
+                validFrom: effectiveDate,
+                validTo: undefined,
+                conceptId
+            });
+            setRaiseSource(null);
+            setIsAdding(false);
+            resetExpenseForm();
+            return;
+        }
+
         const transactionData = {
             name: newExpense.name, amount: Number(newExpense.amount), frequency: newExpense.frequency as Transaction['frequency'],
             category: newExpense.category || 'General', currency: newExpense.currency as Transaction['currency'], type: 'expense' as const,
@@ -516,7 +779,7 @@ const ExpensesView: React.FC = () => {
             addTransaction({ id: Date.now().toString(), ...transactionData });
         }
         setIsAdding(false);
-        setNewExpense({ name: '', amount: 0, frequency: 'Mensual', category: 'General', currency: 'DOP', type: 'expense', validFrom: '', validTo: '' });
+        resetExpenseForm();
     };
 
     const handleEdit = (expense: Transaction) => {
@@ -527,13 +790,34 @@ const ExpensesView: React.FC = () => {
             validTo: expense.validTo || ''
         });
         setEditingId(expense.id);
+        setRaiseSource(null);
         setIsAdding(true);
+    };
+
+    const handleRaise = (expense: Transaction) => {
+        setRaiseSource(expense);
+        setNewExpense({
+            name: expense.name, amount: 0, frequency: expense.frequency,
+            category: expense.category || 'General', currency: expense.currency || 'DOP', type: 'expense',
+            validFrom: '', validTo: ''
+        });
+        setEditingId(null);
+        setIsAdding(true);
+    };
+
+    const toggleExpanded = (conceptId: string) => {
+        setExpandedConcepts(prev => {
+            const next = new Set(prev);
+            if (next.has(conceptId)) next.delete(conceptId); else next.add(conceptId);
+            return next;
+        });
     };
 
     const cancelEdit = () => {
         setIsAdding(false);
         setEditingId(null);
-        setNewExpense({ name: '', amount: 0, frequency: 'Mensual', category: 'General', currency: 'DOP', type: 'expense', validFrom: '', validTo: '' });
+        setRaiseSource(null);
+        resetExpenseForm();
     };
 
     return (
@@ -586,37 +870,63 @@ const ExpensesView: React.FC = () => {
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                            {(data.expenses || []).map(expense => {
-                                const Icon = getIcon(expense.name);
+                            {displayExpenses.map(({ active: expense, history }) => {
+                                const Icon = getCategoryIcon(expense.category, 'expense');
+                                const conceptKey = expense.conceptId || expense.id;
+                                const isExpanded = expandedConcepts.has(conceptKey);
                                 return (
-                                    <tr key={expense.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/30 transition-colors group">
-                                        <td className="px-6 py-4 flex items-center gap-3">
-                                            <div className="w-10 h-10 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center text-error dark:text-red-300 group-hover:scale-110 transition-transform">
-                                                <Icon size={18} />
-                                            </div>
-                                            <div>
-                                                <div className="font-bold text-text">
-                                                    {expense.name}
-                                                    {(expense.validFrom || expense.validTo) && (
-                                                        <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300">
-                                                            Temporal
-                                                        </span>
-                                                    )}
+                                    <React.Fragment key={expense.id}>
+                                        <tr className="hover:bg-gray-50 dark:hover:bg-gray-800/30 transition-colors group">
+                                            <td className="px-6 py-4 flex items-center gap-3">
+                                                {history.length > 0 ? (
+                                                    <button onClick={() => toggleExpanded(conceptKey)} aria-label={isExpanded ? 'Ocultar historial' : 'Ver historial'} className="text-gray-400 hover:text-gray-600 shrink-0">
+                                                        {isExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                                                    </button>
+                                                ) : <span className="w-4 shrink-0" />}
+                                                <div className="w-10 h-10 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center text-error dark:text-red-300 group-hover:scale-110 transition-transform shrink-0">
+                                                    <Icon size={18} />
                                                 </div>
-                                                <div className="text-xs text-gray-500">{expense.category || 'General'}</div>
-                                            </div>
-                                        </td>
-                                        <td className="px-6 py-4 text-right font-medium text-gray-900 dark:text-gray-100">
-                                            <div>{formatCurrency(expense.amount, expense.currency || 'DOP')}</div>
-                                            {expense.currency && expense.currency !== 'DOP' && <div className="text-xs text-gray-500 font-normal">≈ {formatCurrency(expense.currency === 'USD' ? expense.amount * currencies.usd.rate : expense.amount * currencies.eur.rate)}</div>}
-                                        </td>
-                                        <td className="px-6 py-4 text-right text-gray-500 dark:text-gray-400">{formatCurrency(calculateAnnualAmountV2(expense, currencies))}</td>
-                                        <td className="px-6 py-4 text-center"><span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${expense.frequency === 'Fijo' ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300' : 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300'}`}>{expense.frequency}</span></td>
-                                        <td className="px-6 py-4 text-center">
-                                            <button onClick={() => handleEdit(expense)} aria-label={`${t('common:edit')} ${expense.name}`} className="text-gray-400 hover:text-blue-500 mr-2 p-2 rounded-full hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-all"><Pencil size={16} aria-hidden="true" /></button>
-                                            <button onClick={() => removeTransaction(expense.id)} aria-label={`${t('common:delete')} ${expense.name}`} className="text-gray-400 hover:text-error p-2 rounded-full hover:bg-red-50 dark:hover:bg-red-900/20 transition-all"><Trash2 size={16} aria-hidden="true" /></button>
-                                        </td>
-                                    </tr>
+                                                <div>
+                                                    <div className="font-bold text-text">
+                                                        {expense.name}
+                                                        {history.length > 0 && (
+                                                            <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300">
+                                                                {history.length + 1} versiones
+                                                            </span>
+                                                        )}
+                                                        {history.length === 0 && (expense.validFrom || expense.validTo) && (
+                                                            <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300">
+                                                                Temporal
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                    <div className="text-xs text-gray-500">{expense.category || 'General'}{expense.validFrom ? ` · vigente desde ${expense.validFrom}` : ''}</div>
+                                                </div>
+                                            </td>
+                                            <td className="px-6 py-4 text-right font-medium text-gray-900 dark:text-gray-100">
+                                                <div>{formatCurrency(expense.amount, expense.currency || 'DOP')}</div>
+                                                {expense.currency && expense.currency !== 'DOP' && <div className="text-xs text-gray-500 font-normal">≈ {formatCurrency(expense.currency === 'USD' ? expense.amount * currencies.usd.rate : expense.amount * currencies.eur.rate)}</div>}
+                                            </td>
+                                            <td className="px-6 py-4 text-right text-gray-500 dark:text-gray-400">{formatCurrency(calculateAnnualAmountV2(expense, currencies))}</td>
+                                            <td className="px-6 py-4 text-center"><span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${expense.frequency === 'Fijo' ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300' : 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300'}`}>{expense.frequency}</span></td>
+                                            <td className="px-6 py-4 text-center whitespace-nowrap">
+                                                <button onClick={() => handleRaise(expense)} aria-label={`Registrar cambio de monto para ${expense.name}`} title="Registrar cambio de monto" className="text-gray-400 hover:text-error mr-2 p-2 rounded-full hover:bg-red-50 dark:hover:bg-red-900/20 transition-all"><ArrowUpRight size={16} aria-hidden="true" /></button>
+                                                <button onClick={() => handleEdit(expense)} aria-label={`${t('common:edit')} ${expense.name}`} className="text-gray-400 hover:text-blue-500 mr-2 p-2 rounded-full hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-all"><Pencil size={16} aria-hidden="true" /></button>
+                                                <button onClick={() => removeTransaction(expense.id)} aria-label={`${t('common:delete')} ${expense.name}`} className="text-gray-400 hover:text-error p-2 rounded-full hover:bg-red-50 dark:hover:bg-red-900/20 transition-all"><Trash2 size={16} aria-hidden="true" /></button>
+                                            </td>
+                                        </tr>
+                                        {isExpanded && history.map(version => (
+                                            <tr key={version.id} className="bg-gray-50/50 dark:bg-gray-800/20 text-gray-500 dark:text-gray-400">
+                                                <td className="px-6 py-2 pl-16 text-sm">{version.validFrom || '—'} a {version.validTo || '—'}</td>
+                                                <td className="px-6 py-2 text-right text-sm">{formatCurrency(version.amount, version.currency || 'DOP')}</td>
+                                                <td className="px-6 py-2 text-right text-sm">{formatCurrency(calculateAnnualAmountV2(version, currencies))}</td>
+                                                <td className="px-6 py-2 text-center text-sm">{version.frequency}</td>
+                                                <td className="px-6 py-2 text-center">
+                                                    <button onClick={() => removeTransaction(version.id)} aria-label={`${t('common:delete')} versión`} className="text-gray-400 hover:text-error p-1.5 rounded-full hover:bg-red-50 dark:hover:bg-red-900/20 transition-all"><Trash2 size={14} aria-hidden="true" /></button>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </React.Fragment>
                                 )
                             })}
                         </tbody>
@@ -635,49 +945,64 @@ const ExpensesView: React.FC = () => {
             {/* Modal */}
             {isAdding && (
                 <Modal
-                    title={editingId ? t('cashflow:edit_expense') : t('cashflow:new_expense')}
+                    title={raiseSource ? `Registrar cambio de monto: ${raiseSource.name}` : (editingId ? t('cashflow:edit_expense') : t('cashflow:new_expense'))}
                     onClose={cancelEdit}
                     onSave={handleAdd}
-                    saveLabel={editingId ? t('common:save') : t('common:save')}
+                    saveLabel={raiseSource ? 'Registrar' : t('common:save')}
                     color="red"
                 >
-                    <div className="space-y-4">
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <InputGroup label={t('common:concept')}>
-                                <input type="text" className="w-full p-3 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700/50 dark:text-white outline-none focus:ring-2 focus:ring-red-500" value={newExpense.name} onChange={e => setNewExpense({ ...newExpense, name: e.target.value })} autoFocus placeholder="Ej. Netflix" />
-                            </InputGroup>
-                            <InputGroup label={t('common:amount')}>
-                                <div className="flex gap-2">
-                                    <input type="number" className="w-full p-3 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700/50 dark:text-white outline-none focus:ring-2 focus:ring-red-500" value={newExpense.amount || ''} onChange={e => setNewExpense({ ...newExpense, amount: parseFloat(e.target.value) })} placeholder="0.00" />
-                                    <select className="p-3 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700/50 dark:text-white outline-none font-bold" value={newExpense.currency || 'DOP'} onChange={e => setNewExpense({ ...newExpense, currency: e.target.value as any })}>
-                                        <option value="DOP">DOP</option><option value="USD">USD</option><option value="EUR">EUR</option>
-                                    </select>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                        <div className="space-y-4">
+                            {raiseSource && (
+                                <div className="p-3 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-sm text-red-700 dark:text-red-300">
+                                    Nueva versión de <strong>{raiseSource.name}</strong>. La versión anterior se cerrará automáticamente en la fecha "Válido Desde" que indiques.
                                 </div>
-                            </InputGroup>
+                            )}
+                            <SectionCard title="Datos Básicos" icon={FileText}>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <InputGroup label={t('common:concept')}>
+                                        <input type="text" disabled={!!raiseSource} className="w-full p-3 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700/50 dark:text-white outline-none focus:ring-2 focus:ring-red-500 disabled:opacity-60" value={newExpense.name} onChange={e => setNewExpense({ ...newExpense, name: e.target.value })} autoFocus placeholder="Ej. Netflix" />
+                                    </InputGroup>
+                                    <InputGroup label={t('common:amount')}>
+                                        <div className="flex gap-2">
+                                            <input type="number" className="w-full p-3 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700/50 dark:text-white outline-none focus:ring-2 focus:ring-red-500" value={newExpense.amount || ''} onChange={e => setNewExpense({ ...newExpense, amount: parseFloat(e.target.value) })} placeholder="0.00" />
+                                            <select className="p-3 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700/50 dark:text-white outline-none font-bold" value={newExpense.currency || 'DOP'} onChange={e => setNewExpense({ ...newExpense, currency: e.target.value as any })}>
+                                                <option value="DOP">DOP</option><option value="USD">USD</option><option value="EUR">EUR</option>
+                                            </select>
+                                        </div>
+                                    </InputGroup>
+                                </div>
+                            </SectionCard>
+
+                            <SectionCard title="Frecuencia y Vigencia" icon={CalendarClock}>
+                                <div className="flex bg-white dark:bg-gray-700 p-1 rounded-xl mb-3">
+                                    {['Mensual', 'Fijo', 'Variable', 'Anual'].map((freq) => (
+                                        <button key={freq} onClick={() => setNewExpense({ ...newExpense, frequency: freq as any })} className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${newExpense.frequency === freq ? 'bg-gray-100 dark:bg-gray-600 text-slate-900 dark:text-white shadow-sm' : 'text-gray-500 dark:text-gray-400'}`}>{freq}</button>
+                                    ))}
+                                </div>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <InputGroup label={raiseSource ? 'Vigente Desde' : 'Válido Desde (Opcional)'}>
+                                        <DatePicker value={newExpense.validFrom || ''} onChange={date => setNewExpense({ ...newExpense, validFrom: date })} />
+                                    </InputGroup>
+                                    <InputGroup label="Válido Hasta (Opcional)">
+                                        <DatePicker value={newExpense.validTo || ''} onChange={date => setNewExpense({ ...newExpense, validTo: date })} />
+                                    </InputGroup>
+                                </div>
+                            </SectionCard>
                         </div>
-                        <InputGroup label={t('common:category')}>
-                            <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                                {CATEGORIES.map((cat) => (
-                                    <button key={cat.id} onClick={() => setNewExpense({ ...newExpense, category: cat.id })} className={`flex flex-col items-center justify-center p-3 rounded-xl border transition-all ${newExpense.category === cat.id ? 'bg-red-50 dark:bg-red-900/20 border-red-500 text-error dark:text-red-400 ring-1 ring-red-500' : 'bg-card border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300'}`}>
-                                        <cat.icon size={20} className="mb-1" /><span className="text-xs font-medium">{cat.label}</span>
-                                    </button>
-                                ))}
-                            </div>
-                        </InputGroup>
-                        <InputGroup label={t('common:frequency')}>
-                            <div className="flex bg-gray-100 dark:bg-gray-700 p-1 rounded-xl">
-                                {['Mensual', 'Fijo', 'Variable', 'Anual'].map((freq) => (
-                                    <button key={freq} onClick={() => setNewExpense({ ...newExpense, frequency: freq as any })} className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${newExpense.frequency === freq ? 'bg-white dark:bg-gray-600 text-slate-900 dark:text-white shadow-sm' : 'text-gray-500 dark:text-gray-400'}`}>{freq}</button>
-                                ))}
-                            </div>
-                        </InputGroup>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <InputGroup label="Válido Desde (Opcional)">
-                                <DatePicker value={newExpense.validFrom || ''} onChange={date => setNewExpense({ ...newExpense, validFrom: date })} />
-                            </InputGroup>
-                            <InputGroup label="Válido Hasta (Opcional)">
-                                <DatePicker value={newExpense.validTo || ''} onChange={date => setNewExpense({ ...newExpense, validTo: date })} />
-                            </InputGroup>
+                        <div className="space-y-5">
+                            <SummaryPreview draft={newExpense} currencies={currencies} accent="red" totalForShare={totalAnnual} />
+                            <SectionCard title="Categoría" icon={Tag}>
+                                <CategoryPicker
+                                    categories={CATEGORIES}
+                                    value={newExpense.category}
+                                    onChange={id => setNewExpense({ ...newExpense, category: id })}
+                                    recentIds={recentCategoryIds}
+                                    groups={EXPENSE_CATEGORY_GROUPS}
+                                    disabled={!!raiseSource}
+                                    accent="red"
+                                />
+                            </SectionCard>
                         </div>
                     </div>
                 </Modal>
@@ -714,16 +1039,23 @@ const InputGroup: React.FC<InputGroupProps> = ({ label, children }) => (
 const Modal: React.FC<ModalProps> = ({ title, onClose, onSave, saveLabel, children, color }) => {
     const { t } = useTranslation('common');
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200" role="dialog" aria-modal="true" aria-labelledby="modal-title">
-            <div className="bg-card rounded-2xl shadow-2xl max-w-2xl w-full border border-border overflow-hidden animate-in zoom-in-95 duration-200">
-                <div className={`px-6 py-4 border-b border-border flex justify-between items-center bg-gray-50/50 dark:bg-gray-800/50`}>
-                    <h3 id="modal-title" className="text-lg font-bold text-text">{title}</h3>
-                    <button onClick={onClose} aria-label={t('cancel')} className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-500 transition-colors"><X size={20} aria-hidden="true" /></button>
+        <div
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200"
+            role="dialog" aria-modal="true" aria-labelledby="modal-title"
+            onClick={onClose}
+        >
+            <div
+                className="bg-card rounded-2xl shadow-2xl max-w-5xl w-full max-h-[92vh] flex flex-col border border-border overflow-hidden animate-in zoom-in-95 duration-200"
+                onClick={e => e.stopPropagation()}
+            >
+                <div className={`px-8 py-5 border-b border-border flex justify-between items-center bg-gray-50/50 dark:bg-gray-800/50 shrink-0`}>
+                    <h3 id="modal-title" className="text-xl font-bold text-text">{title}</h3>
+                    <button onClick={onClose} aria-label={t('cancel')} className="p-2.5 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-500 transition-colors"><X size={22} aria-hidden="true" /></button>
                 </div>
-                <div className="p-6">{children}</div>
-                <div className="px-6 py-4 bg-gray-50 dark:bg-gray-800/50 border-t border-border flex justify-end gap-3">
-                    <button onClick={onClose} className="px-4 py-2 rounded-lg text-sm font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors">{t('cancel')}</button>
-                    <button onClick={onSave} className={`bg-${color}-600 hover:bg-${color}-700 text-white px-6 py-2 rounded-lg text-sm font-bold shadow-lg transition-all flex items-center gap-2`}>
+                <div className="p-8 overflow-y-auto">{children}</div>
+                <div className="px-8 py-5 bg-gray-50 dark:bg-gray-800/50 border-t border-border flex justify-end gap-3 shrink-0">
+                    <button onClick={onClose} className="px-5 py-2.5 rounded-lg text-sm font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors">{t('cancel')}</button>
+                    <button onClick={onSave} className={`bg-${color}-600 hover:bg-${color}-700 text-white px-7 py-2.5 rounded-lg text-sm font-bold shadow-lg transition-all flex items-center gap-2`}>
                         <Save size={18} aria-hidden="true" /> {saveLabel}
                     </button>
                 </div>

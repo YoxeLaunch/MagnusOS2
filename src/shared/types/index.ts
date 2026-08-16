@@ -22,6 +22,7 @@ export interface Transaction {
     };
     validFrom?: string; // FASE 1 - Non-destructive Historical Tracking
     validTo?: string;   // FASE 1 - Non-destructive Historical Tracking
+    conceptId?: string; // Links versions of the same recurring concept (e.g. salary raises) together
 }
 
 /**

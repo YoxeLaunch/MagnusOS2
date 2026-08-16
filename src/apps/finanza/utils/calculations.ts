@@ -59,20 +59,24 @@ export const calculateAnnualAmountV2 = (t: Transaction, currencies?: CurrencySta
   let startMonth = 0; // 0 = Enero
   let endMonth = 11;  // 11 = Diciembre
 
+  // Nota: se parsean año/mes directo del string "YYYY-MM-DD" (sin pasar por `new Date()`)
+  // porque un Date de solo-fecha se interpreta en UTC medianoche; al leer getMonth()/getFullYear()
+  // en la zona horaria local del navegador, fechas como "2026-02-01" pueden retroceder al mes
+  // anterior en zonas con offset negativo (UTC-3, UTC-4, etc.), rompiendo el prorrateo.
   if (t.validFrom) {
-    const fromDate = new Date(t.validFrom);
-    if (fromDate.getFullYear() === currentYear) {
-      startMonth = fromDate.getMonth();
-    } else if (fromDate.getFullYear() > currentYear) {
+    const [fromYear, fromMonth] = t.validFrom.split('-').map(Number);
+    if (fromYear === currentYear) {
+      startMonth = fromMonth - 1;
+    } else if (fromYear > currentYear) {
       return 0; // Transacción futura
     }
   }
 
   if (t.validTo) {
-    const toDate = new Date(t.validTo);
-    if (toDate.getFullYear() === currentYear) {
-      endMonth = toDate.getMonth();
-    } else if (toDate.getFullYear() < currentYear) {
+    const [toYear, toMonth] = t.validTo.split('-').map(Number);
+    if (toYear === currentYear) {
+      endMonth = toMonth - 1;
+    } else if (toYear < currentYear) {
       return 0; // Transacción expirada en año pasado
     }
   }

@@ -48,7 +48,8 @@ export const getTransactions = async (req, res) => {
                 type: t.type,
                 deductions: cleanDeductions,
                 validFrom: t.validFrom,
-                validTo: t.validTo
+                validTo: t.validTo,
+                conceptId: t.conceptId
             };
         });
 

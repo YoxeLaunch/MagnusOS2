@@ -13,7 +13,8 @@ export const Transaction = sequelize.define('Transaction', {
     type: { type: DataTypes.STRING, allowNull: false },
     deductions: { type: DataTypes.JSON, allowNull: true }, // For salary deductions (AFP, SFS, ISR, Others)
     validFrom: { type: DataTypes.DATEONLY, allowNull: true }, // Added for FASE 1 - Non-destructive Historical Tracking
-    validTo: { type: DataTypes.DATEONLY, allowNull: true } // Added for FASE 1 - Non-destructive Historical Tracking
+    validTo: { type: DataTypes.DATEONLY, allowNull: true }, // Added for FASE 1 - Non-destructive Historical Tracking
+    conceptId: { type: DataTypes.STRING, allowNull: true } // Links versions of the same recurring concept (e.g. salary raises) together
 }, {
     indexes: [
         { fields: ['userId'] },

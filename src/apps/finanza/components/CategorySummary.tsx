@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { DailyTransaction } from '../types';
-import { getExpenseIcon } from '../utils/categoryIcons';
+import { getCategoryIcon } from '../utils/categoryIcons';
 import { PieChart } from 'lucide-react';
 
 interface CategorySummaryProps {
@@ -30,8 +30,6 @@ export const CategorySummary: React.FC<CategorySummaryProps> = ({ transactions }
             }));
     }, [transactions]);
 
-    const getIcon = getExpenseIcon;
-
     if (categoryStats.length === 0) return null;
 
     return (
@@ -43,7 +41,7 @@ export const CategorySummary: React.FC<CategorySummaryProps> = ({ transactions }
 
             <div className="space-y-4">
                 {categoryStats.map((cat) => {
-                    const Icon = getIcon(cat.name);
+                    const Icon = getCategoryIcon(cat.name, 'expense');
                     return (
                         <div key={cat.name} className="relative group">
                             <div className="flex items-center justify-between mb-1.5">

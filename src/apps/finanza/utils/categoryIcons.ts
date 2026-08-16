@@ -3,7 +3,10 @@ import {
     Fuel, ShoppingCart, Wifi, Shirt, Zap, Coffee, Gamepad2, Clapperboard, Film, User, Train,
     ArrowRightLeft, ArrowDownCircle, ArrowUpCircle, PartyPopper, Coins, Home, GraduationCap,
     HeartPulse, ShoppingBag, Plane, CreditCard, TrendingDown, Briefcase, Bitcoin, Building2,
-    PieChart, Wallet
+    PieChart, Wallet, Sparkles, Smartphone, Wrench, Users, HeartHandshake, HandCoins,
+    Scissors, Landmark, Undo2, PawPrint, ShieldCheck, Receipt, Pizza, Laptop, Hammer,
+    Siren, Car, HandHeart, Scale, Dumbbell, BookOpen, Droplets, LifeBuoy, LineChart,
+    Tag, Percent, Umbrella
 } from 'lucide-react';
 
 export const getIncomeIcon = (name?: string) => {
@@ -63,8 +66,13 @@ export const INCOME_CATEGORIES = [
     { id: 'Becas', icon: GraduationCap, label: 'Becas' },
     { id: 'Regalos', icon: Gift, label: 'Regalos' },
     { id: 'Aportaciones', icon: Coins, label: 'Aportes' },
+    { id: 'Reembolsos', icon: Undo2, label: 'Reembolsos' },
     { id: 'Ajuste', icon: Pencil, label: 'Ajuste' },
-    { id: 'Otro', icon: TrendingUp, label: 'Otro' }
+    { id: 'Otro', icon: TrendingUp, label: 'Otro' },
+    { id: 'Alquiler Cobrado', icon: Building2, label: 'Alquiler' },
+    { id: 'Dividendos e Intereses', icon: LineChart, label: 'Dividendos' },
+    { id: 'Venta de Artículos', icon: Tag, label: 'Ventas' },
+    { id: 'Comisiones', icon: Percent, label: 'Comisiones' }
 ];
 
 export const EXPENSE_CATEGORIES = [
@@ -76,17 +84,56 @@ export const EXPENSE_CATEGORIES = [
     { id: 'Salud', icon: HeartPulse, label: 'Salud' },
     { id: 'Compras', icon: ShoppingBag, label: 'Compras' },
     { id: 'Viajes', icon: Plane, label: 'Viajes' },
-    { id: 'Entretenimiento', icon: Gamepad2, label: 'Ocio' },
+    { id: 'Entretenimiento', icon: Film, label: 'Ocio' },
     { id: 'Streaming', icon: Clapperboard, label: 'Streaming' },
     { id: 'Regalos', icon: Gift, label: 'Regalos' },
     { id: 'Aportaciones', icon: Coins, label: 'Ayudas' },
     { id: 'Deudas', icon: CreditCard, label: 'Deudas' },
     { id: 'Ajuste', icon: Pencil, label: 'Ajuste' },
-    { id: 'General', icon: Coffee, label: 'General' }
+    { id: 'General', icon: Coffee, label: 'General' },
+    { id: 'Suscripciones IA', icon: Sparkles, label: 'Suscripciones IA' },
+    { id: 'Videojuegos', icon: Gamepad2, label: 'Videojuegos' },
+    { id: 'Telefonía', icon: Smartphone, label: 'Teléfono' },
+    { id: 'Mantenimiento Vehicular', icon: Wrench, label: 'Vehículo' },
+    { id: 'Ayuda Doméstica', icon: Users, label: 'Ayuda Doméstica' },
+    { id: 'Ayuda Familiar', icon: HeartHandshake, label: 'Familia' },
+    { id: 'Préstamos a Terceros', icon: HandCoins, label: 'Préstamos' },
+    { id: 'Cuidado Personal', icon: Scissors, label: 'Cuidado Personal' },
+    { id: 'Colecta Oficina', icon: Briefcase, label: 'Oficina' },
+    { id: 'Eventos Sociales', icon: PartyPopper, label: 'Eventos' },
+    { id: 'Ropa', icon: Shirt, label: 'Ropa' },
+    { id: 'Comisiones Bancarias', icon: Landmark, label: 'Banco' },
+    { id: 'Mascotas', icon: PawPrint, label: 'Mascotas' },
+    { id: 'Seguros', icon: ShieldCheck, label: 'Seguros' },
+    { id: 'Impuestos', icon: Receipt, label: 'Impuestos' },
+    { id: 'Transporte Público', icon: Train, label: 'Transp. Público' },
+    { id: 'Delivery', icon: Pizza, label: 'Delivery' },
+    { id: 'Tecnología', icon: Laptop, label: 'Tecnología' },
+    { id: 'Hogar y Reparaciones', icon: Hammer, label: 'Reparaciones' },
+    { id: 'Multas y Recargos', icon: Siren, label: 'Multas' },
+    { id: 'Estacionamiento y Peajes', icon: Car, label: 'Parqueo/Peajes' },
+    { id: 'Donaciones', icon: HandHeart, label: 'Donaciones' },
+    { id: 'Trámites Legales', icon: Scale, label: 'Trámites Legales' },
+    { id: 'Gimnasio y Deporte', icon: Dumbbell, label: 'Gimnasio' },
+    { id: 'Cursos y Libros', icon: BookOpen, label: 'Cursos y Libros' },
+    { id: 'Lavandería', icon: Droplets, label: 'Lavandería' },
+    { id: 'Imprevistos', icon: LifeBuoy, label: 'Imprevistos' }
 ];
+
+// Agrupación temática de EXPENSE_CATEGORIES para el selector con buscador/grupos colapsables.
+export const EXPENSE_CATEGORY_GROUPS: Record<string, string[]> = {
+    'Esenciales': ['Vivienda', 'Alimentos', 'Transporte', 'Servicios', 'Salud', 'Educación'],
+    'Estilo de vida': ['Compras', 'Viajes', 'Entretenimiento', 'Streaming', 'Videojuegos', 'Gimnasio y Deporte', 'Cursos y Libros'],
+    'Vehículo y movilidad': ['Transporte Público', 'Mantenimiento Vehicular', 'Estacionamiento y Peajes'],
+    'Suscripciones y cuentas': ['Suscripciones IA', 'Telefonía', 'Comisiones Bancarias'],
+    'Familia y social': ['Ayuda Doméstica', 'Ayuda Familiar', 'Regalos', 'Eventos Sociales', 'Donaciones', 'Aportaciones'],
+    'Finanzas': ['Préstamos a Terceros', 'Deudas', 'Ajuste', 'Impuestos', 'Seguros', 'Imprevistos'],
+    'Otros': ['Mascotas', 'Cuidado Personal', 'Ropa', 'Lavandería', 'Colecta Oficina', 'Hogar y Reparaciones', 'Delivery', 'Tecnología', 'Multas y Recargos', 'General']
+};
 
 export const INVESTMENT_CATEGORIES = [
     { id: 'Ahorro', icon: Wallet, label: 'Ahorro' },
+    { id: 'Fondo de Emergencia', icon: Umbrella, label: 'Fondo Emergencia' },
     { id: 'Bolsa', icon: TrendingUp, label: 'Bolsa / Fondos' },
     { id: 'Cripto', icon: Bitcoin, label: 'Criptomonedas' },
     { id: 'Bienes Raíces', icon: Building2, label: 'Inmuebles' },
@@ -123,4 +170,21 @@ export const TRANSACTION_META = {
         icon: PieChart,
         categories: INVESTMENT_CATEGORIES
     }
+};
+
+// Resuelve el ícono real de una transacción por id de categoría (fuente de verdad:
+// el mismo array que alimenta el selector del modal). Si la categoría es texto libre
+// histórico que no está en el array, cae al keyword-matching legacy; si tampoco matchea
+// nada, usa un ícono neutro en vez de uno engañoso.
+export const getCategoryIcon = (categoryId?: string, type?: 'income' | 'expense' | 'investment') => {
+    const categories = type === 'income' ? INCOME_CATEGORIES
+        : type === 'investment' ? INVESTMENT_CATEGORIES
+        : EXPENSE_CATEGORIES;
+    const match = categories.find(c => c.id === categoryId);
+    if (match) return match.icon;
+
+    if (type === 'income') return getIncomeIcon(categoryId);
+    if (type === 'investment') return getInvestmentIcon(categoryId);
+    if (type === 'expense') return getExpenseIcon(categoryId);
+    return Tag;
 };
