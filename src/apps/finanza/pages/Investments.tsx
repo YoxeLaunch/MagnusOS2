@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { useData } from '../context/DataContext';
-import { formatCurrency } from '../utils/calculations';
+import { formatCurrency, getPortfolioSnapshot } from '../utils/calculations';
 import { Transaction } from '../types';
 import { AssetAllocation } from '../components/AssetAllocation';
 import {
@@ -34,7 +34,11 @@ const INVESTMENT_CATEGORIES = [
     { id: 'otro', label: 'Otro', icon: Target },
 ];
 
-export const Investments: React.FC = () => {
+interface InvestmentsProps {
+    embedded?: boolean;
+}
+
+export const Investments: React.FC<InvestmentsProps> = ({ embedded = false }) => {
     const { data, addTransaction, removeTransaction, updateTransaction, dailyTransactions, currencies, refreshCurrencies } = useData();
     const [isAdding, setIsAdding] = useState(false);
     const [editingId, setEditingId] = useState<string | null>(null);
@@ -63,20 +67,11 @@ export const Investments: React.FC = () => {
         date: new Date().toISOString().split('T')[0],
     });
 
-    // Calculate Global Cash Available from Daily Transactions
+    // Misma fuente de verdad que Wealth.tsx: saldo de cuentas declaradas si existe,
+    // si no el acumulado del registro diario (nunca se suman ambas).
     const globalCashAvailable = useMemo(() => {
-        let income = 0;
-        let expense = 0;
-        let investment = 0;
-
-        dailyTransactions.forEach(t => {
-            if (t.type === 'income') income += t.amount;
-            else if (t.type === 'expense') expense += t.amount;
-            else if (t.type === 'investment') investment += t.amount;
-        });
-
-        return income - expense - investment;
-    }, [dailyTransactions]);
+        return getPortfolioSnapshot(data, dailyTransactions, currencies).liquidAssets;
+    }, [data, dailyTransactions, currencies]);
 
     const calculateMetrics = useMemo(() => {
         let invested = 0;
@@ -165,7 +160,7 @@ export const Investments: React.FC = () => {
     };
 
     return (
-        <div className="max-w-[1600px] mx-auto p-6 md:p-8 space-y-8 pb-32">
+        <div className={embedded ? 'space-y-8 border-t border-slate-200 pt-8 dark:border-white/10' : 'max-w-[1600px] mx-auto p-6 md:p-8 space-y-8 pb-32'}>
 
             {/* HEADER */}
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">

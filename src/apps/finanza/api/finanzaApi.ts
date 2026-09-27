@@ -2,6 +2,7 @@
 // Finanza API Client for Magnus-OS2
 // New Ledger endpoints + Legacy support
 // ========================================
+import { apiFetch } from '../../../shared/utils/apiFetch';
 
 const API_BASE = '/api/finanza';
 
@@ -13,7 +14,7 @@ export interface Account {
     userId: string;
     name: string;
     type: 'cash' | 'checking' | 'savings' | 'credit_card' | 'investment' | 'loan';
-    currency: string;
+    currency: 'DOP' | 'USD' | 'EUR';
     institution?: string;
     openingBalance: number;
     currentBalance: number;
@@ -24,13 +25,13 @@ export interface Account {
 
 export const accountsApi = {
     getAll: async (userId: string, includeArchived = false): Promise<Account[]> => {
-        const res = await fetch(`${API_BASE}/accounts?userId=${userId}&includeArchived=${includeArchived}`);
+        const res = await apiFetch(`${API_BASE}/accounts?userId=${userId}&includeArchived=${includeArchived}`);
         if (!res.ok) throw new Error('Failed to fetch accounts');
         return res.json();
     },
 
     create: async (account: Partial<Account>): Promise<Account> => {
-        const res = await fetch(`${API_BASE}/accounts`, {
+        const res = await apiFetch(`${API_BASE}/accounts`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(account)
@@ -40,7 +41,7 @@ export const accountsApi = {
     },
 
     update: async (id: string, updates: Partial<Account>): Promise<Account> => {
-        const res = await fetch(`${API_BASE}/accounts/${id}`, {
+        const res = await apiFetch(`${API_BASE}/accounts/${id}`, {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(updates)
@@ -50,12 +51,12 @@ export const accountsApi = {
     },
 
     archive: async (id: string): Promise<void> => {
-        const res = await fetch(`${API_BASE}/accounts/${id}`, { method: 'DELETE' });
+        const res = await apiFetch(`${API_BASE}/accounts/${id}`, { method: 'DELETE' });
         if (!res.ok) throw new Error('Failed to archive account');
     },
 
     getBalance: async (id: string): Promise<{ currentBalance: number; currency: string }> => {
-        const res = await fetch(`${API_BASE}/accounts/${id}/balance`);
+        const res = await apiFetch(`${API_BASE}/accounts/${id}/balance`);
         if (!res.ok) throw new Error('Failed to get balance');
         return res.json();
     }
@@ -113,13 +114,13 @@ export const ledgerApi = {
         Object.entries(filters).forEach(([key, value]) => {
             if (value !== undefined) params.append(key, String(value));
         });
-        const res = await fetch(`${API_BASE}/ledger?${params}`);
+        const res = await apiFetch(`${API_BASE}/ledger?${params}`);
         if (!res.ok) throw new Error('Failed to fetch transactions');
         return res.json();
     },
 
     createTransaction: async (transaction: Omit<LedgerTransaction, 'id'>): Promise<LedgerTransaction> => {
-        const res = await fetch(`${API_BASE}/ledger/transactions`, {
+        const res = await apiFetch(`${API_BASE}/ledger/transactions`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(transaction)
@@ -132,7 +133,7 @@ export const ledgerApi = {
     },
 
     updateTransaction: async (id: string, updates: Partial<LedgerTransaction>): Promise<LedgerTransaction> => {
-        const res = await fetch(`${API_BASE}/ledger/transactions/${id}`, {
+        const res = await apiFetch(`${API_BASE}/ledger/transactions/${id}`, {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(updates)
@@ -142,12 +143,12 @@ export const ledgerApi = {
     },
 
     deleteTransaction: async (id: string): Promise<void> => {
-        const res = await fetch(`${API_BASE}/ledger/transactions/${id}`, { method: 'DELETE' });
+        const res = await apiFetch(`${API_BASE}/ledger/transactions/${id}`, { method: 'DELETE' });
         if (!res.ok) throw new Error('Failed to delete transaction');
     },
 
     updateStatus: async (id: string, status: 'pending' | 'cleared' | 'reconciled'): Promise<void> => {
-        const res = await fetch(`${API_BASE}/ledger/transactions/${id}/status`, {
+        const res = await apiFetch(`${API_BASE}/ledger/transactions/${id}/status`, {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ status })
@@ -171,7 +172,7 @@ export interface TransferRequest {
 
 export const transfersApi = {
     create: async (transfer: TransferRequest): Promise<LedgerTransaction> => {
-        const res = await fetch(`${API_BASE}/transfers`, {
+        const res = await apiFetch(`${API_BASE}/transfers`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(transfer)

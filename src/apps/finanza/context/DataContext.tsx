@@ -3,6 +3,7 @@ import { AppData, Transaction, CurrencyState, DailyTransaction, WealthSnapshot }
 import { authService } from '../../../shared/services/auth';
 import { apiFetch } from '../../../shared/utils/apiFetch';
 import { useToast } from '../../../shared/context/ToastContext';
+import { accountsApi } from '../api/finanzaApi';
 
 interface DataContextType {
   data: AppData;
@@ -101,8 +102,15 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       .then(res => res.json())
       .then(data => setWealthHistory(Array.isArray(data) ? data : []));
 
+    // Fetch declared bank/cash accounts (e.g. "Efectivo") so Patrimonio/Wealth reflects them
+    const accountsPromise = accountsApi.getAll(userId)
+      .then(accounts => {
+        setData(prev => ({ ...prev, accounts }));
+      })
+      .catch(err => console.error('Error fetching accounts:', err));
+
     // Wait for all initial critical data
-    Promise.all([transactionsPromise, dailyPromise, historyPromise])
+    Promise.all([transactionsPromise, dailyPromise, historyPromise, accountsPromise])
       .finally(() => {
         // Short delay to ensure state updates are processed
         setTimeout(() => setIsLoading(false), 200);

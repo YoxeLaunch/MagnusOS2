@@ -154,12 +154,72 @@ export const formatUSD = (amount: number) => {
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
 };
 
-export const calculateNetWorth = (data: any): number => {
-  if (!data) return 0;
-  const accounts = data.accounts?.reduce((acc: number, curr: any) => acc + (curr.balance || 0), 0) || 0;
-  const investments = data.investments?.reduce((acc: number, curr: any) => acc + (curr.currentValue || curr.amount || 0), 0) || 0;
-  const assets = data.assets?.reduce((acc: number, curr: any) => acc + (curr.value || 0), 0) || 0;
-  // Debts are usually negative balances in accounts or a separate array. Assuming separate array for now if it exists, otherwise ignored.
-  const debts = data.debts?.reduce((acc: number, curr: any) => acc + (curr.amount || 0), 0) || 0;
-  return accounts + investments + assets - debts;
+export interface PortfolioSnapshot {
+  accountsBalance: number;   // Saldo líquido declarado (efectivo/corrientes/ahorro), convertido a DOP
+  dailyNet: number;          // income - expense - investment, todo el historial de dailyTransactions
+  dailyInvestment: number;   // Solo la porción de inversión del registro diario (sin categoría propia)
+  liquidAssets: number;      // accountsBalance si existe, si no dailyNet (nunca se suman ambas: ver Wealth.tsx)
+  investedAssets: number;    // valor de inversiones declaradas + aportes registrados en el diario
+  materialAssets: number;
+  debts: number;
+  netWorth: number;
+}
+
+/**
+ * Fuente única de verdad para "cuánto dinero tienes": usada por Wealth.tsx, Investments.tsx,
+ * PrintReport.tsx y Projections.tsx (Cash Runway / FIRE Calculator), para que el patrimonio
+ * mostrado sea el mismo número en todas las pantallas.
+ */
+export const getPortfolioSnapshot = (data: any, dailyTransactions: any[] = [], currencies?: CurrencyState): PortfolioSnapshot => {
+  const convertToDOP = (amount: number, currency?: string) => {
+    if (currency === 'USD' && currencies?.usd) return amount * currencies.usd.rate;
+    if (currency === 'EUR' && currencies?.eur) return amount * currencies.eur.rate;
+    return amount;
+  };
+
+  // Las cuentas pueden estar denominadas en USD/EUR y los pasivos se guardan como
+  // balances positivos. No se deben sumar como liquidez: una tarjeta/préstamo reduce
+  // patrimonio y una cuenta de inversión pertenece al bloque de inversiones.
+  const accountTotals = (data?.accounts || []).reduce((totals: { liquid: number; invested: number; debts: number }, acc: any) => {
+    const balance = convertToDOP(Number(acc.currentBalance) || 0, acc.currency);
+
+    if (acc.type === 'credit_card' || acc.type === 'loan') {
+      totals.debts += balance;
+    } else if (acc.type === 'investment') {
+      totals.invested += balance;
+    } else {
+      totals.liquid += balance;
+    }
+
+    return totals;
+  }, { liquid: 0, invested: 0, debts: 0 });
+
+  const accountsBalance = accountTotals.liquid;
+
+  let dailyIncome = 0, dailyExpense = 0, dailyInvestment = 0;
+  (dailyTransactions || []).forEach((t: any) => {
+    const amt = convertToDOP(t.amount, t.currency);
+    if (t.type === 'income') dailyIncome += amt;
+    else if (t.type === 'investment') dailyInvestment += amt;
+    else dailyExpense += amt;
+  });
+  const dailyNet = dailyIncome - dailyExpense - dailyInvestment;
+
+  // Preferir el saldo declarado de las cuentas; sumarlo con dailyNet duplicaría el dinero
+  // cuando la cuenta ya refleja ese acumulado del registro diario.
+  const liquidAssets = accountsBalance > 0 ? accountsBalance : dailyNet;
+
+  const investmentsValue = (data?.investments || []).reduce((sum: number, inv: any) => sum + convertToDOP(inv.currentValue ?? inv.amount ?? 0, inv.currency), 0);
+  // Las inversiones antiguas no están vinculadas a cuentas. Para no contarlas dos
+  // veces, las cuentas de inversión se usan como respaldo solo si no hay inversiones
+  // declaradas en la fuente histórica.
+  const investedAssets = investmentsValue + (investmentsValue > 0 ? 0 : accountTotals.invested) + dailyInvestment;
+
+  const materialAssets = (data?.assets || []).reduce((sum: number, a: any) => sum + (a.value || 0), 0);
+  const declaredDebts = (data?.debts || []).reduce((sum: number, d: any) => sum + convertToDOP(Number(d.amount) || 0, d.currency), 0);
+  const debts = accountTotals.debts + declaredDebts;
+
+  const netWorth = liquidAssets + investedAssets + materialAssets - debts;
+
+  return { accountsBalance, dailyNet, dailyInvestment, liquidAssets, investedAssets, materialAssets, debts, netWorth };
 };

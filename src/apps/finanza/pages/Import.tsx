@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { formatCurrency } from '../utils/calculations';
 import { useAuth } from '../../../shared/context/AuthContext';
+import { apiFetch } from '../../../shared/utils/apiFetch';
 
 const API_BASE = '/api/finanza';
 
@@ -249,7 +250,7 @@ export const Import: React.FC = () => {
         const loadAccounts = async () => {
             if (!user?.username) return;
             try {
-                const res = await fetch(`${API_BASE}/accounts?userId=${user.username}`);
+                const res = await apiFetch(`${API_BASE}/accounts?userId=${user.username}`);
                 if (res.ok) setAccounts(await res.json());
             } catch (error) {
                 console.error('Error loading accounts:', error);
@@ -267,7 +268,7 @@ export const Import: React.FC = () => {
 
         setLoading(true);
         try {
-            const res = await fetch(`${API_BASE}/import/preview`, {
+            const res = await apiFetch(`${API_BASE}/import/preview`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ content, accountId: selectedAccount })
@@ -291,7 +292,7 @@ export const Import: React.FC = () => {
 
         setLoading(true);
         try {
-            const res = await fetch(`${API_BASE}/import`, {
+            const res = await apiFetch(`${API_BASE}/import`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({

@@ -13,7 +13,7 @@
     "lint": "npx @biomejs/biome check --apply .",
     "format": "npx @biomejs/biome format --write .",
     "analyze": "npm run lint && npm run type-check",
-    "help": "start GUIA_COMANDOS.md",
+    "help": "cat GUIA_COMANDOS.md",
     "type-check": "tsc --noEmit",
     "test": "jest",
     "mcp": "node server/mcp-server.js"

@@ -95,6 +95,8 @@ const AccountCard: React.FC<AccountCardProps> = ({ account, onEdit, onArchive })
     );
 };
 
+type AccountFormData = Pick<Account, 'name' | 'type' | 'currency' | 'institution' | 'openingBalance' | 'notes'>;
+
 interface AccountModalProps {
     isOpen: boolean;
     onClose: () => void;
@@ -103,7 +105,7 @@ interface AccountModalProps {
 }
 
 const AccountModal: React.FC<AccountModalProps> = ({ isOpen, onClose, onSave, account }) => {
-    const [formData, setFormData] = useState({
+    const [formData, setFormData] = useState<AccountFormData>({
         name: '',
         type: 'checking' as Account['type'],
         currency: 'DOP',
@@ -179,7 +181,7 @@ const AccountModal: React.FC<AccountModalProps> = ({ isOpen, onClose, onSave, ac
                             <label className="block text-sm font-medium mb-1">Moneda</label>
                             <select
                                 value={formData.currency}
-                                onChange={e => setFormData({ ...formData, currency: e.target.value })}
+                                onChange={e => setFormData({ ...formData, currency: e.target.value as Account['currency'] })}
                                 className="w-full px-3 py-2 bg-input border border-border rounded-lg"
                             >
                                 <option value="DOP">DOP (RD$)</option>
@@ -335,7 +337,7 @@ export const Accounts: React.FC = () => {
                     {Object.entries(totals).map(([currency, amount]) => (
                         <div key={currency} className="flex items-baseline gap-1">
                             <span className={`text-3xl font-bold ${amount < 0 ? 'text-destructive' : 'text-foreground'}`}>
-                                {formatCurrency(amount, currency)}
+                                {formatCurrency(amount, currency as Account['currency'])}
                             </span>
                             <span className="text-sm text-muted-foreground">{currency}</span>
                         </div>

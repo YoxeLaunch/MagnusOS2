@@ -18,7 +18,8 @@ import {
   X as XIcon,
   ArrowRightLeft,
   ShieldCheck,
-  PieChart
+  PieChart,
+  Target
 } from 'lucide-react';
 import { MasterLayout } from '../../../shared/components/layout/MasterLayout';
 import { useData } from '../context/DataContext';
@@ -28,7 +29,8 @@ const FINANZA_NAV_ITEMS = [
   { path: "/finanza/flujo", label: "Gestión de Flujo", icon: ArrowRightLeft },
   { path: "/finanza/seguimiento", label: "Seguimiento Diario", icon: Receipt },
   { path: "/finanza/patrimonio", label: "Patrimonio Global", icon: Wallet },
-  { path: "/finanza/inversiones", label: "Inversiones", icon: PiggyBank },
+  { path: "/finanza/mercado", label: "Mercado", icon: TrendingUp },
+  { path: "/finanza/ahorros", label: "Metas de Ahorro", icon: Target },
   { path: "/finanza/proyecciones", label: "Proyección 2026", icon: LineChart },
 ];
 
@@ -79,7 +81,8 @@ const Sidebar = ({ isDark, toggleTheme }: any) => {
           <NavLink to="/finanza/flujo" icon={ArrowRightLeft} label="Gestión de Flujo" isActive={location.pathname.includes("/finanza/flujo")} />
           <NavLink to="/finanza/seguimiento" icon={Receipt} label="Seguimiento Diario" isActive={location.pathname.includes("/finanza/seguimiento")} />
           <NavLink to="/finanza/patrimonio" icon={Wallet} label="Patrimonio Global" isActive={location.pathname.includes("/finanza/patrimonio")} />
-          <NavLink to="/finanza/inversiones" icon={PiggyBank} label="Inversiones" isActive={location.pathname.includes("/finanza/inversiones")} />
+          <NavLink to="/finanza/mercado" icon={TrendingUp} label="Mercado" isActive={location.pathname.includes("/finanza/mercado")} />
+          <NavLink to="/finanza/ahorros" icon={Target} label="Metas de Ahorro" isActive={location.pathname.includes("/finanza/ahorros")} />
           <NavLink to="/finanza/proyecciones" icon={LineChart} label="Proyección 2026" isActive={location.pathname.includes("/finanza/proyecciones")} />
         </nav>
 

@@ -6,7 +6,7 @@ import {
     PieChart, Wallet, Sparkles, Smartphone, Wrench, Users, HeartHandshake, HandCoins,
     Scissors, Landmark, Undo2, PawPrint, ShieldCheck, Receipt, Pizza, Laptop, Hammer,
     Siren, Car, HandHeart, Scale, Dumbbell, BookOpen, Droplets, LifeBuoy, LineChart,
-    Tag, Percent, Umbrella
+    Tag, Percent, Umbrella, Pill
 } from 'lucide-react';
 
 export const getIncomeIcon = (name?: string) => {
@@ -117,11 +117,13 @@ export const EXPENSE_CATEGORIES = [
     { id: 'Gimnasio y Deporte', icon: Dumbbell, label: 'Gimnasio' },
     { id: 'Cursos y Libros', icon: BookOpen, label: 'Cursos y Libros' },
     { id: 'Lavandería', icon: Droplets, label: 'Lavandería' },
-    { id: 'Imprevistos', icon: LifeBuoy, label: 'Imprevistos' }
+    { id: 'Imprevistos', icon: LifeBuoy, label: 'Imprevistos' },
+    { id: 'Vitaminas y Suplementos', icon: Pill, label: 'Vitaminas' }
 ];
 
 // Agrupación temática de EXPENSE_CATEGORIES para el selector con buscador/grupos colapsables.
 export const EXPENSE_CATEGORY_GROUPS: Record<string, string[]> = {
+    'Consumo Vital': ['Salud', 'Vitaminas y Suplementos', 'Mantenimiento Vehicular', 'Ropa'],
     'Esenciales': ['Vivienda', 'Alimentos', 'Transporte', 'Servicios', 'Salud', 'Educación'],
     'Estilo de vida': ['Compras', 'Viajes', 'Entretenimiento', 'Streaming', 'Videojuegos', 'Gimnasio y Deporte', 'Cursos y Libros'],
     'Vehículo y movilidad': ['Transporte Público', 'Mantenimiento Vehicular', 'Estacionamiento y Peajes'],

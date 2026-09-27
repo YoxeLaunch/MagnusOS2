@@ -10,7 +10,7 @@
  * - Handles edge cases (negative savings, etc.)
  */
 
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { Flame, TrendingUp, Target, Clock, DollarSign, Percent, Settings } from 'lucide-react';
 import { formatCurrency } from '../utils/calculations';
 
@@ -214,6 +214,8 @@ const CircularProgress: React.FC<CircularProgressProps> = ({
 // ============================================================================
 
 interface FIRECalculatorProps {
+    /** Patrimonio neto real actual (Wealth.tsx), usado como punto de partida si el usuario no lo ha ajustado manualmente */
+    currentPortfolio?: number;
     /** Average annual income from projections (optional, used for defaults) */
     avgAnnualIncome?: number;
     /** Average annual expenses from projections (optional, used for defaults) */
@@ -223,6 +225,7 @@ interface FIRECalculatorProps {
 }
 
 export const FIRECalculator: React.FC<FIRECalculatorProps> = ({
+    currentPortfolio: realCurrentPortfolio = 0,
     avgAnnualIncome = 0,
     avgAnnualExpenses = 0,
     savingsRate = 0
@@ -231,10 +234,22 @@ export const FIRECalculator: React.FC<FIRECalculatorProps> = ({
 
     // Load persisted inputs or use defaults
     const storedInputs = loadInputs();
+    // Se captura una sola vez al montar: si el usuario ya había editado este campo antes,
+    // no lo sobrescribimos aunque el patrimonio real llegue después (carga async de datos).
+    const hadStoredPortfolio = useRef(storedInputs.currentPortfolio !== undefined).current;
 
+    // Punto de partida: el patrimonio real si el usuario nunca lo ha editado a mano.
     const [currentPortfolio, setCurrentPortfolio] = useState(
-        storedInputs.currentPortfolio ?? 0
+        storedInputs.currentPortfolio ?? realCurrentPortfolio
     );
+
+    // El patrimonio real llega de forma asíncrona (fetch de cuentas/inversiones);
+    // si aún no había un valor guardado por el usuario, lo sincronizamos cuando cargue.
+    useEffect(() => {
+        if (!hadStoredPortfolio && realCurrentPortfolio > 0) {
+            setCurrentPortfolio(realCurrentPortfolio);
+        }
+    }, [realCurrentPortfolio, hadStoredPortfolio]);
     const [annualExpenses, setAnnualExpenses] = useState(
         storedInputs.annualExpenses ?? ((avgAnnualExpenses * 12) || 36000)
     );

@@ -4,6 +4,7 @@ import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import { TrendingUp, ShieldCheck, Target, Award, Calendar, Info, Gauge, AlertTriangle } from 'lucide-react';
 import { useData } from '../context/DataContext';
 import { calculateTrend } from '../utils/prediction';
+import { getPortfolioSnapshot } from '../utils/calculations';
 import { getFinancialCycle, getCycleId, getCycleFromId } from '../utils/financialCycle';
 import { sanitizeTransactions } from '../utils/dataQuality';
 
@@ -37,8 +38,11 @@ interface ForecastSummary {
 }
 
 export const Projections: React.FC = () => {
-    const { dailyTransactions } = useData();
+    const { data, dailyTransactions, currencies } = useData();
     const { user } = useAuth();
+
+    // Misma fuente de verdad que Wealth.tsx, Investments.tsx y PrintReport.tsx
+    const portfolio = useMemo(() => getPortfolioSnapshot(data, dailyTransactions, currencies), [data, dailyTransactions, currencies]);
     const [manualEvents, setManualEvents] = useState<ManualEvent[]>([]);
 
     // Econometric data states
@@ -233,21 +237,15 @@ export const Projections: React.FC = () => {
         return Math.round((monthsWithPositiveSavings / projectionData.length) * 100);
     }, [projectionData]);
 
-    // 4. CASH RUNWAY (Pista de Efectivo) - NEW METRIC
+    // 4. CASH RUNWAY (Pista de Efectivo) - liquidez real (cuentas o registro diario) / gasto mensual promedio
     const cashRunway = useMemo(() => {
         if (projectionData.length === 0) return 0;
 
-        // Calculate average monthly expense from projections
         const avgMonthlyExpense = projectionData.reduce((acc, curr) => acc + curr.gastos, 0) / projectionData.length;
-
-        // Get current savings (sum of all positive savings from projections as proxy)
-        // In a real scenario, this would come from actual account balances + Investments
-        // Since we don't have a "Total Balance" prop yet, we use projected accumulation + any manual investment logic if needed
-        const estimatedSavings = projectionData.reduce((acc, curr) => acc + (curr.ahorro > 0 ? curr.ahorro : 0), 0);
-
         if (!avgMonthlyExpense || avgMonthlyExpense <= 0) return 0;
-        return Number((estimatedSavings / avgMonthlyExpense).toFixed(1));
-    }, [projectionData]);
+
+        return Number((Math.max(0, portfolio.liquidAssets) / avgMonthlyExpense).toFixed(1));
+    }, [projectionData, portfolio.liquidAssets]);
 
     // 5. EXPENSE VOLATILITY (Volatilidad de Gastos) - NEW METRIC
     const expenseStability = useMemo(() => {
@@ -564,6 +562,7 @@ export const Projections: React.FC = () => {
             {/* FIRE & Health Radar Widgets */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <FIRECalculator
+                    currentPortfolio={portfolio.netWorth}
                     avgAnnualIncome={projectionData.length > 0 ? projectionData.reduce((a, p) => a + p.ingresos, 0) / projectionData.length : 0}
                     avgAnnualExpenses={projectionData.length > 0 ? projectionData.reduce((a, p) => a + p.gastos, 0) / projectionData.length : 0}
                     savingsRate={savingsRate}

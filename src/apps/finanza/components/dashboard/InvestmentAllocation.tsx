@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import { RadialBarChart, RadialBar, PolarGrid, PolarRadiusAxis, ResponsiveContainer, Legend } from 'recharts';
 import { TrendingUp, PieChart } from 'lucide-react';
-import { Transaction } from '../../../shared/types';
+import { Transaction } from '../../../../shared/types';
 import { formatCurrency } from '../../utils/calculations';
 
 interface InvestmentAllocationProps {

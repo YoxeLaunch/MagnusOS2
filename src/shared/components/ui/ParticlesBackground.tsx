@@ -6,6 +6,13 @@ export const ParticlesBackground = () => {
     const containerRef = useRef<HTMLDivElement>(null);
     const mouseRef     = useRef({ x: -9999, y: -9999 });
     const { theme }    = useTheme();
+    const isDarkRef    = useRef(theme === 'dark');
+
+    // Keep the color ref in sync without tearing down the running animation loop —
+    // avoids a visible re-init/clear of the canvas every time the theme toggles.
+    useEffect(() => {
+        isDarkRef.current = theme === 'dark';
+    }, [theme]);
 
     useEffect(() => {
         const canvas    = canvasRef.current;
@@ -21,10 +28,7 @@ export const ParticlesBackground = () => {
         let width  = container.clientWidth;
         let height = container.clientHeight;
 
-        // Colors per theme
-        const isDark      = theme === 'dark';
-        const GOLD        = '212,175,55';
-        const LINE_COLOR  = isDark ? '255,255,255' : '15,23,42';
+        const GOLD = '212,175,55';
 
         // Lightweight symbols — pure ASCII/Unicode, no emoji (emoji are GPU-heavy in canvas)
         // Leaf-like shapes using text: ♦ ◆ ● · ✦ ✧ ◇
@@ -74,7 +78,7 @@ export const ParticlesBackground = () => {
 
             draw() {
                 ctx!.font        = `${this.size}px sans-serif`;
-                ctx!.fillStyle   = isDark ? `rgba(255,255,255,${this.alpha})` : `rgba(15,23,42,${this.alpha})`;
+                ctx!.fillStyle   = isDarkRef.current ? `rgba(255,255,255,${this.alpha})` : `rgba(15,23,42,${this.alpha})`;
                 ctx!.globalAlpha = 1;
                 ctx!.fillText(this.symbol, this.x, this.y);
             }
@@ -147,7 +151,7 @@ export const ParticlesBackground = () => {
             window.removeEventListener('mousemove', handleMouseMove);
             cancelAnimationFrame(animationFrameId);
         };
-    }, [theme]);
+    }, []);
 
     return (
         <div ref={containerRef} className="absolute inset-0 pointer-events-none z-0">

@@ -1,7 +1,7 @@
 import React from 'react';
 import { Crown, Trash2, Search, Key, X, Eye, EyeOff } from 'lucide-react';
 import { useToast } from '../../../../../shared/context/ToastContext';
-import { User, UserRole } from '../../../types';
+import { User } from '../../../types';
 import { apiFetch } from '../../../../../shared/utils/apiFetch';
 import { UserAvatar } from '../../../../../shared/components/UserAvatar';
 import { exportToCSV } from '../../../../../shared/utils/csvExport';

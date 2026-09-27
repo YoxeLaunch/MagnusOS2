@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { formatCurrency } from '../utils/calculations';
 import { useAuth } from '../../../shared/context/AuthContext';
+import { apiFetch } from '../../../shared/utils/apiFetch';
 
 // API Client
 const API_BASE = '/api/finanza';
@@ -24,13 +25,15 @@ interface SavingsGoal {
     targetAmount: number;
     currentAmount: number;
     progress: number;
-    currency: string;
+    currency: 'DOP' | 'USD' | 'EUR';
     targetDate?: string;
     monthlyNeeded: number;
     isCompleted: boolean;
     icon?: string;
     color?: string;
 }
+
+type SavingsGoalFormData = Pick<SavingsGoal, 'name' | 'targetAmount' | 'targetDate' | 'currency'>;
 
 // ========================================
 // Goal Card Component
@@ -170,7 +173,7 @@ const GoalModal: React.FC<{
     onSave: (goal: Partial<SavingsGoal>) => void;
     goal?: SavingsGoal | null;
 }> = ({ isOpen, onClose, onSave, goal }) => {
-    const [formData, setFormData] = useState({
+    const [formData, setFormData] = useState<SavingsGoalFormData>({
         name: '',
         targetAmount: 0,
         targetDate: '',
@@ -228,7 +231,7 @@ const GoalModal: React.FC<{
                             <label className="block text-sm font-medium mb-1">Moneda</label>
                             <select
                                 value={formData.currency}
-                                onChange={e => setFormData({ ...formData, currency: e.target.value })}
+                                onChange={e => setFormData({ ...formData, currency: e.target.value as SavingsGoal['currency'] })}
                                 className="w-full px-3 py-2 bg-input border border-border rounded-lg"
                             >
                                 <option value="DOP">DOP</option>
@@ -352,7 +355,7 @@ export const Savings: React.FC = () => {
     const loadGoals = async () => {
         if (!user?.username) return;
         try {
-            const res = await fetch(`${API_BASE}/savings-goals?userId=${user.username}`);
+            const res = await apiFetch(`${API_BASE}/savings-goals?userId=${user.username}`);
             if (!res.ok) throw new Error('Failed to fetch');
             const data = await res.json();
             setGoals(data);
@@ -375,7 +378,7 @@ export const Savings: React.FC = () => {
                 ? `${API_BASE}/savings-goals/${editingGoal.id}`
                 : `${API_BASE}/savings-goals`;
 
-            const res = await fetch(url, {
+            const res = await apiFetch(url, {
                 method: editingGoal ? 'PATCH' : 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ ...goalData, userId: user.username })
@@ -395,7 +398,8 @@ export const Savings: React.FC = () => {
     const handleDelete = async (id: string) => {
         if (!confirm('¿Eliminar esta meta de ahorro?')) return;
         try {
-            await fetch(`${API_BASE}/savings-goals/${id}`, { method: 'DELETE' });
+            const res = await apiFetch(`${API_BASE}/savings-goals/${id}`, { method: 'DELETE' });
+            if (!res.ok) throw new Error('Failed to delete goal');
             await loadGoals();
         } catch (error) {
             console.error('Error deleting goal:', error);
@@ -405,7 +409,7 @@ export const Savings: React.FC = () => {
     const handleContribute = async (amount: number) => {
         if (!contributingGoal) return;
         try {
-            const res = await fetch(`${API_BASE}/savings-goals/${contributingGoal.id}/contribute`, {
+            const res = await apiFetch(`${API_BASE}/savings-goals/${contributingGoal.id}/contribute`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ amount })
@@ -434,16 +438,17 @@ export const Savings: React.FC = () => {
     }
 
     return (
-        <div className="space-y-6">
+        <div className="max-w-[1600px] mx-auto p-6 md:p-8 space-y-8 pb-32">
             {/* Header */}
-            <div className="flex items-center justify-between">
+            <div className="relative overflow-hidden rounded-3xl border border-slate-200 bg-gradient-to-br from-white via-slate-50 to-emerald-50/70 p-7 shadow-sm dark:border-white/10 dark:from-slate-950 dark:via-slate-900 dark:to-emerald-950/40 md:p-9 flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
                 <div>
-                    <h1 className="text-2xl font-bold">Metas de Ahorro</h1>
-                    <p className="text-muted-foreground">Define y alcanza tus objetivos financieros</p>
+                    <p className="mb-2 text-xs font-bold uppercase tracking-[0.24em] text-theme-gold">Capital en construcción</p>
+                    <h1 className="font-serif text-3xl font-black text-slate-900 dark:text-white md:text-4xl">Metas de Ahorro</h1>
+                    <p className="mt-2 max-w-2xl text-slate-500 dark:text-slate-400">Convierte tus prioridades en un plan visible, medible y accionable.</p>
                 </div>
                 <button
                     onClick={() => { setEditingGoal(null); setShowModal(true); }}
-                    className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg"
+                    className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-5 py-3 font-bold text-white shadow-lg shadow-slate-900/15 transition-all hover:-translate-y-0.5 hover:bg-slate-800 dark:bg-theme-gold dark:text-slate-950 dark:hover:bg-yellow-400"
                 >
                     <Plus className="w-4 h-4" />
                     Nueva Meta
@@ -451,8 +456,8 @@ export const Savings: React.FC = () => {
             </div>
 
             {/* Summary Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                <div className="bg-gradient-to-br from-primary/10 to-primary/5 border border-primary/20 rounded-xl p-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                <div className="relative overflow-hidden rounded-2xl border border-emerald-500/20 bg-gradient-to-br from-emerald-500 to-teal-700 p-5 text-white shadow-lg shadow-emerald-500/15">
                     <div className="flex items-center gap-2 mb-2">
                         <PiggyBank className="w-5 h-5 text-primary" />
                         <span className="text-sm text-muted-foreground">Total Ahorrado</span>
@@ -460,7 +465,7 @@ export const Savings: React.FC = () => {
                     <p className="text-2xl font-bold">{formatCurrency(totalSaved, 'DOP')}</p>
                 </div>
 
-                <div className="bg-card border border-border rounded-xl p-4">
+                <div className="rounded-2xl border border-slate-200 bg-white/80 p-5 shadow-sm backdrop-blur-xl dark:border-white/10 dark:bg-black/40">
                     <div className="flex items-center gap-2 mb-2">
                         <Target className="w-5 h-5 text-muted-foreground" />
                         <span className="text-sm text-muted-foreground">Meta Total</span>
@@ -468,7 +473,7 @@ export const Savings: React.FC = () => {
                     <p className="text-2xl font-bold">{formatCurrency(totalTarget, 'DOP')}</p>
                 </div>
 
-                <div className="bg-card border border-border rounded-xl p-4">
+                <div className="rounded-2xl border border-slate-200 bg-white/80 p-5 shadow-sm backdrop-blur-xl dark:border-white/10 dark:bg-black/40">
                     <div className="flex items-center gap-2 mb-2">
                         <TrendingUp className="w-5 h-5 text-muted-foreground" />
                         <span className="text-sm text-muted-foreground">Progreso General</span>
@@ -476,7 +481,7 @@ export const Savings: React.FC = () => {
                     <p className="text-2xl font-bold">{overallProgress.toFixed(1)}%</p>
                 </div>
 
-                <div className="bg-card border border-border rounded-xl p-4">
+                <div className="rounded-2xl border border-slate-200 bg-white/80 p-5 shadow-sm backdrop-blur-xl dark:border-white/10 dark:bg-black/40">
                     <div className="flex items-center gap-2 mb-2">
                         <Check className="w-5 h-5 text-green-500" />
                         <span className="text-sm text-muted-foreground">Completadas</span>
@@ -499,7 +504,7 @@ export const Savings: React.FC = () => {
                     </button>
                 </div>
             ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
                     {goals.map(goal => (
                         <GoalCard
                             key={goal.id}

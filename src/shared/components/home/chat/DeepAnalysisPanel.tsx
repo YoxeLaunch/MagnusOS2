@@ -127,9 +127,11 @@ const StructuredReport: React.FC<{ data?: AIStructuredResponse; fallbackResponse
     if (!data) {
         return (
             <div className="rounded-xl bg-slate-800/30 border border-violet-500/15 p-4">
-                <ReactMarkdown remarkPlugins={[remarkGfm]} className="prose prose-sm dark:prose-invert max-w-none text-slate-300 text-[12.5px]">
-                    {fallbackResponse || ''}
-                </ReactMarkdown>
+                <div className="prose prose-sm dark:prose-invert max-w-none text-slate-300 text-[12.5px]">
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                        {fallbackResponse || ''}
+                    </ReactMarkdown>
+                </div>
             </div>
         );
     }

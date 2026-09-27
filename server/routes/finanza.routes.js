@@ -18,46 +18,49 @@ const importBodyParser = express.json({ limit: '10mb' });
 
 // ========================================
 // ACCOUNTS (New - P1)
+// El frontend (finanzaApi.ts / Import.tsx) llama a /api/finanza/*, por eso
+// estas rutas "nuevas" llevan el prefijo explícito — a diferencia de las
+// rutas LEGACY de abajo, que sí se llaman directo en /api/* y no deben tocarse.
 // ========================================
-router.get('/accounts', accountsController.getAccounts);
-router.post('/accounts', accountsController.createAccount);
-router.patch('/accounts/:id', accountsController.updateAccount);
-router.delete('/accounts/:id', accountsController.archiveAccount);
-router.get('/accounts/:id/balance', accountsController.getAccountBalance);
-router.post('/accounts/reorder', accountsController.reorderAccounts);
+router.get('/finanza/accounts', accountsController.getAccounts);
+router.post('/finanza/accounts', accountsController.createAccount);
+router.patch('/finanza/accounts/:id', accountsController.updateAccount);
+router.delete('/finanza/accounts/:id', accountsController.archiveAccount);
+router.get('/finanza/accounts/:id/balance', accountsController.getAccountBalance);
+router.post('/finanza/accounts/reorder', accountsController.reorderAccounts);
 
 // ========================================
 // LEDGER (New - P1)
 // ========================================
-router.get('/ledger', ledgerController.getLedgerTransactions);
-router.post('/ledger/transactions', ledgerController.createTransaction);
-router.patch('/ledger/transactions/:id', ledgerController.updateTransaction);
-router.delete('/ledger/transactions/:id', ledgerController.deleteTransaction);
-router.patch('/ledger/transactions/:id/status', ledgerController.updateTransactionStatus);
+router.get('/finanza/ledger', ledgerController.getLedgerTransactions);
+router.post('/finanza/ledger/transactions', ledgerController.createTransaction);
+router.patch('/finanza/ledger/transactions/:id', ledgerController.updateTransaction);
+router.delete('/finanza/ledger/transactions/:id', ledgerController.deleteTransaction);
+router.patch('/finanza/ledger/transactions/:id/status', ledgerController.updateTransactionStatus);
 
 // ========================================
 // TRANSFERS (New - P1)
 // ========================================
-router.post('/transfers', ledgerController.createTransfer);
+router.post('/finanza/transfers', ledgerController.createTransfer);
 
 // ========================================
 // SAVINGS GOALS (New - P2)
 // ========================================
-router.get('/savings-goals', savingsController.getSavingsGoals);
-router.post('/savings-goals', savingsController.createSavingsGoal);
-router.patch('/savings-goals/:id', savingsController.updateSavingsGoal);
-router.delete('/savings-goals/:id', savingsController.deleteSavingsGoal);
-router.post('/savings-goals/:id/contribute', savingsController.addContribution);
-router.get('/savings-goals/:id/progress', savingsController.getGoalProgress);
-router.get('/savings-rate', savingsController.getSavingsRate);
+router.get('/finanza/savings-goals', savingsController.getSavingsGoals);
+router.post('/finanza/savings-goals', savingsController.createSavingsGoal);
+router.patch('/finanza/savings-goals/:id', savingsController.updateSavingsGoal);
+router.delete('/finanza/savings-goals/:id', savingsController.deleteSavingsGoal);
+router.post('/finanza/savings-goals/:id/contribute', savingsController.addContribution);
+router.get('/finanza/savings-goals/:id/progress', savingsController.getGoalProgress);
+router.get('/finanza/savings-rate', savingsController.getSavingsRate);
 
 // ========================================
 // IMPORT (New - P3) — límite extendido a 10mb
 // ========================================
-router.get('/import/templates', importBodyParser, importController.getImportTemplates);
-router.post('/import/preview', importBodyParser, importController.previewImport);
-router.post('/import', importBodyParser, importController.importTransactions);
-router.post('/import/categorize', importBodyParser, importController.categorizeImports);
+router.get('/finanza/import/templates', importBodyParser, importController.getImportTemplates);
+router.post('/finanza/import/preview', importBodyParser, importController.previewImport);
+router.post('/finanza/import', importBodyParser, importController.importTransactions);
+router.post('/finanza/import/categorize', importBodyParser, importController.categorizeImports);
 
 // ========================================
 // WEALTH (New - Phase 1)

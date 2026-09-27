@@ -18,7 +18,7 @@ export const ThemeTransitionOverlay: React.FC<Props> = ({ isVisible, targetTheme
                         animate={{ clipPath: "circle(150% at 50% 50%)" }}
                         exit={{ opacity: 0 }}
                         transition={{ duration: 0.6, ease: "easeInOut" }}
-                        className="fixed inset-0 z-[9999] pointer-events-none"
+                        className="fixed inset-0 z-[99999] pointer-events-none"
                         style={{
                             backgroundColor: targetTheme === 'dark' ? 'var(--color-bg-dark)' : 'var(--color-bg-light)'
                         }}
@@ -26,7 +26,7 @@ export const ThemeTransitionOverlay: React.FC<Props> = ({ isVisible, targetTheme
 
                     {/* The Icon Animation - Centered and on top */}
                     <motion.div
-                        className="fixed inset-0 z-[10000] flex items-center justify-center pointer-events-none"
+                        className="fixed inset-0 z-[100000] flex items-center justify-center pointer-events-none"
                         initial={{ opacity: 0, scale: 0.5, rotate: -45 }}
                         animate={{ opacity: 1, scale: 1, rotate: 0 }}
                         exit={{ opacity: 0, scale: 1.5 }}

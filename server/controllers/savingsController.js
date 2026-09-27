@@ -1,4 +1,4 @@
-import { SavingsGoal, SavingsContribution, Account, toMinorUnits, fromMinorUnits, sequelize } from '../models/index.js';
+import { SavingsGoal, SavingsContribution, Account, DailyTransaction, toMinorUnits, fromMinorUnits, sequelize } from '../models/index.js';
 import { Op } from 'sequelize';
 
 // ========================================
@@ -345,15 +345,48 @@ export const getSavingsRate = async (req, res) => {
             return res.status(400).json({ error: 'userId is required' });
         }
 
-        // This would require integration with the ledger
-        // For now, return a placeholder
+        const targetMonth = month || new Date().toISOString().slice(0, 7); // YYYY-MM
+        const monthStart = `${targetMonth}-01`;
+        const monthEndDate = new Date(monthStart);
+        monthEndDate.setMonth(monthEndDate.getMonth() + 1);
+        const monthEnd = monthEndDate.toISOString().slice(0, 10);
+
+        // Fuente real: registro diario (DailyTransaction), igual que el resto del dashboard.
+        const transactions = await DailyTransaction.findAll({
+            where: {
+                userId,
+                date: { [Op.gte]: monthStart, [Op.lt]: monthEnd }
+            }
+        });
+
+        let totalIncome = 0;
+        let totalExpense = 0;
+        let totalInvested = 0;
+        transactions.forEach(t => {
+            const amount = Number(t.amount) || 0;
+            if (t.type === 'income') totalIncome += amount;
+            else if (t.type === 'investment') totalInvested += amount;
+            else totalExpense += amount;
+        });
+
+        const totalSaved = totalIncome - totalExpense - totalInvested;
+        const savingsRate = totalIncome > 0 ? (totalSaved / totalIncome) * 100 : 0;
+
+        // Aportes reales a metas de ahorro (ej. Fondo de Emergencia) registrados ese mes.
+        const goalContributions = await SavingsContribution.findAll({
+            include: [{ model: SavingsGoal, as: 'goal', where: { userId }, attributes: [] }],
+            where: { date: { [Op.gte]: monthStart, [Op.lt]: monthEnd } }
+        });
+        const totalGoalContributions = goalContributions.reduce((sum, c) => sum + fromMinorUnits(c.amountMinor), 0);
+
         res.json({
-            month: month || new Date().toISOString().slice(0, 7),
-            totalIncome: 0,
-            totalExpense: 0,
-            totalSaved: 0,
-            savingsRate: 0,
-            message: 'Integrate with ledger for actual calculations'
+            month: targetMonth,
+            totalIncome,
+            totalExpense,
+            totalInvested,
+            totalSaved,
+            savingsRate: Math.round(savingsRate * 10) / 10,
+            totalGoalContributions
         });
     } catch (error) {
         console.error('[SavingsGoals] Error calculating rate:', error);

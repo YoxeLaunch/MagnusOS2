@@ -3,7 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { useData } from '../context/DataContext';
 import { useAuth } from '../../../shared/context/AuthContext';
 import { Crown, Shield, CheckCircle, PieChart, TrendingUp, Activity, DollarSign, Calendar, ArrowRight, Wallet, Target, AlertTriangle, BarChart2 } from 'lucide-react';
-import { calculateAnnualAmountV2, calculateCurrentMonthlyAmount, isTransactionCurrentlyValid, formatCurrency } from '../utils/calculations';
+import { calculateAnnualAmountV2, calculateCurrentMonthlyAmount, isTransactionCurrentlyValid, formatCurrency, getPortfolioSnapshot } from '../utils/calculations';
 import { Transaction } from '../../../shared/types';
 import { getFinancialCycle, isDateInCycle } from '../utils/financialCycle';
 
@@ -42,6 +42,12 @@ export const PrintReport: React.FC = () => {
     const totalIncome = data.incomes.reduce((acc, curr) => acc + calculateMonthlyAmount(curr), 0);
     const totalFixedExpense = data.expenses.reduce((acc, curr) => acc + calculateMonthlyAmount(curr), 0);
 
+    // Impacto anual real: suma de calculateAnnualAmountV2 por fila (no monthly*12),
+    // para que el total del pie de tabla cuadre con la columna "Impacto Anual"
+    // incluso cuando un concepto cambió de versión a mitad de año.
+    const totalAnnualIncome = data.incomes.reduce((acc, curr) => acc + calculateAnnualAmountV2(curr, currencies), 0);
+    const totalAnnualExpense = data.expenses.reduce((acc, curr) => acc + calculateAnnualAmountV2(curr, currencies), 0);
+
     // Real stats calculation (current cycle)
     const realStats = useMemo(() => {
         let income = 0;
@@ -59,28 +65,11 @@ export const PrintReport: React.FC = () => {
         return { income, expense, investment };
     }, [dailyTransactions, currentCycle, convertToDOP]);
 
-    // All-time stats
-    const allTimeStats = useMemo(() => {
-        let income = 0; let expense = 0; let investment = 0;
-        dailyTransactions.forEach(t => {
-            const amt = convertToDOP(t.amount, (t as any).currency);
-            if (t.type === 'income') income += amt;
-            else if (t.type === 'investment') investment += amt;
-            else expense += amt;
-        });
-        return { income, expense, investment, net: income - expense - investment };
-    }, [dailyTransactions, convertToDOP]);
-
-    // Accounts balance
-    const accountsBalance = useMemo(() => {
-        return ((data as any).accounts || []).reduce((sum: number, acc: any) => sum + (acc.balance || 0), 0);
-    }, [data]);
-
-    // Wealth Calc
-    const availableLiquidity = accountsBalance > 0 ? accountsBalance : (allTimeStats.net);
-    const investedAssets = (data.investments?.reduce((sum: number, inv: any) => sum + (inv.currentValue || inv.amount || 0), 0) || 0);
-    const totalInvested = investedAssets > 0 ? investedAssets : allTimeStats.investment;
-    const netWorth = availableLiquidity + totalInvested;
+    // Wealth Calc — misma fuente de verdad que Wealth.tsx, Investments.tsx y Projections.tsx
+    const wealthSnapshot = useMemo(() => getPortfolioSnapshot(data, dailyTransactions, currencies), [data, dailyTransactions, currencies]);
+    const availableLiquidity = wealthSnapshot.liquidAssets;
+    const totalInvested = wealthSnapshot.investedAssets;
+    const netWorth = wealthSnapshot.netWorth;
 
     // Rates
     const savingsRate = realStats.income > 0 ? ((realStats.income - realStats.expense) / realStats.income) * 100 : 0;
@@ -531,7 +520,7 @@ export const PrintReport: React.FC = () => {
                                 <tr>
                                     <td className="px-3 py-2 text-emerald-800" colSpan={2}>Total Ingresos Mensuales</td>
                                     <td className="px-3 py-2 text-right text-emerald-800 font-mono">{formatCurrency(totalIncome)}</td>
-                                    <td className="px-3 py-2 text-right text-emerald-700 font-mono text-xs">{formatCurrency(totalIncome * 12)}</td>
+                                    <td className="px-3 py-2 text-right text-emerald-700 font-mono text-xs">{formatCurrency(totalAnnualIncome)}</td>
                                     <td className="px-3 py-2 text-right text-emerald-600">100%</td>
                                 </tr>
                             </tfoot>
@@ -583,13 +572,13 @@ export const PrintReport: React.FC = () => {
                                 <tr className="bg-slate-100">
                                     <td className="px-3 py-2" colSpan={2}>Total Costo Fijo Mensual</td>
                                     <td className="px-3 py-2 text-right font-mono text-red-600">{formatCurrency(totalFixedExpense)}</td>
-                                    <td className="px-3 py-2 text-right font-mono text-xs text-slate-500">{formatCurrency(totalFixedExpense * 12)}</td>
+                                    <td className="px-3 py-2 text-right font-mono text-xs text-slate-500">{formatCurrency(totalAnnualExpense)}</td>
                                     <td className="px-3 py-2 text-right text-red-500">{(totalFixedExpense / totalIncome * 100).toFixed(1)}%</td>
                                 </tr>
                                 <tr className="bg-emerald-50">
                                     <td className="px-3 py-2 text-emerald-800" colSpan={2}>Margen Disponible (Ing − Gastos Fijos)</td>
                                     <td className="px-3 py-2 text-right font-mono text-emerald-700">{formatCurrency(totalIncome - totalFixedExpense)}</td>
-                                    <td className="px-3 py-2 text-right font-mono text-xs text-emerald-600">{formatCurrency((totalIncome - totalFixedExpense) * 12)}</td>
+                                    <td className="px-3 py-2 text-right font-mono text-xs text-emerald-600">{formatCurrency(totalAnnualIncome - totalAnnualExpense)}</td>
                                     <td className="px-3 py-2 text-right text-emerald-600">{((totalIncome - totalFixedExpense) / totalIncome * 100).toFixed(1)}%</td>
                                 </tr>
                             </tfoot>

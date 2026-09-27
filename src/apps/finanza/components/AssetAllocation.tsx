@@ -6,6 +6,10 @@ import { PiggyBank, TrendingUp, Building2, Coins, Landmark, Target } from 'lucid
 
 interface AssetAllocationProps {
     investments: Transaction[];
+    /** Aportes a inversión registrados en el diario (DailyTransaction type='investment'),
+     * que no tienen categoría propia — se muestran como una porción aparte para que el
+     * total del donut cuadre con la KPI "Inversiones" (que sí las incluye). */
+    dailyInvestmentTotal?: number;
 }
 
 const COLORS = {
@@ -15,6 +19,7 @@ const COLORS = {
     crypto: '#8B5CF6',        // Violet-500
     banco: '#6366F1',         // Indigo-500
     otro: '#EC4899',          // Pink-500
+    diario: '#14B8A6',        // Teal-500
 };
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -24,9 +29,10 @@ const CATEGORY_LABELS: Record<string, string> = {
     crypto: 'Cripto',
     banco: 'Depósitos',
     otro: 'Otros',
+    diario: 'Registro Diario',
 };
 
-export const AssetAllocation: React.FC<AssetAllocationProps> = ({ investments }) => {
+export const AssetAllocation: React.FC<AssetAllocationProps> = ({ investments, dailyInvestmentTotal = 0 }) => {
     // Calculate allocation
     const chartData = useMemo(() => {
         const totals: Record<string, number> = {};
@@ -37,6 +43,10 @@ export const AssetAllocation: React.FC<AssetAllocationProps> = ({ investments })
             totals[cat] = (totals[cat] || 0) + val;
         });
 
+        if (dailyInvestmentTotal > 0) {
+            totals['diario'] = (totals['diario'] || 0) + dailyInvestmentTotal;
+        }
+
         // Filter out zero categories and sort by value descending
         return Object.entries(totals)
             .map(([key, value]) => ({
@@ -46,7 +56,7 @@ export const AssetAllocation: React.FC<AssetAllocationProps> = ({ investments })
             }))
             .filter(item => item.value > 0)
             .sort((a, b) => b.value - a.value);
-    }, [investments]);
+    }, [investments, dailyInvestmentTotal]);
 
     const totalValue = chartData.reduce((acc, curr) => acc + curr.value, 0);
 

@@ -6,6 +6,7 @@ import { useCentroComandoData, CentroComandoMode } from '../hooks/useCentroComan
 import { DashboardSkeleton } from '../../../shared/components/Skeleton';
 import { formatCurrency } from '../utils/calculations';
 import { PrintOptionsModal, PrintOptions } from '../components/PrintOptionsModal';
+import { MarketIntel } from '../components/MarketIntel';
 
 export const CentroComando: React.FC = () => {
     const [mode, setMode] = useState<CentroComandoMode>('anual');
@@ -63,6 +64,10 @@ export const CentroComando: React.FC = () => {
                     <KPIRowAnual data={anualData} />
                     <PatrimonioBarChart ciclos={anualData.ciclosPorMes} />
                     
+                    {/* SECCIÓN MERCADO // INDICADORES CLAVE */}
+                    <div className="mt-8">
+                        <MarketIntel variant="summary" />
+                    </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mt-8">
                         {/* Mock components for InversionPortfolio and TasaAhorroTrend since they were not strictly defined but assumed based on structure */}
                         <div className="bg-white/80 dark:bg-neutral-900/50 backdrop-blur-xl border border-slate-200 dark:border-white/10 rounded-2xl p-6 shadow-xl">
@@ -107,6 +112,10 @@ export const CentroComando: React.FC = () => {
                 <>
                     <KPIRowMensual data={mensualData} />
                     
+                    {/* SECCIÓN MERCADO // INDICADORES CLAVE */}
+                    <div className="mt-8">
+                        <MarketIntel variant="summary" />
+                    </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mt-8">
                         <div className="bg-white/80 dark:bg-neutral-900/50 backdrop-blur-xl border border-slate-200 dark:border-white/10 rounded-2xl p-6 shadow-xl">
                             <h3 className="text-slate-900 dark:text-white font-bold mb-4 font-serif">Flujo del Ciclo</h3>

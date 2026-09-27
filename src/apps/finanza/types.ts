@@ -1,4 +1,5 @@
 import { Transaction } from '../../shared/types';
+import { Account } from './api/finanzaApi';
 export type { Transaction };
 
 export interface DailyTransaction {
@@ -42,6 +43,7 @@ export interface AppData {
   incomes: Transaction[];
   expenses: Transaction[];
   investments: Transaction[];
+  accounts?: Account[];
   savingsGoal: number;
   materialInvestment: number;
 }

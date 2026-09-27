@@ -1,7 +1,7 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { useData } from '../context/DataContext';
-import { calculateTotalAnnual, calculateAnnualAmount, formatCurrency } from '../utils/calculations';
+import { calculateTotalAnnual, calculateAnnualAmountV2, formatCurrency } from '../utils/calculations';
 import { getFinancialCycle, isDateInCycle } from '../utils/financialCycle';
 import { Printer, Activity, PieChart as PieChartIcon, TrendingUp, Receipt, PiggyBank, Flag, Wallet } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, PieChart, Pie } from 'recharts';
@@ -74,8 +74,8 @@ export const DashboardLegacy: React.FC = () => {
     const incomes = (data.incomes || []).filter(t => new Date(t.date || '2025-12-21') >= START_DATE);
     const expenses = (data.expenses || []).filter(t => new Date(t.date || '2025-12-21') >= START_DATE);
 
-    const totalIncome = incomes.reduce((acc, curr) => acc + (calculateAnnualAmount(curr, currencies) / 12), 0);
-    const totalExpense = expenses.reduce((acc, curr) => acc + (calculateAnnualAmount(curr, currencies) / 12), 0);
+    const totalIncome = incomes.reduce((acc, curr) => acc + (calculateAnnualAmountV2(curr, currencies) / 12), 0);
+    const totalExpense = expenses.reduce((acc, curr) => acc + (calculateAnnualAmountV2(curr, currencies) / 12), 0);
 
     const compData = [
       { name: 'Ingresos', value: totalIncome, fill: '#3b82f6' },
@@ -85,7 +85,7 @@ export const DashboardLegacy: React.FC = () => {
     const pieData = Object.values(expenses.reduce((acc: any, curr) => {
       const cat = curr.category || curr.name;
       if (!acc[cat]) acc[cat] = { name: cat, value: 0 };
-      acc[cat].value += (calculateAnnualAmount(curr, currencies) / 12);
+      acc[cat].value += (calculateAnnualAmountV2(curr, currencies) / 12);
       return acc;
     }, {}));
 

@@ -1,13 +1,15 @@
 
 import React, { useState, useEffect } from 'react';
 import { useData } from '../context/DataContext';
-import { calculateNetWorth, formatCurrency } from '../utils/calculations';
+import { getPortfolioSnapshot, formatCurrency } from '../utils/calculations';
 import { Building2, TrendingUp, PiggyBank, DollarSign, Wallet, ArrowUpRight, ArrowDownRight, RefreshCw, X } from 'lucide-react';
 import { AssetAllocation } from '../components/AssetAllocation';
+import { Investments } from './Investments';
 import { PortfolioHistory } from '../components/PortfolioHistory';
+import { MarketIntel } from '../components/MarketIntel';
 
 export const Wealth: React.FC = () => {
-    const { data, dailyTransactions, wealthHistory } = useData();
+    const { data, dailyTransactions, wealthHistory, currencies } = useData();
     const [currentDate, setCurrentDate] = useState(new Date());
 
     // Currency State
@@ -22,10 +24,11 @@ export const Wealth: React.FC = () => {
         console.log('Wealth Dashboard Mounted - Triggering Snapshot Check');
     }, []);
 
-    const netWorth = calculateNetWorth(data);
-
     // Safety check for data
     if (!data) return <div className="p-8 text-center text-slate-500">Cargando datos financieros...</div>;
+
+    // Misma fuente de verdad que Investments.tsx, PrintReport.tsx y Projections.tsx
+    const { liquidAssets, investedAssets, materialAssets, netWorth, dailyInvestment } = getPortfolioSnapshot(data, dailyTransactions, currencies);
 
     // Fixed calculations with proper types and property checks
     const monthlyTransactions = (data as any).transactions || [];
@@ -39,15 +42,6 @@ export const Wealth: React.FC = () => {
 
     const cashFlow = monthlyIncome - monthlyExpenses;
     const savingsRate = monthlyIncome > 0 ? (cashFlow / monthlyIncome) * 100 : 0;
-
-    // Global liquidity and investments calculation (History-aware)
-    const dailyIncome = dailyTransactions.filter((t: any) => t.type === 'income').reduce((sum: number, t: any) => sum + t.amount, 0);
-    const dailyExpense = dailyTransactions.filter((t: any) => t.type === 'expense').reduce((sum: number, t: any) => sum + t.amount, 0);
-    const dailyInvestment = dailyTransactions.filter((t: any) => t.type === 'investment').reduce((sum: number, t: any) => sum + t.amount, 0);
-
-    const liquidAssets = ((data as any).accounts?.reduce((sum: number, acc: any) => sum + (acc.balance || 0), 0) || 0) + (dailyIncome - dailyExpense - dailyInvestment);
-    const investedAssets = (data.investments?.reduce((sum: number, inv: any) => sum + (inv.currentValue || inv.amount || 0), 0) || 0) + dailyInvestment;
-    const materialAssets = ((data as any).assets?.reduce((sum: number, asset: any) => sum + (asset.value || 0), 0) || 0);
 
     return (
         <div className="max-w-[1600px] mx-auto p-6 md:p-8 space-y-8 pb-32">
@@ -144,7 +138,7 @@ export const Wealth: React.FC = () => {
                 <div className="lg:col-span-1 bg-slate-900 text-white p-6 rounded-2xl shadow-lg border border-slate-800 flex flex-col">
                     <h3 className="text-lg font-bold mb-6">Distribución</h3>
                     <div className="flex-1 flex items-center justify-center">
-                        <AssetAllocation investments={data.investments || []} />
+                        <AssetAllocation investments={data.investments || []} dailyInvestmentTotal={dailyInvestment} />
                     </div>
                 </div>
             </div>
@@ -175,7 +169,7 @@ export const Wealth: React.FC = () => {
                                             <p className="text-xs text-gray-400 capitalize">{acc.type}</p>
                                         </div>
                                     </div>
-                                    <span className="font-mono font-bold text-gray-900 dark:text-white">{formatCurrency(acc.balance)}</span>
+                                    <span className="font-mono font-bold text-gray-900 dark:text-white">{formatCurrency(acc.currentBalance)}</span>
                                 </div>
                             ))}
                         </div>
@@ -235,6 +229,12 @@ export const Wealth: React.FC = () => {
                     </div>
                 </div>
             </div>
+
+            {/* Gestión unificada: inversiones y patrimonio comparten la misma fuente de datos. */}
+            <Investments embedded />
+
+            {/* SECCIÓN MERCADO // INDICADORES CLAVE */}
+            <MarketIntel variant="summary" />
 
             {/* Currency Edit Modal */}
             {isEditingRates && (
