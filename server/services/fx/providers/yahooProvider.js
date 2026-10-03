@@ -22,11 +22,70 @@ export class YahooProvider extends BaseFxProvider {
     }
 
     /**
-     * Consulta el ticker DOP=X a Yahoo Finance v8 chart
+     * Consulta Yahoo Finance v8 chart para la moneda solicitada
+     * @param {string} targetCurrency - 'USD' o 'EUR'
      * @returns {Promise<Array>}
      */
-    async getRates() {
+    async getRates(targetCurrency = 'USD') {
+        const target = (targetCurrency || 'USD').toUpperCase();
+
         return this.executeWithProtection(async (signal) => {
+            if (target === 'EUR') {
+                // Para EUR consultamos tanto EURDOP=X como EURUSD=X (benchmark internacional)
+                const fetchTicker = async (ticker) => {
+                    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?range=1d&interval=5m`;
+                    const res = await fetch(url, {
+                        headers: { 'User-Agent': YAHOO_UA, 'Accept': 'application/json' },
+                        signal
+                    });
+                    if (!res.ok) return null;
+                    const json = await res.json();
+                    return json?.chart?.result?.[0]?.meta || null;
+                };
+
+                const [eurDopMeta, eurUsdMeta] = await Promise.all([
+                    fetchTicker('EURDOP=X'),
+                    fetchTicker('EURUSD=X')
+                ]);
+
+                const eurUsdData = eurUsdMeta && typeof eurUsdMeta.regularMarketPrice === 'number' ? {
+                    price: eurUsdMeta.regularMarketPrice,
+                    prevClose: eurUsdMeta.chartPreviousClose || eurUsdMeta.regularMarketPrice,
+                    change: eurUsdMeta.regularMarketPrice - (eurUsdMeta.chartPreviousClose || eurUsdMeta.regularMarketPrice),
+                    changePercent: eurUsdMeta.chartPreviousClose ? ((eurUsdMeta.regularMarketPrice - eurUsdMeta.chartPreviousClose) / eurUsdMeta.chartPreviousClose) * 100 : 0,
+                    symbol: 'EURUSD=X'
+                } : null;
+
+                const price = eurDopMeta?.regularMarketPrice || (eurUsdData ? eurUsdData.price * 60.0 : null);
+                if (!price || typeof price !== 'number') {
+                    throw new Error('Yahoo Finance no devolvió precio para EUR');
+                }
+
+                const prevClose = eurDopMeta?.chartPreviousClose || price;
+
+                const normalized = normalizeRateObservation({
+                    provider: this.id,
+                    rawInstitution: 'Yahoo Finance',
+                    buy: price,
+                    sell: price,
+                    baseCurrency: 'EUR',
+                    quoteCurrency: 'DOP',
+                    observedAt: new Date(),
+                    providerUpdatedAt: eurDopMeta?.regularMarketTime ? new Date(eurDopMeta.regularMarketTime * 1000) : new Date(),
+                    rateType: RATE_TYPES.MARKET,
+                    metadata: {
+                        prevClose,
+                        change: price - prevClose,
+                        changePercent: prevClose ? ((price - prevClose) / prevClose) * 100 : 0,
+                        eurUsd: eurUsdData,
+                        ticker: 'EURDOP=X'
+                    }
+                });
+
+                return normalized ? [normalized] : [];
+            }
+
+            // Flujo USD estándar (DOP=X)
             const url = 'https://query1.finance.yahoo.com/v8/finance/chart/DOP=X?range=1d&interval=5m';
             const response = await fetch(url, {
                 headers: {
@@ -54,13 +113,16 @@ export class YahooProvider extends BaseFxProvider {
                 rawInstitution: 'Yahoo Finance',
                 buy: price,
                 sell: price,
+                baseCurrency: 'USD',
+                quoteCurrency: 'DOP',
                 observedAt: new Date(),
                 providerUpdatedAt: meta.regularMarketTime ? new Date(meta.regularMarketTime * 1000) : new Date(),
                 rateType: RATE_TYPES.MARKET,
                 metadata: {
                     prevClose,
                     change: price - prevClose,
-                    changePercent: prevClose ? ((price - prevClose) / prevClose) * 100 : 0
+                    changePercent: prevClose ? ((price - prevClose) / prevClose) * 100 : 0,
+                    ticker: 'DOP=X'
                 }
             });
 

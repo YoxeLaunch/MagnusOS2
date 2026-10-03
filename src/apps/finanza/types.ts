@@ -86,14 +86,28 @@ export interface FxBankRate {
   };
 }
 
-export interface FxUsdDopResponse {
+export interface FxRatesResponse {
   pair: string;
+  baseCurrency?: string;
+  quoteCurrency?: string;
   generatedAt: string;
   summary: {
     avgBuy: number | null;
     avgSell: number | null;
     avgSpread: number | null;
     institutionsCount: number;
+    bestToSell?: {
+      institutionId: string;
+      institutionName: string;
+      rate: number;
+      validationStatus: string;
+    } | null;
+    bestToBuy?: {
+      institutionId: string;
+      institutionName: string;
+      rate: number;
+      validationStatus: string;
+    } | null;
     bestToSellUsd?: {
       institutionId: string;
       institutionName: string;
@@ -114,11 +128,27 @@ export interface FxUsdDopResponse {
       change: number;
       changePercent: number;
       observedAt: string;
+      ticker?: string;
     } | null;
     official?: {
       buy: number;
       sell: number;
       observedAt: string;
+    } | null;
+    eurUsd?: {
+      price: number;
+      prevClose: number;
+      change: number;
+      changePercent: number;
+      symbol?: string;
+    } | null;
+    implied?: {
+      rate: number;
+      formula: string;
+      eurUsd: number;
+      usdDop: number;
+      label: string;
+      description?: string;
     } | null;
   };
   banks: FxBankRate[];
@@ -135,3 +165,5 @@ export interface FxUsdDopResponse {
     }>;
   };
 }
+
+export type FxUsdDopResponse = FxRatesResponse;

@@ -25,29 +25,45 @@ export class FxService {
         this.cacheTtlMs = ttlMinutes * 60 * 1000;
         this.maxStaleHours = parseInt(process.env.FX_MAX_STALE_HOURS || '24', 10);
 
-        // Estado en memoria
-        this.cacheData = null;
-        this.cacheTimestamp = 0;
+        // Estado en memoria aislado por par (ej: 'USD/DOP', 'EUR/DOP')
+        this.cache = new Map();
 
-        // Anti-Stampede (Single-flight Promise lock)
-        this.activeRefreshPromise = null;
+        // Anti-Stampede aislado por par (Single-flight Promise lock per pair)
+        this.activeRefreshPromises = new Map();
     }
 
     /**
-     * Retorna el estado consolidado de divisas USD/DOP implementando Stale-While-Revalidate y Single-Flight
+     * Normaliza el identificador de par de divisas (soporta 'USD/DOP', 'EUR/DOP', 'usd-dop', etc.)
      */
-    async getUsdDopRates({ forceRefresh = false } = {}) {
+    #normalizePair(pairInput = 'USD/DOP') {
+        if (!pairInput || typeof pairInput !== 'string') return 'USD/DOP';
+        const cleaned = pairInput.replace(/[-_]/g, '/').toUpperCase();
+        if (cleaned.startsWith('EUR') || cleaned === 'EUR/DOP') return 'EUR/DOP';
+        return 'USD/DOP';
+    }
+
+    /**
+     * Retorna el estado consolidado de divisas implementando Stale-While-Revalidate y Single-Flight por par
+     * @param {string} pairInput - 'USD/DOP' o 'EUR/DOP'
+     * @param {Object} options
+     * @param {boolean} options.forceRefresh - Fuerza llamada externa inmediata
+     */
+    async getRates(pairInput = 'USD/DOP', { forceRefresh = false } = {}) {
+        const pair = this.#normalizePair(pairInput);
+        const [baseCurrency, quoteCurrency] = pair.split('/');
         const now = Date.now();
-        const hasCache = this.cacheData !== null;
-        const cacheAgeMs = now - this.cacheTimestamp;
+
+        const cached = this.cache.get(pair);
+        const hasCache = Boolean(cached && cached.data);
+        const cacheAgeMs = hasCache ? (now - cached.timestamp) : Infinity;
         const isFresh = hasCache && cacheAgeMs < this.cacheTtlMs;
 
         // Caso 1: Caché fresca en memoria -> respuesta inmediata en 0ms
         if (isFresh && !forceRefresh) {
             return {
-                ...this.cacheData,
+                ...cached.data,
                 meta: {
-                    ...this.cacheData.meta,
+                    ...cached.data.meta,
                     cache: true,
                     stale: false,
                     ageMinutes: Math.floor(cacheAgeMs / 60000)
@@ -55,46 +71,48 @@ export class FxService {
             };
         }
 
-        // Caso 2: Forzar refresco explícito (ej. admin o botón de recarga)
+        // Caso 2: Forzar refresco explícito
         if (forceRefresh) {
-            return this.#executeSingleFlightRefresh();
+            return this.#executeSingleFlightRefresh(pair);
         }
 
-        // Caso 3: Caché expirada pero presente -> SWR: responder inmediatamente el dato viejo y refrescar en background
+        // Caso 3: Caché expirada pero presente -> SWR: entregar dato viejo y refrescar en background
         if (hasCache) {
             const ageMinutes = Math.floor(cacheAgeMs / 60000);
             const isMaxStale = ageMinutes > (this.maxStaleHours * 60);
 
-            // Disparar refresco en segundo plano si no hay uno en curso
-            this.#executeSingleFlightRefresh().catch(err => {
-                console.warn('[FX] Error en refresco SWR en segundo plano:', err.message);
+            // Disparar refresco en segundo plano si no hay uno en curso para este par
+            this.#executeSingleFlightRefresh(pair).catch(err => {
+                console.warn(`[FX][${pair}] Error en refresco SWR en segundo plano:`, err.message);
             });
 
             return {
-                ...this.cacheData,
+                ...cached.data,
                 meta: {
-                    ...this.cacheData.meta,
+                    ...cached.data.meta,
                     cache: true,
                     stale: true,
                     ageMinutes,
                     isMaxStale,
-                    warning: isMaxStale ? '⚠ Última tasa disponible (>24h). Esperando actualización bancaria.' : undefined
+                    warning: isMaxStale ? `⚠ Última tasa ${pair} disponible (>24h). Esperando actualización bancaria.` : undefined
                 }
             };
         }
 
-        // Caso 4: No hay caché en memoria (primer arranque) -> intentar cargar de PostgreSQL primero o refrescar
-        const dbSnapshot = await this.#loadLastSnapshotFromDb();
+        // Caso 4: No hay caché en memoria (primer arranque) -> intentar cargar de base de datos
+        const dbSnapshot = await this.#loadLastSnapshotFromDb(baseCurrency, quoteCurrency);
         if (dbSnapshot) {
-            this.cacheData = dbSnapshot;
-            this.cacheTimestamp = new Date(dbSnapshot.generatedAt).getTime();
-            
-            // Disparar refresco para actualizar datos en background
-            this.#executeSingleFlightRefresh().catch(err => {
-                console.warn('[FX] Error en refresco inicial en background:', err.message);
+            this.cache.set(pair, {
+                data: dbSnapshot,
+                timestamp: new Date(dbSnapshot.generatedAt).getTime()
             });
 
-            const initialAge = Math.floor((now - this.cacheTimestamp) / 60000);
+            // Disparar refresco en background
+            this.#executeSingleFlightRefresh(pair).catch(err => {
+                console.warn(`[FX][${pair}] Error en refresco inicial en background:`, err.message);
+            });
+
+            const initialAge = Math.floor((now - new Date(dbSnapshot.generatedAt).getTime()) / 60000);
             return {
                 ...dbSnapshot,
                 meta: {
@@ -108,43 +126,61 @@ export class FxService {
         }
 
         // Caso 5: No hay datos en memoria ni en BD -> llamada síncrona protegida
-        return this.#executeSingleFlightRefresh();
+        return this.#executeSingleFlightRefresh(pair);
     }
 
     /**
-     * Single-Flight: Si múltiples peticiones concurrentes piden refrescar, comparten la misma promesa
+     * Interfaz retrocompatible para USD/DOP
      */
-    async #executeSingleFlightRefresh() {
-        if (this.activeRefreshPromise) {
-            return this.activeRefreshPromise;
+    async getUsdDopRates(options = {}) {
+        return this.getRates('USD/DOP', options);
+    }
+
+    /**
+     * Interfaz dedicada para EUR/DOP
+     */
+    async getEurDopRates(options = {}) {
+        return this.getRates('EUR/DOP', options);
+    }
+
+    /**
+     * Single-Flight Mutex: Las peticiones concurrentes del mismo par comparten la misma promesa en vuelo
+     */
+    async #executeSingleFlightRefresh(pair) {
+        if (this.activeRefreshPromises.has(pair)) {
+            return this.activeRefreshPromises.get(pair);
         }
 
-        this.activeRefreshPromise = (async () => {
+        const refreshPromise = (async () => {
             try {
-                const refreshed = await this.#refreshAllProviders();
-                this.cacheData = refreshed;
-                this.cacheTimestamp = Date.now();
+                const refreshed = await this.#refreshAllProviders(pair);
+                this.cache.set(pair, {
+                    data: refreshed,
+                    timestamp: Date.now()
+                });
                 return refreshed;
             } finally {
-                this.activeRefreshPromise = null;
+                this.activeRefreshPromises.delete(pair);
             }
         })();
 
-        return this.activeRefreshPromise;
+        this.activeRefreshPromises.set(pair, refreshPromise);
+        return refreshPromise;
     }
 
     /**
-     * Ejecuta la consulta paralela a los proveedores activos y sintetiza el resultado
+     * Ejecuta la consulta paralela a los proveedores activos para el par indicado
      */
-    async #refreshAllProviders() {
+    async #refreshAllProviders(pair) {
         const startTime = Date.now();
+        const [baseCurrency, quoteCurrency] = pair.split('/');
 
-        // Despacho concurrente de todos los providers
+        // Despacho concurrente de todos los providers parametrizados por moneda
         const [tasaRealRes, infoDolarRes, bcrdRes, yahooRes] = await Promise.allSettled([
-            this.tasaReal.getRates(),
-            this.infoDolar.getRates(),
-            this.bcrd.getRates(),
-            this.yahoo.getRates()
+            this.tasaReal.getRates(baseCurrency),
+            this.infoDolar.getRates(baseCurrency),
+            this.bcrd.getRates(baseCurrency),
+            this.yahoo.getRates(baseCurrency)
         ]);
 
         const providerErrors = [];
@@ -155,22 +191,22 @@ export class FxService {
         if (tasaRealRes.status === 'fulfilled' && tasaRealRes.value.success) {
             activeProviders.push('tasareal');
             allObservations = allObservations.concat(tasaRealRes.value.data || []);
-            await this.#recordHealth('tasareal', true, tasaRealRes.value.latencyMs, tasaRealRes.value.recordsReceived, null, tasaRealRes.value.retryCount);
+            await this.#recordHealth('tasareal', true, tasaRealRes.value.latencyMs, tasaRealRes.value.recordsReceived, null, tasaRealRes.value.retryCount, baseCurrency);
         } else {
             const err = tasaRealRes.status === 'rejected' ? tasaRealRes.reason.message : (tasaRealRes.value?.error || 'Falló');
             providerErrors.push({ provider: 'tasareal', error: err });
-            await this.#recordHealth('tasareal', false, 0, 0, err, 0);
+            await this.#recordHealth('tasareal', false, 0, 0, err, 0, baseCurrency);
         }
 
         // Telemetría InfoDolar
         if (infoDolarRes.status === 'fulfilled' && infoDolarRes.value.success) {
             activeProviders.push('infodolar');
             allObservations = allObservations.concat(infoDolarRes.value.data || []);
-            await this.#recordHealth('infodolar', true, infoDolarRes.value.latencyMs, infoDolarRes.value.recordsReceived, null, infoDolarRes.value.retryCount);
+            await this.#recordHealth('infodolar', true, infoDolarRes.value.latencyMs, infoDolarRes.value.recordsReceived, null, infoDolarRes.value.retryCount, baseCurrency);
         } else {
             const err = infoDolarRes.status === 'rejected' ? infoDolarRes.reason.message : (infoDolarRes.value?.error || 'Falló');
             providerErrors.push({ provider: 'infodolar', error: err });
-            await this.#recordHealth('infodolar', false, 0, 0, err, 0);
+            await this.#recordHealth('infodolar', false, 0, 0, err, 0, baseCurrency);
         }
 
         // Referencia Oficial BCRD
@@ -183,10 +219,23 @@ export class FxService {
                 observedAt: b.observedAt,
                 provider: 'bcrd'
             };
+        } else {
+            // Fallback: Si el provider BCRD falló, buscar si TasaReal trajo la tasa oficial del Banco Central
+            const officialObs = allObservations.find(o => o.rateType === 'OFFICIAL_REFERENCE' || o.institutionId === 'bcrd');
+            if (officialObs) {
+                officialRef = {
+                    buy: officialObs.buy,
+                    sell: officialObs.sell,
+                    observedAt: officialObs.observedAt,
+                    provider: 'bcrd'
+                };
+            }
         }
 
         // Referencia de Mercado (Yahoo Finance)
         let marketRef = null;
+        let eurUsdBenchmark = null;
+
         if (yahooRes.status === 'fulfilled' && yahooRes.value.success && yahooRes.value.data?.[0]) {
             const y = yahooRes.value.data[0];
             marketRef = {
@@ -195,25 +244,49 @@ export class FxService {
                 change: y.metadata?.change || 0,
                 changePercent: y.metadata?.changePercent || 0,
                 observedAt: y.observedAt,
-                provider: 'yahoo'
+                provider: 'yahoo',
+                ticker: y.metadata?.ticker || (baseCurrency === 'EUR' ? 'EURDOP=X' : 'DOP=X')
+            };
+
+            if (y.metadata?.eurUsd) {
+                eurUsdBenchmark = y.metadata.eurUsd;
+            }
+        }
+
+        // Cálculo analítico triangular para EUR: EUR/USD x USD/DOP = EUR/DOP implícito
+        let impliedRef = null;
+        if (baseCurrency === 'EUR') {
+            const usdSnapshot = this.cache.get('USD/DOP')?.data;
+            const usdDopRate = usdSnapshot?.summary?.avgSell || usdSnapshot?.reference?.market?.price || 60.15;
+            const eurUsdRate = eurUsdBenchmark?.price || (marketRef?.price ? marketRef.price / usdDopRate : 1.085);
+            const impliedRate = Math.round(eurUsdRate * usdDopRate * 100) / 100;
+
+            impliedRef = {
+                rate: impliedRate,
+                formula: 'EUR/USD × USD/DOP',
+                eurUsd: eurUsdRate,
+                usdDop: usdDopRate,
+                label: 'DERIVADO / BENCHMARK',
+                description: 'Tasa teórica implícita internacional (no es cotización bancaria local)'
             };
         }
 
         // Si ningún agregador bancario respondió, intentar fallback a la caché existente o BD
+        const currentCached = this.cache.get(pair)?.data;
         if (allObservations.length === 0) {
-            console.warn('[FX] Ningún proveedor bancario devolvió datos frescos. Activando cascada de fallback.');
-            if (this.cacheData) {
+            console.warn(`[FX][${pair}] Ningún proveedor bancario devolvió datos frescos. Activando cascada de fallback.`);
+            if (currentCached) {
                 return {
-                    ...this.cacheData,
+                    ...currentCached,
                     meta: {
-                        ...this.cacheData.meta,
+                        ...currentCached.meta,
                         stale: true,
                         degraded: true,
                         providerErrors
                     }
                 };
             }
-            const dbFallback = await this.#loadLastSnapshotFromDb();
+            const dbFallback = await this.#loadLastSnapshotFromDb(baseCurrency, quoteCurrency);
             if (dbFallback) {
                 return {
                     ...dbFallback,
@@ -241,15 +314,15 @@ export class FxService {
         // Calcular mejores tasas (excluyendo valores en conflicto severo)
         const eligibleBanks = consolidatedBanks.filter(b => b.validationStatus !== 'CONFLICT');
         
-        let bestToSellUsd = null; // Mayor compra
-        let bestToBuyUsd = null;  // Menor venta
+        let bestToSell = null; // Mayor compra (cliente vende moneda al banco)
+        let bestToBuy = null;  // Menor venta (cliente compra moneda al banco)
 
         if (eligibleBanks.length) {
             const sortedByBuy = [...eligibleBanks].filter(b => b.buy).sort((a, b) => b.buy - a.buy);
             const sortedBySell = [...eligibleBanks].filter(b => b.sell).sort((a, b) => a.sell - b.sell);
 
             if (sortedByBuy.length) {
-                bestToSellUsd = {
+                bestToSell = {
                     institutionId: sortedByBuy[0].institutionId,
                     institutionName: sortedByBuy[0].institutionName,
                     rate: sortedByBuy[0].buy,
@@ -258,7 +331,7 @@ export class FxService {
             }
 
             if (sortedBySell.length) {
-                bestToBuyUsd = {
+                bestToBuy = {
                     institutionId: sortedBySell[0].institutionId,
                     institutionName: sortedBySell[0].institutionName,
                     rate: sortedBySell[0].sell,
@@ -270,23 +343,34 @@ export class FxService {
         const nowIso = new Date().toISOString();
 
         const payload = {
-            pair: 'USD/DOP',
+            pair,
+            baseCurrency,
+            quoteCurrency,
             generatedAt: nowIso,
             summary: {
                 avgBuy,
                 avgSell,
+                averageBuy: avgBuy,
+                averageSell: avgSell,
                 avgSpread,
                 institutionsCount: consolidatedBanks.length,
-                bestToSellUsd,
-                bestToBuyUsd
+                bestToSell,
+                bestToBuy,
+                // Retrocompatibilidad con nombres específicos USD
+                bestToSellUsd: bestToSell,
+                bestToBuyUsd: bestToBuy
             },
             bestRates: {
-                bestToSellUsd,
-                bestToBuyUsd
+                bestToSell,
+                bestToBuy,
+                bestToSellUsd: bestToSell,
+                bestToBuyUsd: bestToBuy
             },
             reference: {
-                market: marketRef || this.cacheData?.reference?.market || null,
-                official: officialRef || this.cacheData?.reference?.official || null
+                market: marketRef || currentCached?.reference?.market || null,
+                official: officialRef || currentCached?.reference?.official || null,
+                eurUsd: eurUsdBenchmark || currentCached?.reference?.eurUsd || null,
+                implied: impliedRef || currentCached?.reference?.implied || null
             },
             banks: consolidatedBanks,
             meta: {
@@ -305,27 +389,29 @@ export class FxService {
             }
         };
 
-        // Persistir en PostgreSQL de manera asíncrona sin bloquear la respuesta
-        this.#persistObservationsToDb(consolidatedBanks).catch(err => {
-            console.error('[FX] Error persistiendo observaciones en BD:', err.message);
+        // Persistir en PostgreSQL/SQLite con base_currency de manera asíncrona
+        this.#persistObservationsToDb(consolidatedBanks, baseCurrency, quoteCurrency).catch(err => {
+            console.error(`[FX][${pair}] Error persistiendo observaciones en BD:`, err.message);
         });
 
         return payload;
     }
 
     /**
-     * Persistencia deduplicada en PostgreSQL/SQLite
-     * Solo inserta una nueva fila histórica si la tasa cambió significativamente o cambió de fecha
+     * Persistencia deduplicada en PostgreSQL/SQLite diferenciada por base_currency
      */
-    async #persistObservationsToDb(banks) {
+    async #persistObservationsToDb(banks, baseCurrency = 'USD', quoteCurrency = 'DOP') {
         if (!banks || !banks.length) return;
         const today = new Date().toISOString().split('T')[0];
 
         for (const bank of banks) {
             try {
-                // Buscar la última observación registrada para esta institución
+                // Buscar la última observación registrada para esta institución Y esta moneda base
                 const lastObs = await FxRateObservation.findOne({
-                    where: { institutionId: bank.institutionId },
+                    where: {
+                        institutionId: bank.institutionId,
+                        baseCurrency
+                    },
                     order: [['observed_at', 'DESC'], ['id', 'DESC']]
                 });
 
@@ -351,6 +437,8 @@ export class FxService {
                         institutionId: bank.institutionId,
                         institutionName: bank.institutionName,
                         rateType: bank.rateType,
+                        baseCurrency,
+                        quoteCurrency,
                         buy: bank.buy,
                         sell: bank.sell,
                         mid: bank.mid,
@@ -367,19 +455,19 @@ export class FxService {
     }
 
     /**
-     * Carga el último estado válido completo desde la base de datos
+     * Carga el último estado válido completo desde la base de datos para una moneda específica
      */
-    async #loadLastSnapshotFromDb() {
+    async #loadLastSnapshotFromDb(baseCurrency = 'USD', quoteCurrency = 'DOP') {
         try {
-            // Traer las observaciones más recientes por institución
+            const pair = `${baseCurrency}/${quoteCurrency}`;
             const latestRecords = await FxRateObservation.findAll({
+                where: { baseCurrency },
                 order: [['observed_at', 'DESC'], ['id', 'DESC']],
                 limit: 50
             });
 
             if (!latestRecords || latestRecords.length === 0) return null;
 
-            // Agrupar por institutionId conservando solo el más reciente
             const map = new Map();
             for (const r of latestRecords) {
                 if (!map.has(r.institutionId)) {
@@ -408,13 +496,13 @@ export class FxService {
 
             const sortedByBuy = [...banks].filter(b => b.buy).sort((a, b) => b.buy - a.buy);
             const sortedBySell = [...banks].filter(b => b.sell).sort((a, b) => a.sell - b.sell);
-            const bestToSellUsd = sortedByBuy.length ? {
+            const bestToSell = sortedByBuy.length ? {
                 institutionId: sortedByBuy[0].institutionId,
                 institutionName: sortedByBuy[0].institutionName,
                 rate: sortedByBuy[0].buy,
                 validationStatus: sortedByBuy[0].validationStatus
             } : null;
-            const bestToBuyUsd = sortedBySell.length ? {
+            const bestToBuy = sortedBySell.length ? {
                 institutionId: sortedBySell[0].institutionId,
                 institutionName: sortedBySell[0].institutionName,
                 rate: sortedBySell[0].sell,
@@ -422,23 +510,31 @@ export class FxService {
             } : null;
 
             return {
-                pair: 'USD/DOP',
+                pair,
+                baseCurrency,
+                quoteCurrency,
                 generatedAt: latestRecords[0].observedAt,
                 summary: {
                     avgBuy,
                     avgSell,
                     avgSpread,
                     institutionsCount: banks.length,
-                    bestToSellUsd,
-                    bestToBuyUsd
+                    bestToSell,
+                    bestToBuy,
+                    bestToSellUsd: bestToSell,
+                    bestToBuyUsd: bestToBuy
                 },
                 bestRates: {
-                    bestToSellUsd,
-                    bestToBuyUsd
+                    bestToSell,
+                    bestToBuy,
+                    bestToSellUsd: bestToSell,
+                    bestToBuyUsd: bestToBuy
                 },
                 reference: {
                     market: null,
-                    official: null
+                    official: null,
+                    eurUsd: null,
+                    implied: null
                 },
                 banks,
                 meta: {
@@ -448,7 +544,7 @@ export class FxService {
                 }
             };
         } catch (error) {
-            console.error('[FX] No se pudo cargar snapshot desde BD:', error.message);
+            console.error(`[FX][${baseCurrency}/DOP] No se pudo cargar snapshot desde BD:`, error.message);
             return null;
         }
     }
@@ -456,10 +552,10 @@ export class FxService {
     /**
      * Registra evento de salud y latencia de un proveedor en FxProviderHealth
      */
-    async #recordHealth(provider, success, latencyMs, recordsReceived, errorType, retryCount) {
+    async #recordHealth(provider, success, latencyMs, recordsReceived, errorType, retryCount, currency = 'USD') {
         try {
             await FxProviderHealth.create({
-                provider,
+                provider: `${provider}:${currency}`,
                 timestamp: new Date(),
                 success,
                 latencyMs: latencyMs || 0,
@@ -474,14 +570,16 @@ export class FxService {
     }
 
     /**
-     * Retorna la serie histórica de una institución o del mercado general para gráficos (Step / Line)
+     * Retorna la serie histórica de una institución o del mercado general filtrando por moneda
      */
-    async getHistory(institutionId, days = 30) {
+    async getHistory(institutionId, days = 30, baseCurrency = 'USD') {
         const sinceDate = new Date();
         sinceDate.setDate(sinceDate.getDate() - days);
+        const base = (baseCurrency || 'USD').toUpperCase();
 
         const where = {
-            observedAt: { [Op.gte]: sinceDate }
+            observedAt: { [Op.gte]: sinceDate },
+            baseCurrency: base
         };
 
         if (institutionId && institutionId !== 'general') {
@@ -498,6 +596,8 @@ export class FxService {
             id: r.id,
             institutionId: r.institutionId,
             institutionName: r.institutionName,
+            baseCurrency: r.baseCurrency,
+            quoteCurrency: r.quoteCurrency,
             buy: r.buy,
             sell: r.sell,
             mid: r.mid,
@@ -511,13 +611,15 @@ export class FxService {
     /**
      * Genera el Reporte de Evaluación para el trial de 29 días de TasaReal
      */
-    async getTasaRealEvaluation(days = 29) {
+    async getTasaRealEvaluation(days = 29, currency = null) {
         const sinceDate = new Date();
         sinceDate.setDate(sinceDate.getDate() - days);
 
+        const providerFilter = currency ? `tasareal:${currency.toUpperCase()}` : { [Op.like]: 'tasareal%' };
+
         const healthLogs = await FxProviderHealth.findAll({
             where: {
-                provider: 'tasareal',
+                provider: providerFilter,
                 timestamp: { [Op.gte]: sinceDate }
             },
             order: [['timestamp', 'ASC']]
@@ -535,10 +637,15 @@ export class FxService {
         const p95Latency = latencies.length ? latencies[Math.floor(latencies.length * 0.95)] : 0;
 
         // Auditoría de discrepancias vs InfoDolar
+        const obsWhere = {
+            observedAt: { [Op.gte]: sinceDate }
+        };
+        if (currency) {
+            obsWhere.baseCurrency = currency.toUpperCase();
+        }
+
         const comparisons = await FxRateObservation.findAll({
-            where: {
-                observedAt: { [Op.gte]: sinceDate }
-            },
+            where: obsWhere,
             limit: 500
         });
 
@@ -547,6 +654,7 @@ export class FxService {
 
         return {
             periodDays: days,
+            currency: currency || 'ALL',
             configured: Boolean(process.env.TASAREAL_API_KEY),
             enabled: this.tasaReal.enabled,
             circuitState: this.tasaReal.circuitState,
@@ -567,3 +675,4 @@ export class FxService {
 
 // Singleton global
 export const fxService = new FxService();
+

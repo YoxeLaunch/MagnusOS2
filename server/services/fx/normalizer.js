@@ -5,7 +5,7 @@
  * ============================================================================
  */
 
-import { INSTITUTION_REGISTRY, RATE_TYPES } from './types.js';
+import { INSTITUTION_REGISTRY, RATE_TYPES, FX_RATE_BOUNDS } from './types.js';
 
 /**
  * Normaliza una cadena de texto para comparación libre de acentos y puntuación
@@ -121,6 +121,8 @@ export function normalizeRateObservation({
     rawInstitution,
     buy,
     sell,
+    baseCurrency = 'USD',
+    quoteCurrency = 'DOP',
     observedAt = new Date(),
     providerUpdatedAt = null,
     rateType = null,
@@ -130,8 +132,12 @@ export function normalizeRateObservation({
     const buyNum = parseRate(buy);
     const sellNum = parseRate(sell);
 
-    // Validación básica de plausibilidad (un dólar en RD suele estar entre 40 y 100 DOP)
-    const isPlausible = (r) => r === null || (r >= 40 && r <= 100);
+    const base = (baseCurrency || 'USD').toUpperCase();
+    const quote = (quoteCurrency || 'DOP').toUpperCase();
+
+    // Validación de plausibilidad según moneda base (USD: 40-100, EUR: 40-120)
+    const bounds = FX_RATE_BOUNDS[base] || { min: 40, max: 120 };
+    const isPlausible = (r) => r === null || (r >= bounds.min && r <= bounds.max);
 
     if (!isPlausible(buyNum) || !isPlausible(sellNum)) {
         return null;
@@ -156,8 +162,8 @@ export function normalizeRateObservation({
         fullName: resolved.fullName || resolved.name,
         rateType: resolved.type,
         logo: resolved.logo,
-        baseCurrency: 'USD',
-        quoteCurrency: 'DOP',
+        baseCurrency: base,
+        quoteCurrency: quote,
         buy: buyNum,
         sell: sellNum,
         mid,
@@ -167,3 +173,4 @@ export function normalizeRateObservation({
         metadata
     };
 }
+

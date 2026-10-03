@@ -24,11 +24,15 @@ export class BcrdProvider extends BaseFxProvider {
 
     /**
      * Consulta la tasa oficial spot del BCRD
+     * @param {string} targetCurrency - 'USD' o 'EUR'
      * @returns {Promise<Array>}
      */
-    async getRates() {
+    async getRates(targetCurrency = 'USD') {
+        const target = (targetCurrency || 'USD').toUpperCase();
+
         return this.executeWithProtection(async (signal) => {
-            const response = await fetch(this.apiUrl, {
+            const url = target === 'EUR' ? `${this.apiUrl}?currency=EUR` : this.apiUrl;
+            const response = await fetch(url, {
                 headers: {
                     'Accept': 'application/json',
                     'User-Agent': 'Magnus-OS2-Providence-FX/1.0'
@@ -37,7 +41,7 @@ export class BcrdProvider extends BaseFxProvider {
             });
 
             if (!response.ok) {
-                throw new Error(`HTTP ${response.status} al consultar BCRD API`);
+                throw new Error(`HTTP ${response.status} al consultar BCRD API (${target})`);
             }
 
             const json = await response.json();
@@ -48,7 +52,7 @@ export class BcrdProvider extends BaseFxProvider {
             const dateVal = json?.fecha ?? json?.date ?? json?.data?.fecha;
 
             if (!buyVal && !sellVal) {
-                throw new Error('Respuesta de BCRD no contiene valores válidos de compra o venta');
+                throw new Error(`Respuesta de BCRD no contiene valores válidos de compra o venta para ${target}`);
             }
 
             const normalized = normalizeRateObservation({
@@ -56,11 +60,13 @@ export class BcrdProvider extends BaseFxProvider {
                 rawInstitution: 'Banco Central de la República Dominicana',
                 buy: buyVal,
                 sell: sellVal,
+                baseCurrency: target,
+                quoteCurrency: 'DOP',
                 observedAt: new Date(),
                 providerUpdatedAt: dateVal ? new Date(dateVal) : null,
                 rateType: RATE_TYPES.OFFICIAL_REFERENCE,
                 metadata: {
-                    source: 'bcrd_official_spot'
+                    source: `bcrd_official_spot_${target.toLowerCase()}`
                 }
             });
 

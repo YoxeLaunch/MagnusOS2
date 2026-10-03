@@ -18,16 +18,21 @@ export class InfoDolarProvider extends BaseFxProvider {
             enabled: isEnabled
         });
 
-        this.url = 'https://www.infodolar.com.do/';
+        this.usdUrl = 'https://www.infodolar.com.do/';
+        this.eurUrl = 'https://www.infodolar.com.do/precio-euro.aspx';
     }
 
     /**
      * Extrae las tasas de los bancos de la página HTML utilizando Cheerio (DOM Parser)
+     * @param {string} targetCurrency - 'USD' o 'EUR'
      * @returns {Promise<Array>}
      */
-    async getRates() {
+    async getRates(targetCurrency = 'USD') {
+        const target = (targetCurrency || 'USD').toUpperCase();
+        const targetUrl = target === 'EUR' ? this.eurUrl : this.usdUrl;
+
         return this.executeWithProtection(async (signal) => {
-            const response = await fetch(this.url, {
+            const response = await fetch(targetUrl, {
                 headers: {
                     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
                     'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
@@ -37,12 +42,12 @@ export class InfoDolarProvider extends BaseFxProvider {
             });
 
             if (!response.ok) {
-                throw new Error(`HTTP Error ${response.status} de InfoDolar`);
+                throw new Error(`HTTP Error ${response.status} de InfoDolar (${target})`);
             }
 
             const html = await response.text();
             if (!html || html.length < 500) {
-                throw new Error('Respuesta de InfoDolar vacía o truncada');
+                throw new Error(`Respuesta de InfoDolar (${target}) vacía o truncada`);
             }
 
             // Cargar Cheerio para parsing DOM estricto (no regex frágil)
@@ -86,10 +91,12 @@ export class InfoDolarProvider extends BaseFxProvider {
                     rawInstitution,
                     buy: rawBuy,
                     sell: rawSell,
+                    baseCurrency: target,
+                    quoteCurrency: 'DOP',
                     observedAt: new Date(),
                     rateType: RATE_TYPES.RETAIL_BANK,
                     metadata: {
-                        source: 'infodolar_dom'
+                        source: `infodolar_dom_${target.toLowerCase()}`
                     }
                 });
 
@@ -101,7 +108,7 @@ export class InfoDolarProvider extends BaseFxProvider {
                             buy: normalized.buy,
                             sell: normalized.sell
                         });
-                        console.warn(`[FX][INFODOLAR] Anomalía de spread invertido detectada: ${normalized.institutionName} (Compra: ${normalized.buy}, Venta: ${normalized.sell})`);
+                        console.warn(`[FX][INFODOLAR][${target}] Anomalía de spread invertido detectada: ${normalized.institutionName} (Compra: ${normalized.buy}, Venta: ${normalized.sell})`);
                     }
 
                     normalizedObservations.push(normalized);
@@ -110,7 +117,7 @@ export class InfoDolarProvider extends BaseFxProvider {
 
             // Si tras parsear la tabla no obtuvimos al menos 3 bancos reconocidos, el DOM cambió
             if (normalizedObservations.length < 3) {
-                throw new Error(`DOM de InfoDolar no produjo datos válidos mínimos (solo ${normalizedObservations.length} entidades extraídas)`);
+                throw new Error(`DOM de InfoDolar (${target}) no produjo datos válidos mínimos (solo ${normalizedObservations.length} entidades extraídas)`);
             }
 
             return normalizedObservations;

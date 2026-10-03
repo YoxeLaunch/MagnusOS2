@@ -21,9 +21,12 @@ export const scheduleFxJob = () => {
     const hourlyCron = `0 ${activeStartHour}-${activeEndHour} * * 1-5`;
 
     cron.schedule(hourlyCron, async () => {
-        console.log(`[FX_SCHEDULER] Disparando actualización programada en horario bancario RD (${new Date().toLocaleTimeString('es-DO', { timeZone: 'America/Santo_Domingo' })})...`);
+        console.log(`[FX_SCHEDULER] Disparando actualización programada USD/DOP y EUR/DOP en horario bancario RD (${new Date().toLocaleTimeString('es-DO', { timeZone: 'America/Santo_Domingo' })})...`);
         try {
-            await fxService.getUsdDopRates({ forceRefresh: true });
+            await Promise.allSettled([
+                fxService.getRates('USD/DOP', { forceRefresh: true }),
+                fxService.getRates('EUR/DOP', { forceRefresh: true })
+            ]);
         } catch (error) {
             console.error('[FX_SCHEDULER] Error en refresco programado horario:', error.message);
         }
@@ -37,7 +40,10 @@ export const scheduleFxJob = () => {
     cron.schedule(lateClosingCron, async () => {
         console.log(`[FX_SCHEDULER] Disparando consolidación de cierre diario RD (${lateHour}:00 Santo Domingo)...`);
         try {
-            await fxService.getUsdDopRates({ forceRefresh: true });
+            await Promise.allSettled([
+                fxService.getRates('USD/DOP', { forceRefresh: true }),
+                fxService.getRates('EUR/DOP', { forceRefresh: true })
+            ]);
         } catch (error) {
             console.error('[FX_SCHEDULER] Error en refresco nocturno:', error.message);
         }

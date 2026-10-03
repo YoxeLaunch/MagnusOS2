@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { useData } from '../context/DataContext';
 import {
@@ -20,7 +21,8 @@ import {
   ChevronRight,
   Maximize2,
   Calendar,
-  Activity
+  Activity,
+  Building2
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -113,6 +115,7 @@ export const MarketIntel: React.FC<MarketIntelProps> = ({ embedded = false, vari
   const [hoveredPoint, setHoveredPoint] = useState<ChartPoint | null>(null);
   const [calcAmount, setCalcAmount] = useState<number>(100);
   const [isFxModalOpen, setIsFxModalOpen] = useState(false);
+  const [fxModalCurrency, setFxModalCurrency] = useState<'USD' | 'EUR'>('USD');
 
   // Extraer saldos reales de cuentas en USD y EUR de las cuentas de Magnus
   const { usdBalance, eurBalance } = useMemo(() => {
@@ -126,11 +129,6 @@ export const MarketIntel: React.FC<MarketIntelProps> = ({ embedded = false, vari
       else if (acc.currency === 'EUR') eur += bal;
     });
 
-    if (usd === 0 && eur === 0) {
-      usd = 5450.00;
-      eur = 2800.00;
-    }
-
     return { usdBalance: usd, eurBalance: eur };
   }, [data]);
 
@@ -139,7 +137,9 @@ export const MarketIntel: React.FC<MarketIntelProps> = ({ embedded = false, vari
     const usdDop = marketData?.rates?.usd_dop || currencies?.usd?.rate || 60.15;
     const eurUsd = marketData?.rates?.eur_usd || 1.0850;
     const eurDop = marketData?.rates?.eur_dop || (usdDop * eurUsd);
-    return { usdDop, eurUsd, eurDop };
+    const fxUsd = (marketData?.rates as any)?.fx_usd || null;
+    const fxEur = (marketData?.rates as any)?.fx_eur || null;
+    return { usdDop, eurUsd, eurDop, fxUsd, fxEur };
   }, [marketData, currencies]);
 
   const fetchMarkets = async () => {
@@ -249,12 +249,12 @@ export const MarketIntel: React.FC<MarketIntelProps> = ({ embedded = false, vari
     );
   };
 
-  // 4 KPIs Destacados Principales (los únicos en Resumen Anual)
+  // 4 KPIs Destacados Principales Globales (Macroeconómicos y Commodities)
   const featuredKpis = [
-    { sym: 'DOP=X',    title: 'USD / DOP',         sub: 'Dólar a Peso Dominicano', digits: 2, unit: 'RD$', icon: '🇺🇸' },
-    { sym: 'EURUSD=X', title: 'EUR / USD',         sub: 'Euro a Dólar Americano',  digits: 4, unit: '$',   icon: '🇪🇺' },
-    { sym: 'CL=F',     title: 'WTI Crude Oil',     sub: 'Petróleo WTI (Barril)',   digits: 2, unit: 'USD', icon: '🛢️' },
-    { sym: 'BZ=F',     title: 'Brent Crude Oil',   sub: 'Petróleo Brent (Barril)', digits: 2, unit: 'USD', icon: '⛽' },
+    { sym: 'ES=F',     title: 'S&P 500 Futures',   sub: 'Índice S&P 500 Global',      digits: 2, unit: 'PTS',    icon: '📈' },
+    { sym: 'GC=F',     title: 'Gold (Oz)',         sub: 'Oro — Activo Refugio',       digits: 2, unit: 'USD/oz', icon: '🪙' },
+    { sym: 'CL=F',     title: 'WTI Crude Oil',     sub: 'Petróleo WTI (Barril)',      digits: 2, unit: 'USD',    icon: '🛢️' },
+    { sym: 'BZ=F',     title: 'Brent Crude Oil',   sub: 'Petróleo Brent (Barril)',    digits: 2, unit: 'USD',    icon: '⛽' },
   ];
 
   const categoryQuotes = (marketData?.quotes || []).filter(q => {
@@ -295,6 +295,9 @@ export const MarketIntel: React.FC<MarketIntelProps> = ({ embedded = false, vari
       isUp: chg >= 0
     };
   }, [activeCandle]);
+
+  const usdQuote = getQuote('DOP=X');
+  const eurQuote = getQuote('EURUSD=X');
 
   return (
     <section id="section-market" className="space-y-6 animate-in fade-in duration-500 font-sans">
@@ -370,7 +373,7 @@ export const MarketIntel: React.FC<MarketIntelProps> = ({ embedded = false, vari
 
           <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mt-2">
             <div>
-              <p className="text-xs text-slate-400 font-medium">Saldo Original</p>
+              <p className="text-xs text-slate-400 font-medium">Saldo en Cuentas</p>
               <p className="text-2xl sm:text-3xl font-bold font-serif text-slate-900 dark:text-white mt-0.5">
                 $ {usdBalance.toLocaleString('en-US', { minimumFractionDigits: 2 })}
               </p>
@@ -406,7 +409,7 @@ export const MarketIntel: React.FC<MarketIntelProps> = ({ embedded = false, vari
 
           <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mt-2">
             <div>
-              <p className="text-xs text-slate-400 font-medium">Saldo Original</p>
+              <p className="text-xs text-slate-400 font-medium">Saldo en Cuentas</p>
               <div className="flex items-baseline gap-2 mt-0.5">
                 <p className="text-2xl sm:text-3xl font-bold font-serif text-slate-900 dark:text-white">
                   € {eurBalance.toLocaleString('en-US', { minimumFractionDigits: 2 })}
@@ -428,7 +431,188 @@ export const MarketIntel: React.FC<MarketIntelProps> = ({ embedded = false, vari
       </div>
 
       {/* ========================================================================= */}
-      {/* 3. KPIS PRIORITARIOS (USD/DOP, EUR/USD, WTI, BRENT)                       */}
+      {/* 2.1. HUB CAMBIARIO REPÚBLICA DOMINICANA // PROVIDENCE FX (BIFURCADO)      */}
+      {/* ========================================================================= */}
+      <div className="bg-white/80 dark:bg-neutral-800/40 backdrop-blur-xl border border-slate-200 dark:border-white/10 rounded-2xl shadow-sm hover:shadow-md transition-all overflow-hidden">
+        {/* Barra superior de identificación institucional */}
+        <div className="px-6 py-3.5 border-b border-slate-100 dark:border-white/5 bg-slate-50/70 dark:bg-white/[0.02] flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5">
+            <div className="p-1.5 rounded-lg bg-blue-500/10 text-blue-600 dark:text-blue-400">
+              <Building2 size={16} />
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold tracking-wider uppercase text-slate-800 dark:text-slate-200">
+                Mercado Cambiario República Dominicana
+              </span>
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800/40 font-mono">
+                PROVIDENCE FX
+              </span>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2.5 text-xs text-slate-500 dark:text-slate-400">
+            <span className="hidden sm:inline">Multifuente: BCRD • TasaReal • InfoDolar</span>
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/40 font-semibold text-[11px]">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+              En Vivo
+            </span>
+          </div>
+        </div>
+
+        {/* Tarjeta Dividida en 2 Mitades Simétricas */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 divide-y lg:divide-y-0 lg:divide-x divide-slate-100 dark:divide-white/5">
+          {/* MITAD IZQUIERDA: DÓLAR (USD / DOP) */}
+          <div
+            onClick={() => {
+              setFxModalCurrency('USD');
+              setIsFxModalOpen(true);
+            }}
+            className="p-6 hover:bg-slate-50/60 dark:hover:bg-white/[0.02] transition-all cursor-pointer group flex flex-col justify-between"
+          >
+            <div>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                  <span className="text-2xl">🇺🇸</span>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h4 className="font-bold text-slate-900 dark:text-white text-base group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
+                        USD / DOP
+                      </h4>
+                      <span className="text-[10px] uppercase font-bold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300 border border-blue-200 dark:border-blue-800/40">
+                        Bancos RD ↗
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-400">Dólar a Peso Dominicano</p>
+                  </div>
+                </div>
+
+                <div className="text-right">
+                  <div className="flex items-baseline justify-end gap-1.5">
+                    <span className="text-2xl sm:text-3xl font-bold font-serif text-slate-900 dark:text-white tracking-tight">
+                      {rates.usdDop.toFixed(2)}
+                    </span>
+                    <span className="text-xs font-semibold text-slate-400">RD$</span>
+                  </div>
+                  <div className="flex items-center justify-end gap-1 text-xs font-semibold text-emerald-500">
+                    <TrendingUp size={13} />
+                    <span>+{usdQuote.change_percent ? usdQuote.change_percent.toFixed(2) : '0.84'}%</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Indicadores de Promedios Bancarios */}
+              <div className="grid grid-cols-3 gap-2 mt-4 p-3 rounded-xl bg-slate-50 dark:bg-white/[0.03] border border-slate-100 dark:border-white/5 text-center">
+                <div>
+                  <p className="text-[10px] uppercase text-slate-400 font-semibold tracking-wider">Prom. Compra</p>
+                  <p className="text-xs sm:text-sm font-bold font-mono text-emerald-600 dark:text-emerald-400 mt-0.5">
+                    RD$ {(rates.fxUsd?.avgBuy || 59.01).toFixed(2)}
+                  </p>
+                </div>
+                <div className="border-x border-slate-200 dark:border-white/10">
+                  <p className="text-[10px] uppercase text-slate-400 font-semibold tracking-wider">Prom. Venta</p>
+                  <p className="text-xs sm:text-sm font-bold font-mono text-blue-600 dark:text-blue-400 mt-0.5">
+                    RD$ {(rates.fxUsd?.avgSell || 60.82).toFixed(2)}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-[10px] uppercase text-slate-400 font-semibold tracking-wider">Spread</p>
+                  <p className="text-xs sm:text-sm font-bold font-mono text-amber-500 dark:text-amber-400 mt-0.5">
+                    RD$ {(rates.fxUsd?.avgSpread || 1.81).toFixed(2)}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Sparkline & Enlace */}
+            <div className="mt-4">
+              <div className="h-10 w-full mb-3">
+                {renderSparkline(usdQuote.spark, usdQuote.up, 260, 40)}
+              </div>
+              <div className="flex items-center justify-between text-xs pt-2.5 border-t border-slate-100 dark:border-white/5 text-blue-600 dark:text-blue-400 font-medium group-hover:underline">
+                <span>Ver comparativa de 24+ bancos e instituciones</span>
+                <ArrowUpRight size={14} className="group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
+              </div>
+            </div>
+          </div>
+
+          {/* MITAD DERECHA: EURO (EUR / DOP) */}
+          <div
+            onClick={() => {
+              setFxModalCurrency('EUR');
+              setIsFxModalOpen(true);
+            }}
+            className="p-6 hover:bg-slate-50/60 dark:hover:bg-white/[0.02] transition-all cursor-pointer group flex flex-col justify-between"
+          >
+            <div>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                  <span className="text-2xl">🇪🇺</span>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h4 className="font-bold text-slate-900 dark:text-white text-base group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
+                        EUR / DOP
+                      </h4>
+                      <span className="text-[10px] uppercase font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/40">
+                        Bancos RD ↗
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-400">Euro a Peso Dominicano</p>
+                  </div>
+                </div>
+
+                <div className="text-right">
+                  <div className="flex items-baseline justify-end gap-1.5">
+                    <span className="text-2xl sm:text-3xl font-bold font-serif text-slate-900 dark:text-white tracking-tight">
+                      {rates.eurDop.toFixed(2)}
+                    </span>
+                    <span className="text-xs font-semibold text-slate-400">RD$</span>
+                  </div>
+                  <div className="flex items-center justify-end gap-1 text-xs font-semibold text-emerald-500">
+                    <TrendingUp size={13} />
+                    <span>+{eurQuote.change_percent ? eurQuote.change_percent.toFixed(2) : '0.90'}%</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Indicadores de Promedios Bancarios */}
+              <div className="grid grid-cols-3 gap-2 mt-4 p-3 rounded-xl bg-slate-50 dark:bg-white/[0.03] border border-slate-100 dark:border-white/5 text-center">
+                <div>
+                  <p className="text-[10px] uppercase text-slate-400 font-semibold tracking-wider">Prom. Compra</p>
+                  <p className="text-xs sm:text-sm font-bold font-mono text-emerald-600 dark:text-emerald-400 mt-0.5">
+                    RD$ {(rates.fxEur?.avgBuy || 66.59).toFixed(2)}
+                  </p>
+                </div>
+                <div className="border-x border-slate-200 dark:border-white/10">
+                  <p className="text-[10px] uppercase text-slate-400 font-semibold tracking-wider">Prom. Venta</p>
+                  <p className="text-xs sm:text-sm font-bold font-mono text-blue-600 dark:text-blue-400 mt-0.5">
+                    RD$ {(rates.fxEur?.avgSell || 70.05).toFixed(2)}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-[10px] uppercase text-slate-400 font-semibold tracking-wider">Ref. EUR/USD</p>
+                  <p className="text-xs sm:text-sm font-bold font-mono text-slate-700 dark:text-slate-300 mt-0.5">
+                    ${rates.eurUsd.toFixed(4)}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Sparkline & Enlace */}
+            <div className="mt-4">
+              <div className="h-10 w-full mb-3">
+                {renderSparkline(eurQuote.spark, eurQuote.up, 260, 40)}
+              </div>
+              <div className="flex items-center justify-between text-xs pt-2.5 border-t border-slate-100 dark:border-white/5 text-emerald-600 dark:text-emerald-400 font-medium group-hover:underline">
+                <span>Ver comparativa de 16+ bancos e instituciones</span>
+                <ArrowUpRight size={14} className="group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ========================================================================= */}
+      {/* 3. KPIS PRIORITARIOS GLOBALES (S&P 500, ORO, WTI, BRENT)                  */}
       {/* ========================================================================= */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {featuredKpis.map(item => {
@@ -439,11 +623,7 @@ export const MarketIntel: React.FC<MarketIntelProps> = ({ embedded = false, vari
             <div
               key={item.sym}
               onClick={() => {
-                if (item.sym === 'DOP=X') {
-                  setIsFxModalOpen(true);
-                } else {
-                  setSelectedQuote(q);
-                }
+                setSelectedQuote(q);
               }}
               className="bg-white/80 dark:bg-neutral-800/40 backdrop-blur-xl border border-slate-200 dark:border-white/10 rounded-2xl p-5 shadow-sm hover:shadow-md hover:border-blue-500/40 dark:hover:border-blue-500/40 transition-all cursor-pointer group flex flex-col justify-between"
             >
@@ -453,20 +633,13 @@ export const MarketIntel: React.FC<MarketIntelProps> = ({ embedded = false, vari
                     <span className="text-lg">{item.icon}</span>
                     <span className="font-bold text-sm text-slate-800 dark:text-slate-100">{item.title}</span>
                   </div>
-                  <div className="flex items-center gap-1.5">
-                    {item.sym === 'DOP=X' && (
-                      <span className="text-[10px] uppercase font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300 border border-blue-500/20">
-                        Bancos RD
-                      </span>
-                    )}
-                    <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded-full ${
-                      q.market_open
-                        ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300'
-                        : 'bg-slate-100 text-slate-500 dark:bg-white/5 dark:text-slate-400'
-                    }`}>
-                      {q.market_open ? 'En vivo' : 'Cerrado'}
-                    </span>
-                  </div>
+                  <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded-full ${
+                    q.market_open
+                      ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300'
+                      : 'bg-slate-100 text-slate-500 dark:bg-white/5 dark:text-slate-400'
+                  }`}>
+                    {q.market_open ? 'En vivo' : 'Cerrado'}
+                  </span>
                 </div>
                 <p className="text-xs text-slate-400 mt-1">{item.sub}</p>
               </div>
@@ -660,8 +833,8 @@ export const MarketIntel: React.FC<MarketIntelProps> = ({ embedded = false, vari
       {/* ========================================================================= */}
       {/* 5. MODAL INTERACTIVO ESTILO TRADINGVIEW CON VELAS, OHLC Y RANGOS         */}
       {/* ========================================================================= */}
-      {selectedQuote && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/70 backdrop-blur-md animate-in fade-in duration-200">
+      {selectedQuote && createPortal(
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-2 sm:p-4 md:p-6 bg-black/85 backdrop-blur-md animate-in fade-in duration-200">
           <div className="bg-[#111722] text-slate-100 w-full max-w-4xl max-h-[92vh] overflow-y-auto rounded-2xl shadow-2xl border border-slate-700/60 p-4 sm:p-6 space-y-4">
 
             {/* BARRA SUPERIOR TRADINGVIEW: NOMBRE + OHLC EN VIVO + CIERRE */}
@@ -935,13 +1108,15 @@ export const MarketIntel: React.FC<MarketIntelProps> = ({ embedded = false, vari
             )}
 
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
-      {/* Modal especializado de Mercado Cambiario Dominicano (USD/DOP) */}
+      {/* Modal especializado de Mercado Cambiario Dominicano (USD/DOP & EUR/DOP) */}
       <FxMercadoModal
         isOpen={isFxModalOpen}
         onClose={() => setIsFxModalOpen(false)}
+        initialCurrency={fxModalCurrency}
       />
 
     </section>

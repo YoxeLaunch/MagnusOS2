@@ -6,6 +6,7 @@
  */
 
 import { CurrencyHistory } from '../models/index.js';
+import { fxService } from '../services/fx/fxService.js';
 
 const YAHOO_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36';
 const CACHE_TTL_MS = 60 * 1000; // 60s
@@ -211,7 +212,9 @@ export async function getMarketIntelData() {
     rates: {
       usd_dop: usdDop,
       eur_usd: eurUsd,
-      eur_dop: eurDop
+      eur_dop: eurDop,
+      fx_usd: fxService.cache.get('USD/DOP')?.data?.summary || null,
+      fx_eur: fxService.cache.get('EUR/DOP')?.data?.summary || null
     },
     quotes
   };
@@ -356,11 +359,9 @@ export const getMarketChart = async (req, res) => {
 
 /**
  * ============================================================================
- * PROVIDENCE FX CONTROLLERS (MERCADO CAMBIARIO USD/DOP DOMINICANO)
+ * PROVIDENCE FX CONTROLLERS (MERCADO CAMBIARIO USD/DOP & EUR/DOP)
  * ============================================================================
  */
-import { fxService } from '../services/fx/fxService.js';
-
 export const getFxUsdDop = async (req, res) => {
   try {
     const data = await fxService.getUsdDopRates();
@@ -368,6 +369,37 @@ export const getFxUsdDop = async (req, res) => {
     return res.json(data);
   } catch (error) {
     console.error('[FX_API] Error al obtener tasas USD/DOP:', error.message);
+    return res.status(500).json({
+      success: false,
+      error: 'No fue posible actualizar la cotización cambiaria USD/DOP',
+      degraded: true
+    });
+  }
+};
+
+export const getFxEurDop = async (req, res) => {
+  try {
+    const data = await fxService.getEurDopRates();
+    res.setHeader('Cache-Control', 'public, max-age=60');
+    return res.json(data);
+  } catch (error) {
+    console.error('[FX_API] Error al obtener tasas EUR/DOP:', error.message);
+    return res.status(500).json({
+      success: false,
+      error: 'No fue posible actualizar la cotización cambiaria EUR/DOP',
+      degraded: true
+    });
+  }
+};
+
+export const getFxRatesByPair = async (req, res) => {
+  try {
+    const pair = req.params.pair || 'USD/DOP';
+    const data = await fxService.getRates(pair);
+    res.setHeader('Cache-Control', 'public, max-age=60');
+    return res.json(data);
+  } catch (error) {
+    console.error(`[FX_API] Error al obtener tasas para ${req.params.pair}:`, error.message);
     return res.status(500).json({
       success: false,
       error: 'No fue posible actualizar la cotización cambiaria',
@@ -380,10 +412,12 @@ export const getFxHistory = async (req, res) => {
   try {
     const institutionId = req.params.institution || 'general';
     const days = parseInt(req.query.days || '30', 10);
-    const history = await fxService.getHistory(institutionId, Math.min(days, 365));
+    const currency = (req.query.currency || 'USD').toUpperCase();
+    const history = await fxService.getHistory(institutionId, Math.min(days, 365), currency);
     return res.json({
       success: true,
       institutionId,
+      currency,
       days,
       points: history
     });
@@ -396,7 +430,8 @@ export const getFxHistory = async (req, res) => {
 export const getTasaRealEvaluation = async (req, res) => {
   try {
     const days = parseInt(req.query.days || '29', 10);
-    const evaluation = await fxService.getTasaRealEvaluation(days);
+    const currency = req.query.currency ? req.query.currency.toUpperCase() : null;
+    const evaluation = await fxService.getTasaRealEvaluation(days, currency);
     return res.json({
       success: true,
       evaluation
@@ -409,7 +444,18 @@ export const getTasaRealEvaluation = async (req, res) => {
 
 export const refreshFxRates = async (req, res) => {
   try {
-    const data = await fxService.getUsdDopRates({ forceRefresh: true });
+    const pair = req.body?.pair || req.query?.pair || 'USD/DOP';
+    let data;
+    if (pair.toUpperCase() === 'ALL') {
+      const [usd, eur] = await Promise.all([
+        fxService.getRates('USD/DOP', { forceRefresh: true }),
+        fxService.getRates('EUR/DOP', { forceRefresh: true })
+      ]);
+      data = { usd, eur };
+    } else {
+      data = await fxService.getRates(pair, { forceRefresh: true });
+    }
+
     return res.json({
       success: true,
       refreshed: true,
@@ -420,5 +466,6 @@ export const refreshFxRates = async (req, res) => {
     return res.status(500).json({ success: false, error: 'Fallo al forzar refresco de proveedores' });
   }
 };
+
 
 

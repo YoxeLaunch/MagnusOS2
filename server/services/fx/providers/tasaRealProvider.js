@@ -29,11 +29,13 @@ export class TasaRealProvider extends BaseFxProvider {
     }
 
     /**
-     * Consulta las tasas de cambio de TasaReal
+     * Consulta las tasas de cambio de TasaReal para una moneda específica
+     * @param {string} targetCurrency - Divisa base (ej. 'USD', 'EUR')
      * @returns {Promise<Array>} Lista de observaciones normalizadas
      */
-    async getRates() {
+    async getRates(targetCurrency = 'USD') {
         const apiKey = this.#getApiKey();
+        const target = (targetCurrency || 'USD').toUpperCase();
 
         if (!apiKey) {
             console.log('[FX][TASAREAL] Saltando consulta: TASAREAL_API_KEY no configurada en variables de entorno.');
@@ -46,7 +48,8 @@ export class TasaRealProvider extends BaseFxProvider {
         }
 
         return this.executeWithProtection(async (signal) => {
-            const response = await fetch(this.apiUrl, {
+            const fetchUrl = `${this.apiUrl}?currency=${encodeURIComponent(target)}`;
+            const response = await fetch(fetchUrl, {
                 method: 'GET',
                 headers: {
                     'Authorization': `Bearer ${apiKey}`,
@@ -78,9 +81,9 @@ export class TasaRealProvider extends BaseFxProvider {
             for (const item of rawList) {
                 if (!item || typeof item !== 'object') continue;
 
-                // Filtrar exclusivamente cotizaciones en USD
-                const currency = (item.currency || item.moneda || item.base || 'USD').toUpperCase();
-                if (currency !== 'USD') continue;
+                // Filtrar exclusivamente cotizaciones en la divisa solicitada
+                const currency = (item.currency || item.moneda || item.base || target).toUpperCase();
+                if (currency !== target) continue;
 
                 // Mapear nombres flexibles de la entidad
                 const institutionName = item.institution_name || item.institution || item.bank || item.name || item.entidad;
@@ -98,12 +101,15 @@ export class TasaRealProvider extends BaseFxProvider {
                     rawInstitution: String(institutionName),
                     buy: buyVal,
                     sell: sellVal,
+                    baseCurrency: target,
+                    quoteCurrency: 'DOP',
                     observedAt: new Date(),
                     providerUpdatedAt: updatedAt ? new Date(updatedAt) : null,
                     rateType: isOfficial ? RATE_TYPES.OFFICIAL_REFERENCE : RATE_TYPES.RETAIL_BANK,
                     metadata: {
                         source: 'tasareal_api',
-                        verification: item.verification || null
+                        verification: item.verification || null,
+                        currency: target
                     }
                 });
 
@@ -113,7 +119,7 @@ export class TasaRealProvider extends BaseFxProvider {
             }
 
             if (normalizedObservations.length === 0) {
-                throw new Error('TasaReal respondió pero no se extrajeron cotizaciones válidas');
+                throw new Error(`TasaReal respondió pero no se extrajeron cotizaciones válidas para ${target}`);
             }
 
             return normalizedObservations;

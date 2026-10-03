@@ -191,7 +191,39 @@ export const INSTITUTION_REGISTRY = [
         type: RATE_TYPES.RETAIL_BANK,
         logo: 'caribeexpress'
     },
-    // Referencias Institucionales
+    {
+        id: 'capla',
+        name: 'Capla Agente de Cambio',
+        fullName: 'Agente de Cambio Capla',
+        aliases: ['capla', 'agente de cambio capla'],
+        type: RATE_TYPES.RETAIL_BANK,
+        logo: 'capla'
+    },
+    {
+        id: 'rm',
+        name: 'RM Agente de Cambio',
+        fullName: 'Agente de Cambio R&M',
+        aliases: ['rm', 'r&m', 'agente de cambio rm'],
+        type: RATE_TYPES.RETAIL_BANK,
+        logo: 'rm'
+    },
+    {
+        id: 'moneycorps',
+        name: 'Moneycorp',
+        fullName: 'Moneycorp Agente de Cambio',
+        aliases: ['moneycorps', 'moneycorp'],
+        type: RATE_TYPES.RETAIL_BANK,
+        logo: 'moneycorp'
+    },
+    {
+        id: 'cambio_extranjero',
+        name: 'Cambio Extranjero',
+        fullName: 'Agente de Cambio Extranjero',
+        aliases: ['cambio extranjero'],
+        type: RATE_TYPES.RETAIL_BANK,
+        logo: 'bank'
+    },
+    // Referencias Institucionales y Oficiales
     {
         id: 'bcrd',
         name: 'Banco Central RD',
@@ -201,11 +233,34 @@ export const INSTITUTION_REGISTRY = [
         logo: 'bcrd'
     },
     {
+        id: 'dgii',
+        name: 'DGII',
+        fullName: 'Dirección General de Impuestos Internos',
+        aliases: ['dgii', 'impuestos internos'],
+        type: RATE_TYPES.OFFICIAL_REFERENCE,
+        logo: 'official'
+    },
+    {
         id: 'yahoo',
         name: 'Mercado Spot (Yahoo)',
-        fullName: 'Yahoo Finance FX Market Ticker (DOP=X)',
+        fullName: 'Yahoo Finance FX Market Ticker',
         aliases: ['yahoo', 'yahoo finance', 'mercado spot', 'interbancario'],
         type: RATE_TYPES.MARKET,
         logo: 'yahoo'
     }
 ];
+
+export const SUPPORTED_PAIRS = ['USD/DOP', 'EUR/DOP'];
+export const SUPPORTED_CURRENCIES = ['USD', 'EUR'];
+
+export const FX_RATE_BOUNDS = {
+    USD: {
+        min: parseFloat(process.env.FX_RATE_BOUNDS_USD_MIN || '40'),
+        max: parseFloat(process.env.FX_RATE_BOUNDS_USD_MAX || '100')
+    },
+    EUR: {
+        min: parseFloat(process.env.FX_RATE_BOUNDS_EUR_MIN || '40'),
+        max: parseFloat(process.env.FX_RATE_BOUNDS_EUR_MAX || '120')
+    }
+};
+
