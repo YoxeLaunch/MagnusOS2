@@ -24,6 +24,41 @@ const MOCK_UPDATES: Update[] = [
         tag: 'Finanza'
     },
     {
+        id: 'market-tradingview',
+        title: 'Mercado Financiero en Vivo & Gráficos TradingView',
+        date: '27 de Septiembre, 2026',
+        description: 'Módulo de inteligencia de mercado en /finanza/mercado con cotizaciones en tiempo real, índices bursátiles, materias primas, criptomonedas y gráficos técnicos estilo TradingView.',
+        tag: 'Finanza'
+    },
+    {
+        id: 'backups-hud',
+        title: 'Torre de Control: Sistema de Backups & Telemetría HUD',
+        date: '16 de Agosto, 2026',
+        description: 'Consola de administración del sistema con gestión de copias de seguridad automatizadas, descarga y restauración de snapshots y monitor HUD con indicadores visuales de hardware.',
+        tag: 'Sistema'
+    },
+    {
+        id: 'cashflow-redesign',
+        title: 'Rediseño de Gestión de Flujo y Categorías Expandidas',
+        date: '16 de Agosto, 2026',
+        description: 'Nueva experiencia visual en flujo de caja con versionado histórico de ingresos y gastos, categorización granular y análisis de distribución porcentual optimizado.',
+        tag: 'Finanza'
+    },
+    {
+        id: 'landing-services',
+        title: 'Puerta de Entrada MagnusServices & Visualizador Financiero',
+        date: '18 de Julio, 2026',
+        description: 'Integración de la landing institucional MagnusServices como portal de bienvenida unificado y sustitución del diagrama de flujo por un nuevo visualizador de dona de distribución.',
+        tag: 'Estrategia'
+    },
+    {
+        id: 'sabiduria-magnus',
+        title: 'Evolución a Sabiduría Magnus & Centro de Publicaciones',
+        date: '12 de Julio, 2026',
+        description: 'Transformación del módulo de mentorías en Sabiduría Magnus, incorporación de un blog interno de publicaciones estratégicas y optimización de impresión de balances.',
+        tag: 'Sabiduría'
+    },
+    {
         id: '1',
         title: 'Nueva Interfaz de Usuario',
         date: '5 de Enero, 2026',
