@@ -78,14 +78,20 @@ export class TasaRealProvider extends BaseFxProvider {
             for (const item of rawList) {
                 if (!item || typeof item !== 'object') continue;
 
+                // Filtrar exclusivamente cotizaciones en USD
+                const currency = (item.currency || item.moneda || item.base || 'USD').toUpperCase();
+                if (currency !== 'USD') continue;
+
                 // Mapear nombres flexibles de la entidad
-                const institutionName = item.institution || item.bank || item.name || item.entidad || item.entidad_financiera;
+                const institutionName = item.institution_name || item.institution || item.bank || item.name || item.entidad;
                 if (!institutionName) continue;
 
                 // Extraer compra y venta
                 const buyVal = item.buy ?? item.compra ?? item.rate_buy;
                 const sellVal = item.sell ?? item.venta ?? item.rate_sell;
-                const updatedAt = item.updated_at || item.fecha || item.date || item.last_updated;
+                const updatedAt = item.updated_at || item.date || item.fecha || item.last_updated;
+
+                const isOfficial = item.institution_type === 'official' || String(institutionName).toLowerCase().includes('banco central');
 
                 const normalized = normalizeRateObservation({
                     provider: this.id,
@@ -94,9 +100,10 @@ export class TasaRealProvider extends BaseFxProvider {
                     sell: sellVal,
                     observedAt: new Date(),
                     providerUpdatedAt: updatedAt ? new Date(updatedAt) : null,
-                    rateType: RATE_TYPES.RETAIL_BANK,
+                    rateType: isOfficial ? RATE_TYPES.OFFICIAL_REFERENCE : RATE_TYPES.RETAIL_BANK,
                     metadata: {
-                        source: 'tasareal_api'
+                        source: 'tasareal_api',
+                        verification: item.verification || null
                     }
                 });
 
