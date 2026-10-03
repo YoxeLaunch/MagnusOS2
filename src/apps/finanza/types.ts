@@ -53,3 +53,85 @@ export interface CurrencyState {
   eur: CurrencyRate;
   lastUpdated: Date;
 }
+
+// ========================================
+// Providence FX Market Types (USD/DOP RD)
+// ========================================
+export interface FxBankObservation {
+  provider: string;
+  buy: number;
+  sell: number;
+  observedAt: string;
+}
+
+export interface FxBankRate {
+  institutionId: string;
+  institutionName: string;
+  fullName?: string;
+  rateType: string;
+  logo?: string;
+  buy: number;
+  sell: number;
+  mid?: number;
+  spread?: number;
+  validationStatus: 'VERIFIED' | 'ACCEPTABLE' | 'WARNING' | 'CONFLICT' | 'SINGLE_SOURCE';
+  confidence: number;
+  observedAt: string;
+  providerUpdatedAt?: string;
+  providers: string[];
+  observations?: FxBankObservation[];
+  differences?: {
+    differenceBuy: number;
+    differenceSell: number;
+  };
+}
+
+export interface FxUsdDopResponse {
+  pair: string;
+  generatedAt: string;
+  summary: {
+    avgBuy: number | null;
+    avgSell: number | null;
+    avgSpread: number | null;
+    institutionsCount: number;
+    bestToSellUsd?: {
+      institutionId: string;
+      institutionName: string;
+      rate: number;
+      validationStatus: string;
+    } | null;
+    bestToBuyUsd?: {
+      institutionId: string;
+      institutionName: string;
+      rate: number;
+      validationStatus: string;
+    } | null;
+  };
+  reference: {
+    market?: {
+      price: number;
+      prevClose: number;
+      change: number;
+      changePercent: number;
+      observedAt: string;
+    } | null;
+    official?: {
+      buy: number;
+      sell: number;
+      observedAt: string;
+    } | null;
+  };
+  banks: FxBankRate[];
+  meta: {
+    cache: boolean;
+    stale: boolean;
+    ageMinutes: number;
+    isMaxStale?: boolean;
+    warning?: string;
+    sources: Array<{
+      id: string;
+      name: string;
+      status: 'ONLINE' | 'DEGRADED' | 'OFFLINE';
+    }>;
+  };
+}

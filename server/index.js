@@ -11,6 +11,7 @@ import routes from './routes/index.js';
 import { initSystemDb } from './models/system/index.js';
 import { securityHeaders, apiLimiter } from './middleware/security.js';
 import { scheduleCurrencyRateJob, fetchAndStoreRates } from './jobs/currencyRateJob.js';
+import { scheduleFxJob } from './jobs/fxSchedulerJob.js';
 import { fileURLToPath } from 'url';
 import path from 'path';
 
@@ -107,6 +108,9 @@ const startServer = async () => {
         // Auto-actualización diaria de tasas de cambio (USD/EUR -> DOP)
         scheduleCurrencyRateJob();
         fetchAndStoreRates(); // Refresco inicial al arrancar el servidor
+
+        // Planificador inteligente de mercado cambiario dominicano (Providence FX)
+        scheduleFxJob();
 
         // Initialize Socket
         initSocket(io);

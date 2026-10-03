@@ -11,6 +11,8 @@ import { LedgerTransaction, TransactionLine } from './ledger.js';
 import { SavingsGoal, SavingsContribution } from './savingsGoal.js';
 import { MonthlySnapshot } from './monthlySnapshot.js';
 import { FinancialAnomaly } from './anomaly.js';
+import { FxRateObservation } from './fxObservation.js';
+import { FxProviderHealth } from './fxProviderHealth.js';
 
 // ========================================
 // Legacy Associations (to be deprecated)
@@ -142,6 +144,10 @@ export {
 
     // Econometrics Models (v2.1)
     FinancialAnomaly,
+
+    // FX Market Service Models (Providence FX)
+    FxRateObservation,
+    FxProviderHealth,
 
     // Helpers
     toMinorUnits,

@@ -60,9 +60,10 @@ services:
       retries: 3
 
   # ========================================
-  # AI Local (Ollama)
+  # AI Local (Ollama) - Desactivado a peticion
   # ========================================
   ollama:
+    profiles: ["disabled"]
     image: ollama/ollama
     container_name: magnus_ollama
     volumes:

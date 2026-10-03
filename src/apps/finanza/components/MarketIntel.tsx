@@ -31,6 +31,7 @@ import {
   Tooltip as RechartsTooltip
 } from 'recharts';
 import { apiFetch } from '../../../shared/utils/apiFetch';
+import { FxMercadoModal } from './FxMercadoModal';
 
 export interface MarketQuote {
   symbol: string;
@@ -111,6 +112,7 @@ export const MarketIntel: React.FC<MarketIntelProps> = ({ embedded = false, vari
   const [chartData, setChartData] = useState<ChartResponse | null>(null);
   const [hoveredPoint, setHoveredPoint] = useState<ChartPoint | null>(null);
   const [calcAmount, setCalcAmount] = useState<number>(100);
+  const [isFxModalOpen, setIsFxModalOpen] = useState(false);
 
   // Extraer saldos reales de cuentas en USD y EUR de las cuentas de Magnus
   const { usdBalance, eurBalance } = useMemo(() => {
@@ -436,7 +438,13 @@ export const MarketIntel: React.FC<MarketIntelProps> = ({ embedded = false, vari
           return (
             <div
               key={item.sym}
-              onClick={() => setSelectedQuote(q)}
+              onClick={() => {
+                if (item.sym === 'DOP=X') {
+                  setIsFxModalOpen(true);
+                } else {
+                  setSelectedQuote(q);
+                }
+              }}
               className="bg-white/80 dark:bg-neutral-800/40 backdrop-blur-xl border border-slate-200 dark:border-white/10 rounded-2xl p-5 shadow-sm hover:shadow-md hover:border-blue-500/40 dark:hover:border-blue-500/40 transition-all cursor-pointer group flex flex-col justify-between"
             >
               <div>
@@ -445,13 +453,20 @@ export const MarketIntel: React.FC<MarketIntelProps> = ({ embedded = false, vari
                     <span className="text-lg">{item.icon}</span>
                     <span className="font-bold text-sm text-slate-800 dark:text-slate-100">{item.title}</span>
                   </div>
-                  <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded-full ${
-                    q.market_open
-                      ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300'
-                      : 'bg-slate-100 text-slate-500 dark:bg-white/5 dark:text-slate-400'
-                  }`}>
-                    {q.market_open ? 'En vivo' : 'Cerrado'}
-                  </span>
+                  <div className="flex items-center gap-1.5">
+                    {item.sym === 'DOP=X' && (
+                      <span className="text-[10px] uppercase font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300 border border-blue-500/20">
+                        Bancos RD
+                      </span>
+                    )}
+                    <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded-full ${
+                      q.market_open
+                        ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300'
+                        : 'bg-slate-100 text-slate-500 dark:bg-white/5 dark:text-slate-400'
+                    }`}>
+                      {q.market_open ? 'En vivo' : 'Cerrado'}
+                    </span>
+                  </div>
                 </div>
                 <p className="text-xs text-slate-400 mt-1">{item.sub}</p>
               </div>
@@ -922,6 +937,12 @@ export const MarketIntel: React.FC<MarketIntelProps> = ({ embedded = false, vari
           </div>
         </div>
       )}
+
+      {/* Modal especializado de Mercado Cambiario Dominicano (USD/DOP) */}
+      <FxMercadoModal
+        isOpen={isFxModalOpen}
+        onClose={() => setIsFxModalOpen(false)}
+      />
 
     </section>
   );

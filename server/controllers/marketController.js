@@ -354,3 +354,71 @@ export const getMarketChart = async (req, res) => {
   }
 };
 
+/**
+ * ============================================================================
+ * PROVIDENCE FX CONTROLLERS (MERCADO CAMBIARIO USD/DOP DOMINICANO)
+ * ============================================================================
+ */
+import { fxService } from '../services/fx/fxService.js';
+
+export const getFxUsdDop = async (req, res) => {
+  try {
+    const data = await fxService.getUsdDopRates();
+    res.setHeader('Cache-Control', 'public, max-age=60');
+    return res.json(data);
+  } catch (error) {
+    console.error('[FX_API] Error al obtener tasas USD/DOP:', error.message);
+    return res.status(500).json({
+      success: false,
+      error: 'No fue posible actualizar la cotización cambiaria',
+      degraded: true
+    });
+  }
+};
+
+export const getFxHistory = async (req, res) => {
+  try {
+    const institutionId = req.params.institution || 'general';
+    const days = parseInt(req.query.days || '30', 10);
+    const history = await fxService.getHistory(institutionId, Math.min(days, 365));
+    return res.json({
+      success: true,
+      institutionId,
+      days,
+      points: history
+    });
+  } catch (error) {
+    console.error('[FX_API] Error al obtener histórico FX:', error.message);
+    return res.status(500).json({ success: false, error: 'Error al recuperar histórico de tasas' });
+  }
+};
+
+export const getTasaRealEvaluation = async (req, res) => {
+  try {
+    const days = parseInt(req.query.days || '29', 10);
+    const evaluation = await fxService.getTasaRealEvaluation(days);
+    return res.json({
+      success: true,
+      evaluation
+    });
+  } catch (error) {
+    console.error('[FX_API] Error al calcular evaluación de TasaReal:', error.message);
+    return res.status(500).json({ success: false, error: 'Error al generar reporte de evaluación' });
+  }
+};
+
+export const refreshFxRates = async (req, res) => {
+  try {
+    const data = await fxService.getUsdDopRates({ forceRefresh: true });
+    return res.json({
+      success: true,
+      refreshed: true,
+      data
+    });
+  } catch (error) {
+    console.error('[FX_API] Error en refresco forzado:', error.message);
+    return res.status(500).json({ success: false, error: 'Fallo al forzar refresco de proveedores' });
+  }
+};
+
+
