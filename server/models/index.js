@@ -15,6 +15,7 @@ import { FxRateObservation } from './fxObservation.js';
 import { FxProviderHealth } from './fxProviderHealth.js';
 import { MacroIndicator, MacroObservation, MacroSourceHealth } from './macroIndicator.js';
 import { MagnusEvent, MagnusNotification } from './magnusEvent.js';
+import { FuelCatalog, FuelPriceObservation, FuelPolicyWeek, FuelSourceHealth } from './fuelPrice.js';
 
 // ========================================
 // Legacy Associations (to be deprecated)
@@ -76,6 +77,10 @@ export const initDb = async () => {
         }
 
         console.log(`[DB] Database synced (${dbInfo.type.toUpperCase()})`);
+
+        // Índices únicos seguros para integridad de series temporales
+        await sequelize.query('CREATE UNIQUE INDEX IF NOT EXISTS uq_fuel_price_fuel_validfrom ON fuel_price_observations(fuel_id, valid_from);').catch(() => {});
+        await sequelize.query('CREATE UNIQUE INDEX IF NOT EXISTS uq_fuel_policy_valid_from ON fuel_policy_weeks(valid_from);').catch(() => {});
 
         // Seed default categories if none exist
         await seedDefaultCategories();
@@ -159,6 +164,12 @@ export {
     // Magnus Event & Notification Engine Models
     MagnusEvent,
     MagnusNotification,
+
+    // Energía RD Models
+    FuelCatalog,
+    FuelPriceObservation,
+    FuelPolicyWeek,
+    FuelSourceHealth,
 
     // Helpers
     toMinorUnits,

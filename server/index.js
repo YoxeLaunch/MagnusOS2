@@ -13,6 +13,7 @@ import { securityHeaders, apiLimiter } from './middleware/security.js';
 import { scheduleCurrencyRateJob, fetchAndStoreRates } from './jobs/currencyRateJob.js';
 import { scheduleFxJob } from './jobs/fxSchedulerJob.js';
 import { scheduleMacroJob } from './jobs/macroSchedulerJob.js';
+import { scheduleEnergyJob } from './jobs/energySchedulerJob.js';
 import { eventEngine } from './services/macro/eventEngine.js';
 import { fileURLToPath } from 'url';
 import path from 'path';
@@ -116,6 +117,9 @@ const startServer = async () => {
 
         // Planificador de Contexto Macroeconómico Dominicano (Macro RD)
         scheduleMacroJob();
+
+        // Planificador de Combustibles y Mercado Energético (Energía RD)
+        scheduleEnergyJob();
 
         // Initialize Socket
         initSocket(io);

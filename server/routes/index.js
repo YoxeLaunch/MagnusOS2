@@ -11,9 +11,12 @@ import centroComandoRoutes from './centroComando.routes.js';
 import econometricsRoutes from './econometrics.routes.js';
 import marketRoutes from './market.routes.js';
 import { macroRoutes, notificationRoutes } from './macro.routes.js';
+import energyRoutes from './energy.routes.js';
 
 const router = Router();
 
+router.use('/markets/energy-rd', energyRoutes);
+router.use('/markets/energy', energyRoutes);
 router.use('/markets/macro', macroRoutes);
 router.use('/notifications', notificationRoutes);
 router.use('/markets', marketRoutes);

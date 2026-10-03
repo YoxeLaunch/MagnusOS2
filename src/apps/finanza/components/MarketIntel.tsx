@@ -35,6 +35,7 @@ import {
 import { apiFetch } from '../../../shared/utils/apiFetch';
 import { FxMercadoModal } from './FxMercadoModal';
 import { MacroRdSection } from './macro/MacroRdSection';
+import { EnergyRdSection } from './energy/EnergyRdSection';
 
 export interface MarketQuote {
   symbol: string;
@@ -686,6 +687,11 @@ export const MarketIntel: React.FC<MarketIntelProps> = ({ embedded = false, vari
       {/* 3.5 CONTEXTO MACRO RD (BANCO CENTRAL DE LA REPÚBLICA DOMINICANA)           */}
       {/* ========================================================================= */}
       {currentVariant === 'full' && <MacroRdSection />}
+
+      {/* ========================================================================= */}
+      {/* 3.6 ENERGÍA RD // COMBUSTIBLES (MINISTERIO DE INDUSTRIA, COMERCIO Y MIPYMES) */}
+      {/* ========================================================================= */}
+      {currentVariant === 'full' && <EnergyRdSection />}
 
       {/* ========================================================================= */}
       {/* 4. SECCIÓN COMPLETA DE CATEGORÍAS (SÓLO EN VISTA 'FULL' // MERCADO)       */}

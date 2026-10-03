@@ -23,6 +23,8 @@ import {
 
 test.before(async () => {
     await initDb();
+    await MagnusNotification.destroy({ where: {} }).catch(() => {});
+    await MagnusEvent.destroy({ where: { domain: 'MACRO_RD' } }).catch(() => {});
 });
 
 test('1. Master Catalog: Debe contener los 11+ indicadores dominicanos requeridos', () => {
