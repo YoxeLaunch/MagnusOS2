@@ -50,6 +50,7 @@ export class TasaRealProvider extends BaseFxProvider {
                 method: 'GET',
                 headers: {
                     'Authorization': `Bearer ${apiKey}`,
+                    'X-API-Key': apiKey,
                     'Accept': 'application/json',
                     'User-Agent': 'Magnus-OS2-Providence-FX/1.0'
                 },
