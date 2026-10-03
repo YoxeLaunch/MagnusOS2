@@ -12,6 +12,8 @@ import { initSystemDb } from './models/system/index.js';
 import { securityHeaders, apiLimiter } from './middleware/security.js';
 import { scheduleCurrencyRateJob, fetchAndStoreRates } from './jobs/currencyRateJob.js';
 import { scheduleFxJob } from './jobs/fxSchedulerJob.js';
+import { scheduleMacroJob } from './jobs/macroSchedulerJob.js';
+import { eventEngine } from './services/macro/eventEngine.js';
 import { fileURLToPath } from 'url';
 import path from 'path';
 
@@ -112,9 +114,13 @@ const startServer = async () => {
         // Planificador inteligente de mercado cambiario dominicano (Providence FX)
         scheduleFxJob();
 
+        // Planificador de Contexto Macroeconómico Dominicano (Macro RD)
+        scheduleMacroJob();
+
         // Initialize Socket
         initSocket(io);
         initDockerSocket(io);
+        eventEngine.setSocket(io);
 
 
     } catch (error) {

@@ -10,9 +10,12 @@ import aiRoutes from './ai.routes.js';
 import centroComandoRoutes from './centroComando.routes.js';
 import econometricsRoutes from './econometrics.routes.js';
 import marketRoutes from './market.routes.js';
+import { macroRoutes, notificationRoutes } from './macro.routes.js';
 
 const router = Router();
 
+router.use('/markets/macro', macroRoutes);
+router.use('/notifications', notificationRoutes);
 router.use('/markets', marketRoutes);
 router.use('/telemetry/markets', marketRoutes);
 router.use('/', authRoutes);

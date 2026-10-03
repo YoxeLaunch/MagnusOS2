@@ -3,6 +3,7 @@ import { Shield, Settings, LogOut, Menu, X, MessageSquare, Home, ArrowLeft, Wall
 import { User } from '../../types/user';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
+import { NotificationCenter } from './NotificationCenter';
 
 interface AppHeaderProps {
     user: User | null;
@@ -90,6 +91,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
                         </button>
                     )}
 
+                    <NotificationCenter />
                     <ActionButton onClick={onOpenChat} icon={MessageSquare} label="Chat" />
                     <ActionButton onClick={onOpenSettings} icon={Settings} label="Configuración" />
 
@@ -104,8 +106,9 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
                     </button>
                 </div>
 
-                {/* --- MOBILE VIEW (Hamburger) --- */}
-                <div className="md:hidden relative">
+                {/* --- MOBILE VIEW (Hamburger + Notifications) --- */}
+                <div className="md:hidden flex items-center gap-2 relative">
+                    <NotificationCenter />
                     <button
                         onClick={() => setIsMenuOpen(!isMenuOpen)}
                         className="p-2.5 rounded-full bg-slate-200 dark:bg-white/10 text-slate-900 dark:text-white shadow-sm"

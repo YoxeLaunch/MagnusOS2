@@ -1,0 +1,77 @@
+{
+  "thresholds": {
+    "TPM": {
+      "watchDelta": 0.25,
+      "importantDelta": 0.50,
+      "unit": "pp",
+      "impactLabel": "Decisión de Política Monetaria BCRD"
+    },
+    "INFLATION_YOY": {
+      "watchDelta": 0.20,
+      "importantDelta": 0.50,
+      "unit": "pp",
+      "impactLabel": "Variación en Inflación Interanual"
+    },
+    "INFLATION_MONTHLY": {
+      "watchDelta": 0.30,
+      "importantDelta": 0.60,
+      "unit": "pp",
+      "impactLabel": "Ritmo Mensual de Precios al Consumidor"
+    },
+    "INFLATION_CORE": {
+      "watchDelta": 0.20,
+      "importantDelta": 0.40,
+      "unit": "pp",
+      "impactLabel": "Tendencia Subyacente de Precios"
+    },
+    "RATE_ACTIVE": {
+      "watchDelta": 0.50,
+      "importantDelta": 1.00,
+      "unit": "pp",
+      "impactLabel": "Costo de Crédito Bancario Promedio"
+    },
+    "RATE_PASSIVE": {
+      "watchDelta": 0.40,
+      "importantDelta": 0.80,
+      "unit": "pp",
+      "impactLabel": "Rendimiento Pasivo Bancario Promedio"
+    },
+    "IMAE_YOY": {
+      "watchDelta": 1.0,
+      "importantDelta": 2.0,
+      "unit": "pp",
+      "impactLabel": "Pulso de Actividad Económica Real"
+    },
+    "PRIVATE_CREDIT_YOY": {
+      "watchDelta": 1.0,
+      "importantDelta": 2.5,
+      "unit": "pp",
+      "impactLabel": "Dinamismo del Crédito al Sector Privado"
+    },
+    "RESERVES_NET": {
+      "watchDelta": 500.0,
+      "importantDelta": 1000.0,
+      "unit": "US$ MM",
+      "impactLabel": "Posición de Reservas Internacionales Netas"
+    },
+    "USD_DOP_BCRD": {
+      "watchPercent": 0.50,
+      "importantPercent": 1.00,
+      "unit": "%",
+      "impactLabel": "Tipo de Cambio Oficial de Referencia USD/DOP"
+    },
+    "EUR_DOP_BCRD": {
+      "watchPercent": 0.70,
+      "importantPercent": 1.50,
+      "unit": "%",
+      "impactLabel": "Tipo de Cambio Oficial de Referencia EUR/DOP"
+    }
+  },
+  "settings": {
+    "notifyInfo": false,
+    "notifyWatch": true,
+    "notifyImportant": true,
+    "notifyCritical": true,
+    "maxRecentNotifications": 50
+  }
+}

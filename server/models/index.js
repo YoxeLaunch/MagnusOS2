@@ -13,6 +13,8 @@ import { MonthlySnapshot } from './monthlySnapshot.js';
 import { FinancialAnomaly } from './anomaly.js';
 import { FxRateObservation } from './fxObservation.js';
 import { FxProviderHealth } from './fxProviderHealth.js';
+import { MacroIndicator, MacroObservation, MacroSourceHealth } from './macroIndicator.js';
+import { MagnusEvent, MagnusNotification } from './magnusEvent.js';
 
 // ========================================
 // Legacy Associations (to be deprecated)
@@ -148,6 +150,15 @@ export {
     // FX Market Service Models (Providence FX)
     FxRateObservation,
     FxProviderHealth,
+
+    // Macro RD Models
+    MacroIndicator,
+    MacroObservation,
+    MacroSourceHealth,
+
+    // Magnus Event & Notification Engine Models
+    MagnusEvent,
+    MagnusNotification,
 
     // Helpers
     toMinorUnits,

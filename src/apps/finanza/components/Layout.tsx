@@ -25,7 +25,7 @@ import { MasterLayout } from '../../../shared/components/layout/MasterLayout';
 import { useData } from '../context/DataContext';
 
 const FINANZA_NAV_ITEMS = [
-  { path: "/finanza", label: "Resumen Anual", icon: LayoutDashboard },
+  { path: "/finanza", label: "Centro de Comando", icon: LayoutDashboard },
   { path: "/finanza/flujo", label: "Gestión de Flujo", icon: ArrowRightLeft },
   { path: "/finanza/seguimiento", label: "Seguimiento Diario", icon: Receipt },
   { path: "/finanza/patrimonio", label: "Patrimonio Global", icon: Wallet },
@@ -77,7 +77,7 @@ const Sidebar = ({ isDark, toggleTheme }: any) => {
         </div>
 
         <nav className="flex-1 px-4 space-y-1 mt-6 overflow-y-auto custom-scrollbar">
-          <NavLink to="/finanza" icon={LayoutDashboard} label="Resumen Anual" isActive={location.pathname === "/finanza" || location.pathname === "/finanza/"} />
+          <NavLink to="/finanza" icon={LayoutDashboard} label="Centro de Comando" isActive={location.pathname === "/finanza" || location.pathname === "/finanza/"} />
           <NavLink to="/finanza/flujo" icon={ArrowRightLeft} label="Gestión de Flujo" isActive={location.pathname.includes("/finanza/flujo")} />
           <NavLink to="/finanza/seguimiento" icon={Receipt} label="Seguimiento Diario" isActive={location.pathname.includes("/finanza/seguimiento")} />
           <NavLink to="/finanza/patrimonio" icon={Wallet} label="Patrimonio Global" isActive={location.pathname.includes("/finanza/patrimonio")} />

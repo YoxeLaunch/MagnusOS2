@@ -34,6 +34,7 @@ import {
 } from 'recharts';
 import { apiFetch } from '../../../shared/utils/apiFetch';
 import { FxMercadoModal } from './FxMercadoModal';
+import { MacroRdSection } from './macro/MacroRdSection';
 
 export interface MarketQuote {
   symbol: string;
@@ -680,6 +681,11 @@ export const MarketIntel: React.FC<MarketIntelProps> = ({ embedded = false, vari
           );
         })}
       </div>
+
+      {/* ========================================================================= */}
+      {/* 3.5 CONTEXTO MACRO RD (BANCO CENTRAL DE LA REPÚBLICA DOMINICANA)           */}
+      {/* ========================================================================= */}
+      {currentVariant === 'full' && <MacroRdSection />}
 
       {/* ========================================================================= */}
       {/* 4. SECCIÓN COMPLETA DE CATEGORÍAS (SÓLO EN VISTA 'FULL' // MERCADO)       */}

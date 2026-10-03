@@ -30,9 +30,12 @@ export const CentroComandoHeader: React.FC<Props> = ({
   return (
     <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
       <header>
-        <h2 className="text-3xl font-serif font-bold text-slate-900 dark:text-white tracking-wide flex items-center gap-2">
-          <ShieldAlert className="text-blue-500" size={28} />
+        <h2 className="text-3xl font-serif font-bold text-slate-900 dark:text-white tracking-wide flex items-center gap-2.5">
+          <ShieldAlert className="text-cyan-500" size={28} />
           Centro de Comando
+          <span className="text-[11px] font-mono font-bold text-theme-gold tracking-widest uppercase px-2 py-0.5 rounded bg-amber-500/10 border border-amber-500/20">
+            Magnus Capital
+          </span>
         </h2>
         <p className="text-slate-500 dark:text-slate-400 mt-1 font-mono text-sm tracking-tight">
           {subTitle}
