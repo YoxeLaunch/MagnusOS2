@@ -8,6 +8,7 @@ export default defineConfig(({ mode }) => {
         base: '/',
         server: {
             port: 4000,
+            strictPort: true,
             host: '0.0.0.0',
             allowedHosts: true,
             proxy: {

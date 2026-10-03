@@ -17,10 +17,17 @@ interface UpdatesModalProps {
 
 const MOCK_UPDATES: Update[] = [
     {
-        id: 'fx-usd-dop',
-        title: 'Providence FX: Mercado Cambiario USD/DOP',
+        id: 'providence-login-2',
+        title: 'Rediseño Arquitectónico: Acceso Providence 2.0',
         date: '3 de Octubre, 2026',
-        description: 'Nuevo motor institucional en /finanza/mercado. Monitorea cotizaciones en tiempo real de más de 20 bancos de República Dominicana, referencias oficiales del Banco Central (BCRD), arbitraje inteligente (dónde comprar o vender al mejor precio) y gráficos históricos escalonados.',
+        description: 'Nueva experiencia visual de bienvenida a Magnus System inspirada en la arquitectura de Providence. Presenta diseño panorámico nocturno de alta fidelidad, navegación unificada entre inicio de sesión y registro, tarjetas interactivas de capacidades (Finanzas, Datos, Planificación y Seguridad) y resguardo seguro del login clásico.',
+        tag: 'Diseño'
+    },
+    {
+        id: 'fx-usd-dop',
+        title: 'Providence FX: Mercado Cambiario USD & EUR / DOP',
+        date: '3 de Octubre, 2026',
+        description: 'Nuevo motor institucional en /finanza/mercado. Monitorea cotizaciones en tiempo real de más de 20 bancos de República Dominicana y referencias oficiales del Banco Central (BCRD) para USD y EUR, con conversor bidireccional inteligente, spread bancario y gráficos históricos.',
         tag: 'Finanza'
     },
     {
