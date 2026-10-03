@@ -60,7 +60,7 @@ export const getSystemStats = (req, res) => {
 export const getUpdates = async (req, res) => {
     try {
         const updates = await SystemUpdate.findAll({
-            order: [['date', 'DESC']],
+            order: [['date', 'DESC'], ['createdAt', 'DESC']],
             where: { isPublished: true }
         });
         res.json(updates);
