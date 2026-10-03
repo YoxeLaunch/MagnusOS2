@@ -14,38 +14,47 @@
 
 ## 📖 Sobre el Proyecto
 
-**MagnusOS2** es un **Financial Operating System** personal de uso privado: un entorno operativo web full-stack que funciona como sistema integral de control financiero y administrativo. Registra ingresos, gastos e inversiones; gestiona presupuestos; realiza seguimiento diario de flujo de caja; proyecta balances a fin de mes; administra metas de ahorro; y expone dashboards analíticos en tiempo real.
+**MagnusOS2** es un **Financial Operating System** personal de uso privado: un entorno operativo web full-stack que funciona como sistema integral de control financiero y administrativo. Registra ingresos, gastos e inversiones; gestiona presupuestos; realiza seguimiento diario de flujo de caja; proyecta balances a fin de mes; administra metas de ahorro; monitorea cotizaciones de mercado cambiario en tiempo real; y expone dashboards analíticos en vivo.
 
-El nombre "OS2" indica que es la **segunda generación** del sistema (evolución desde `magnus-capital.archived`), con arquitectura rediseñada que incorpora un **ledger de doble entrada** como núcleo contable.
+El nombre "OS2" indica que es la **segunda generación** del sistema (evolución desde `magnus-capital.archived`), con arquitectura rediseñada que incorpora un **ledger de doble entrada** como núcleo contable inmutable.
 
-> **Filosofía:** El ledger manda. Toda cifra visible en la UI debe poder reconstruirse desde el libro contable. Los datos nunca salen del servidor propio.
+> **Filosofía:** El ledger manda. Toda cifra visible en la UI debe poder reconstruirse desde el libro contable. Los datos nunca salen del servidor propio y residen en red privada soberana (**Providence Local Network**).
+
+---
 
 ### ✨ Características Principales
 
-| Módulo | Descripción |
-|--------|-------------|
-| 💰 **Finanzas** | Ledger de doble entrada, flujo de caja, presupuesto, inversiones, metas de ahorro, proyecciones de fin de mes |
-| 🤖 **Magnus / Lab IA** | Panel personal, mentores IA, centro de comando, econometría |
-| 📰 **Publicaciones** | Blog interno de Mentoría: el soberano publica entradas con PDFs e imágenes; el resto de usuarios las lee |
-| 🛡️ **Panel Soberano** | Panel de administración con sidebar (Usuarios, Mentores, Pensum, Economía, Sistema, Comms, Novedades, Portada), métricas de hardware, Docker API |
-| 📊 **Auditor** | Módulo de auditoría contable y reconciliación de cuentas — *temporalmente deshabilitado en el menú, el código se conserva para reactivarlo* |
-| 🌐 **Internacionalización** | Sistema multi-idiomas con i18next |
-| ⚡ **Tiempo Real** | WebSocket (Socket.IO) para notificaciones y actualizaciones en vivo |
-| 🐍 **Sandbox Python** | Contenedor aislado para analítica avanzada y ML (futuro) |
-| 🧠 **Ollama IA Local** | LLM hospedado localmente sin envío de datos a terceros |
+| Módulo | Estado | Descripción |
+|--------|:------:|-------------|
+| 💰 **Finanzas & Ledger** | 🟢 **Activo** | Ledger contable de doble entrada, flujo de caja, presupuesto, inversiones, metas de ahorro y proyecciones de fin de mes. |
+| 💱 **Providence FX & Mercado** | 🟢 **Activo** | Inteligencia de mercado en vivo (`/finanza/mercado`), cotizaciones bancarias en tiempo real para **USD/DOP** y **EUR/DOP**, referencias oficiales del Banco Central (BCRD), Yahoo Finance, comparador de arbitraje bancario, conversor cruzado y gráficos históricos. |
+| 🔐 **Acceso Providence 2.0** | 🟢 **Activo** | Portal de autenticación moderno con diseño arquitectónico nocturno en alta definición, pestañas unificadas de Iniciar Sesión / Registro, tarjetas de capacidades y resguardo de la versión clásica. |
+| 🤖 **Magnus / Lab IA** | 🟢 **Activo** | Panel personal de productividad, mentores estratégicos, pensum/currículum, centro de comando y análisis econométrico. |
+| 📰 **Publicaciones** | 🟢 **Activo** | Blog interno de Mentoría y Estrategia: el soberano publica artículos con imágenes de portada y adjuntos (PDFs hasta 15MB); lectura optimizada para usuarios. |
+| 🛡️ **Panel Soberano (Torre de Control)** | 🟢 **Activo** | Consola de administración con sidebar (Usuarios, Mentores, Pensum, Economía, Sistema, Backups, Comms, Novedades/Changelog), métricas de hardware y Docker API. |
+| 📢 **Changelog en Base de Datos** | 🟢 **Activo** | Historial de Novedades persistido en PostgreSQL (`SystemUpdates`) expuesto en el modal interactivo de bienvenida (`WelcomeIntro`). |
+| 🌐 **Internacionalización** | 🟢 **Activo** | Sistema multi-idiomas nativo con i18next (Español / Inglés). |
+| ⚡ **Tiempo Real** | 🟢 **Activo** | Canales WebSocket (Socket.IO) para telemetría, notificaciones y eventos en vivo. |
+| 📊 **Auditor Contable** | 🟡 *Inactivo* | Módulo de auditoría y reconciliación contable — *temporalmente deshabilitado en menús y rutas para simplificar el flujo, código 100% conservado en `src/apps/auditor` para reactivación inmediata*. |
+| 🧠 **Ollama IA Local** | 🟡 *Opcional* | LLM hospedado localmente — *desactivado por defecto vía Docker profile (`profiles: ["disabled"]`) para optimizar memoria RAM del host (8GB)*. |
+| 🐍 **Sandbox Python** | 🟢 **Aislado** | Contenedor auxiliar de entorno seguro para scripts de analítica avanzada y futuros modelos de pronóstico. |
+
+---
 
 ### 🆕 Actualizaciones Recientes
 
-- **Blog de Publicaciones (Mentoría):** el usuario soberano crea entradas con imágenes de portada, contenido y adjuntos (PDF/imágenes hasta 15MB); el resto de usuarios solo lee.
-- **Panel Soberano rediseñado:** de modal con pestañas horizontales a un layout de panel de administración con sidebar lateral agrupado por Comunidad / Operación / Comunicación.
-- **Auditoría deshabilitada temporalmente:** la tarjeta en Home y la ruta `/auditor` quedan inactivas; el módulo sigue en `src/apps/auditor` listo para reactivarse.
-- **Fix de impresión:** el reporte PDF ya no suma un salario "viejo" y uno "nuevo" como si coexistieran — respeta las fechas de vigencia (`validFrom`/`validTo`) y solo cuenta el ingreso activo hoy.
+- **Acceso Providence 2.0 & Archivo Histórico:** Rediseño arquitectónico integral de la pantalla de bienvenida con estética nocturna panorámica de la sede Providence, pestañas unificadas de inicio de sesión / alta de cuenta, tarjetas interactivas de capacidades (Finanzas, Datos, Planificación y Seguridad) y archivado seguro del login clásico en `src/shared/components/auth/archive/`.
+- **Providence FX Multi-Moneda (USD & EUR / DOP):** Motor institucional de inteligencia cambiaria en `/finanza/mercado`. Monitorea en tiempo real más de 20 bancos de República Dominicana y referencias oficiales del Banco Central (BCRD) para Dólar y Euro, comparador de arbitraje (mejores tasas de compra/venta), spread cambiario y conversor bidireccional inteligente.
+- **Mercado Financiero en Vivo & Gráficos:** Módulo de telemetría de activos con cotizaciones globales, índices bursátiles, materias primas, criptomonedas y gráficos técnicos interactivos.
+- **Gestión de Novedades Centralizada:** Sistema de changelog en base de datos PostgreSQL (`SystemUpdates`) accesible desde el modal de bienvenida y el panel soberano.
+- **Aislamiento de Recursos (Ollama & Auditor):** Configuración de Ollama como servicio opcional (`profiles: ["disabled"]`) y resguardo del módulo de auditoría sin carga innecesaria en la navegación.
+- **Fix de Impresión Financiera:** Reporte financiero PDF depurado para respetar vigencias reales de contratos (`validFrom`/`validTo`) evitando sumas erróneas de salarios anteriores.
 
 ---
 
 ## 🏗️ Arquitectura
 
-MagnusOS2 opera sobre un stack de **4 contenedores Docker** orquestados con un único `docker-compose.yml`:
+MagnusOS2 opera sobre una infraestructura optimizada orquestada mediante Docker Compose:
 
 ```mermaid
 graph TD
@@ -53,51 +62,59 @@ graph TD
 
     subgraph "Frontend SPA — React 18 + Vite"
         React["React 18 + TypeScript"]
-        React -->|"Módulo"| Finanzas["💰 finanza"]
-        React -->|"Módulo"| Magnus["⚙️ magnus / auditor"]
-        React -->|"Módulo"| Admin["🛡️ server-admin"]
+        React -->|"Módulo Activo"| Finanzas["💰 finanza (Ledger + Providence FX)"]
+        React -->|"Módulo Activo"| Magnus["⚙️ magnus / sabiduria"]
+        React -->|"Módulo Activo"| Admin["🛡️ server-admin (Torre de Control)"]
+        React -->|"Módulo Activo"| Landing["🏛️ landing / portal"]
+        React -.->|"Desactivado temporalmente"| Auditor["📊 auditor (conservado)"]
     end
 
     subgraph "Backend — Node.js 20 / Express"
         Backend["Express.js + Socket.IO"]
         JWT["Middleware Auth JWT"]
         ORM["Sequelize ORM"]
+        MarketEngine["💱 Providence FX Engine (BCRD + Bancos)"]
         Backend <--> JWT
         Backend <--> ORM
+        Backend <--> MarketEngine
     end
 
-    subgraph "Servicios Aislados (Docker interno)"
-        DB[("PostgreSQL 16")]
-        AI["🧠 Ollama LLM local"]
-        Sandbox["🐍 Python Sandbox"]
+    subgraph "Servicios Docker"
+        DB[("PostgreSQL 16 (magnus_postgres)")]
+        AppCont["Container Magnus All-in-One (Puerto 4000)"]
+        Sandbox["🐍 Python Sandbox (magnus_sandbox)"]
+        Ollama["🧠 Ollama LLM (Opcional / profile: disabled)"]
     end
 
     React -->|"fetch + JWT"| Backend
-    ORM <-->|"TCP Interno"| DB
-    Backend <-->|"API"| AI
-    Backend <-->|"Ejecución"| Sandbox
+    ORM <-->|"TCP Interno (5432)"| DB
+    Backend <-->|"Ejecución Aislada"| Sandbox
+    Backend -.->|"Opcional"| Ollama
 
     style Backend fill:#339933,stroke:#333,color:#fff
     style DB fill:#336791,stroke:#333,color:#fff
-    style AI fill:#ff8c00,stroke:#333,color:#fff
+    style MarketEngine fill:#d4af37,stroke:#333,color:#000
+    style Ollama fill:#4b5563,stroke:#666,color:#aaa
+    style Auditor fill:#4b5563,stroke:#666,color:#aaa
 ```
 
 ### Stack Tecnológico
 
 | Capa | Tecnología |
 |------|------------|
-| **Frontend** | React 18 + TypeScript + Vite + TailwindCSS + Recharts + Framer Motion |
+| **Frontend** | React 18 + TypeScript + Vite + TailwindCSS + Recharts + Framer Motion + Lucide Icons |
 | **Backend** | Node.js 20 LTS + Express 4 + Socket.IO + JWT + Helmet + Sequelize 6 |
-| **Base de Datos** | PostgreSQL 16 (producción) / SQLite3 (desarrollo) |
+| **Base de Datos** | PostgreSQL 16 (producción en Docker) |
 | **Infraestructura** | Docker Compose + Nginx + Ubuntu Server 24.04 LTS |
-| **IA Local** | Ollama (LLM sin dependencias cloud) + Python Sandbox |
-| **Calidad de Código** | TypeScript + Biome + Jest |
+| **Mercado & FX** | Scrapers y agregadores institucionales (BCRD, Yahoo Finance, banca comercial dominicana) |
+| **IA & Analítica** | Ollama *(desplegable bajo demanda)* + Python Sandbox |
+| **Calidad de Código** | TypeScript estricto + Biome + Jest |
 
 ---
 
 ## 💰 Núcleo Financiero — Ledger de Doble Entrada
 
-El corazón del sistema es un **ledger contable de doble entrada** que garantiza integridad matemática en cada transacción:
+El corazón del sistema es un **ledger contable de partida doble** que garantiza integridad matemática en cada transacción:
 
 ```mermaid
 sequenceDiagram
@@ -146,36 +163,42 @@ RD$1,234.56 → almacenado como 123456
 
 ```
 Magnus-OS2/
-├── server/                    # Backend Node.js
+├── server/                    # Backend Node.js 20
 │   ├── index.js               # Entry point (Express + Socket.IO)
-│   ├── routes/                # 11 archivos de rutas REST
-│   │   ├── finanza.routes.js  # Ledger, cuentas, ahorros, import
-│   │   ├── auth.routes.js     # Autenticación JWT
-│   │   ├── magnus.routes.js   # Dashboard personal + Lab IA
-│   │   ├── auditor.routes.js  # Auditoría contable
+│   ├── routes/                # Rutas modulares de la API REST
+│   │   ├── finanza.routes.js  # Ledger, cuentas, ahorros, importaciones
+│   │   ├── market.routes.js   # Providence FX (USD/EUR, BCRD), telemetría de mercado
+│   │   ├── auth.routes.js     # Autenticación JWT y roles
+│   │   ├── magnus.routes.js   # Dashboard personal + Lab IA + Sabiduría
+│   │   ├── system.routes.js   # Novedades (Changelog), backups, settings
+│   │   ├── auditor.routes.js  # Auditoría contable (conservada)
 │   │   ├── econometrics.routes.js # Análisis econométrico
 │   │   └── ...
-│   ├── controllers/           # Lógica de negocio
-│   ├── models/                # Modelos Sequelize (DB schema)
-│   ├── middleware/            # JWT auth, rate limiting, security
-│   ├── jobs/                  # Cron jobs programados
-│   ├── services/              # Docker API, servicios externos
-│   └── socket/                # Handlers WebSocket
-├── src/                       # Frontend React/TypeScript
+│   ├── controllers/           # Lógica de negocio (controladores)
+│   ├── models/                # Modelos Sequelize (PostgreSQL)
+│   ├── middleware/            # JWT auth, rate limiting, seguridad Helmet
+│   ├── services/              # Scraping bancario, Docker API, backup engine
+│   └── socket/                # Handlers WebSocket en tiempo real
+├── src/                       # Frontend React / TypeScript
 │   ├── apps/
-│   │   ├── finanza/           # Módulo financiero principal
-│   │   ├── magnus/            # Dashboard + Lab IA + Centro Comando + Publicaciones
-│   │   ├── auditor/           # Auditoría contable (deshabilitado en el menú, código conservado)
-│   │   └── server-admin/      # Panel soberano de administración
-│   ├── context/               # React Context providers
-│   └── shared/                # Componentes y utils compartidos
-├── docker-compose.yml         # Orquestación 4 servicios
-├── Dockerfile.api             # Imagen Backend
-├── Dockerfile.web             # Imagen Frontend (Nginx)
+│   │   ├── finanza/           # Módulo financiero (Ledger, Cashflow, Providence FX)
+│   │   ├── magnus/            # Dashboard personal + Sabiduría + Centro Comando + Publicaciones
+│   │   ├── server-admin/      # Torre de Control Soberana (HUD, usuarios, backups, changelog)
+│   │   ├── landing/           # Puerta de entrada y bienvenida
+│   │   └── auditor/           # Auditoría contable (deshabilitada en menú, código conservado)
+│   ├── shared/                # Componentes y utilidades transversales
+│   │   ├── components/
+│   │   │   ├── auth/          # Login y Register Providence 2.0
+│   │   │   │   └── archive/   # Resguardo histórico de login y registro clásico
+│   │   │   └── home/          # WelcomeIntro, UpdatesModal, etc.
+│   │   └── context/           # Contextos globales (Auth, Toast, etc.)
+├── public/                    # Assets estáticos (imágenes arquitectónicas, avatares)
+├── docker-compose.yml         # Orquestación de contenedores
+├── Dockerfile.api             # Imagen unificada de producción
 ├── Dockerfile.sandbox         # Imagen Python Sandbox
-├── nginx.conf                 # Configuración proxy/static server
-├── DOCS.md                    # 📚 Documentación técnica completa
-└── package.json               # Dependencias unificadas
+├── vite.config.ts             # Configuración de Vite (puerto 4000 estricto + proxy API 4001)
+├── DOCS.md                    # Documentación técnica extendida
+└── package.json               # Dependencias del proyecto
 ```
 
 ---
@@ -187,6 +210,15 @@ Magnus-OS2/
 - [Node.js](https://nodejs.org/) v20 LTS o superior
 - [Docker](https://www.docker.com/) + Docker Compose v2
 - [NPM](https://www.npmjs.com/) v9 o superior
+
+### Puertos y Entornos
+
+| Entorno | Servicio | Puerto | Descripción |
+|---------|----------|:------:|-------------|
+| **Desarrollo** | Frontend Vite | `4000` | Servidor de desarrollo con HMR (`strictPort: true`) |
+| **Desarrollo** | Backend API | `4001` | Servidor Node/Express (proxy configurado en Vite) |
+| **Producción Docker** | `magnus_os2_app` | `4000` | Contenedor unificado (Express sirve el bundle de `dist/`) |
+| **Producción Docker** | `magnus_postgres` | `5432` | Red interna aislada `magnus_net` (no expuesto a internet) |
 
 ### Opción A — Desarrollo Local
 
@@ -200,27 +232,28 @@ npm install
 
 # 3. Configurar variables de entorno
 cp .env.example .env
-# Editar .env con tus valores (JWT_SECRET, etc.)
+# Configurar JWT_SECRET, credenciales de BD, etc.
 
-# 4. Iniciar en modo desarrollo (Frontend + Backend)
+# 4. Iniciar en modo desarrollo
 npm run start:all
+# Frontend Vite en http://localhost:4000 y Backend en http://localhost:4001
 ```
-
-> 💡 El frontend abre en Vite (HMR activo) y el backend en `localhost:4000`
 
 ### Opción B — Docker (Producción)
 
 ```bash
 # 1. Configurar entorno
 cp .env.example .env
-# Editar .env con tus valores
 
-# 2. Construir y levantar todos los servicios
+# 2. Construir y levantar servicios principales
 docker compose up -d --build
 
-# 3. Ver estado y logs
+# 3. (Opcional) Si deseas habilitar el contenedor de Ollama IA:
+docker compose --profile disabled up -d ollama
+
+# 4. Verificar estado de los contenedores
 docker compose ps
-docker compose logs -f
+docker compose logs -f magnus
 ```
 
 ---
@@ -229,17 +262,17 @@ docker compose logs -f
 
 | Comando | Descripción |
 |---------|-------------|
-| `npm run dev` | Frontend en Vite (HMR) |
-| `npm run server` | Backend en Node.js (puerto 4000) |
-| `npm run start:all` | Frontend + Backend en paralelo |
-| `npm run build` | Compila frontend para producción |
-| `npm run preview` | Sirve `dist/` para probar producción |
-| `npm run lint` | Analiza y auto-corrige código (Biome) |
-| `npm run format` | Formatea código (Biome) |
-| `npm run analyze` | lint + type-check en un paso |
-| `npm run type-check` | Verifica tipos TypeScript |
-| `npm test` | Suite de pruebas (Jest) |
-| `npm run mcp` | Inicia servidor MCP (Model Context Protocol) |
+| `npm run dev` | Inicia frontend en Vite (`localhost:4000`) |
+| `npm run server` | Inicia servidor backend Node.js (`localhost:4001`) |
+| `npm run start:all` | Inicia Frontend + Backend en paralelo para desarrollo |
+| `npm run build` | Compila el frontend optimizado para producción en `dist/` |
+| `npm run preview` | Previsualiza el bundle compilado localmente |
+| `npm run lint` | Analiza y auto-corrige código mediante Biome |
+| `npm run format` | Aplica formato uniforme de código (Biome) |
+| `npm run analyze` | Ejecuta análisis de código y verificación de tipos TypeScript |
+| `npm run type-check` | Valida tipos TypeScript sin emitir archivos (`tsc --noEmit`) |
+| `npm test` | Ejecuta la suite de pruebas unitarias con Jest |
+| `npm run mcp` | Inicia el servidor MCP (Model Context Protocol) |
 
 ---
 
@@ -263,80 +296,35 @@ El algoritmo de predicción evoluciona automáticamente:
 
 ## 🐳 Infraestructura Docker
 
-El sistema opera con **4 contenedores Docker** optimizados para servidores con 8GB de RAM:
+El sistema está configurado para operar con alta eficiencia en servidores con recursos contenidos (e.g. 8GB de RAM):
 
-| Servicio | Imagen | RAM estimada | Propósito |
-|----------|--------|-------------|-----------|
-| `postgres` | postgres:16-alpine | 150-300MB | Base de datos principal |
-| `magnus` | magnus-api:latest | 120-200MB | Backend + Frontend servido |
-| `ollama` | ollama/ollama | 2-6GB* | LLM local (IA) |
-| `sandbox` | python:sandbox | 50-100MB | Analítica Python aislada |
-
-> *Ollama: usar modelos Q4_K_M y `OLLAMA_MAX_LOADED_MODELS=1` para optimizar RAM.
-
-PostgreSQL está configurado con parámetros optimizados para hardware doméstico (`shared_buffers=256MB`, `max_connections=50`, `synchronous_commit=off`).
+| Servicio | Contenedor | Estado | Propósito |
+|----------|------------|:------:|-----------|
+| `postgres` | `magnus_postgres` | 🟢 Activo | Base de datos principal PostgreSQL 16 Alpine |
+| `magnus` | `magnus_os2_app` | 🟢 Activo | Backend Node 20 + Frontend compilado servido en puerto `4000` |
+| `sandbox` | `magnus_sandbox` | 🟢 Activo | Contenedor Python aislado para analítica y ejecución segura |
+| `ollama` | `magnus_ollama` | 🟡 *Opcional* | LLM local — *perfil `disabled` por defecto para economizar memoria; activable bajo demanda con `--profile disabled`* |
 
 ---
 
 ## 🔒 Seguridad
 
-El sistema implementa múltiples capas de seguridad:
+El sistema implementa múltiples capas de protección soberana:
 
-- ✅ **JWT** en todas las rutas financieras (sin excepción)
-- ✅ **Helmet** — headers HTTP de seguridad (CSP, HSTS, etc.)
-- ✅ **Rate Limiting** — express-rate-limit en todas las rutas
-- ✅ **PostgreSQL aislado** — puerto NO expuesto al exterior
-- ✅ **Payload limits** — 1MB general, 10MB para importaciones
-- ✅ **CORS** restringido al dominio del frontend
-- ✅ **Secrets en `.env`** — nunca en el repositorio
-
----
-
-## 📋 Roadmap
-
-### Corto Plazo (1–3 meses)
-- [ ] Dashboard unificado legacy + ledger
-- [ ] Suavizado exponencial en predicciones
-- [ ] Alertas Telegram automáticas
-- [ ] Backup automático diario configurado
-
-### Mediano Plazo (3–9 meses)
-- [ ] Vista materializada PostgreSQL (-80% tiempo query)
-- [ ] Redis cache para dashboard
-- [ ] Categorización automática via ML
-- [ ] Importación CSV bancos dominicanos (BHD, Popular, BanReservas)
-
-### Largo Plazo (9–24 meses)
-- [ ] AI Analyst con acceso real al ledger (Ollama local)
-- [ ] Forecasting ARIMA en Python Sandbox
-- [ ] Módulo de impuestos DOP (ISR, AFP, SFS)
-- [ ] App móvil PWA instalable
+- ✅ **JWT Estricto** en todas las rutas financieras y administrativas.
+- ✅ **Helmet** — Encabezados HTTP de seguridad (CSP, HSTS, X-Content-Type-Options).
+- ✅ **Rate Limiting** — Protección anti-fuerza bruta vía `express-rate-limit`.
+- ✅ **Base de Datos Aislada** — Puerto PostgreSQL `5432` confinado exclusivamente a la red Docker interna (`magnus_net`).
+- ✅ **CORS Protegido** — Restringido al origen autorizado del sistema.
+- ✅ **Validación de Invariante Contable** — Rechazo automático de transacciones que no cuadren a cero.
+- ✅ **Aislamiento de Login Clásico** — Código anterior preservado en directorio de archivo sin exposición accidental.
 
 ---
 
-## 📚 Documentación
+## 📚 Documentación Adicional
 
-Toda la documentación técnica está consolidada en un único archivo:
-
-- **[DOCS.md](DOCS.md)** — Documentación técnica completa:
-  - Comandos y operación detallada
-  - Arquitectura y flujos de datos
-  - Modelos de datos completos (SQL)
-  - API endpoints documentados
-  - Guía de KPIs y algoritmos financieros
-  - Plan de fases de implementación
-  - Seguridad y backups
-  - Roadmap y mejoras propuestas
-
----
-
-## 🤝 Contribuyendo
-
-1. Haz un **Fork** del repositorio
-2. Crea tu rama: `git checkout -b feature/MiNuevaIdea`
-3. Commit con descripción clara: `git commit -m 'feat: descripción'`
-4. Sube los cambios: `git push origin feature/MiNuevaIdea`
-5. Abre un **Pull Request**
+- **[DOCS.md](DOCS.md)** — Manual técnico de referencia, endpoints de API y esquemas SQL.
+- **[GUIA_COMANDOS.md](GUIA_COMANDOS.md)** — Guía operativa y comandos administrativos rápidos.
 
 ---
 
