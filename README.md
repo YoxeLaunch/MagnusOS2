@@ -7,7 +7,8 @@
   <img src="https://img.shields.io/badge/Vite-7.3-B73BFE?style=for-the-badge&logo=vite&logoColor=FFD62E" alt="Vite" />
   <img src="https://img.shields.io/badge/Node.js-20_LTS-339933?style=for-the-badge&logo=nodedotjs&logoColor=white" alt="Node.js" />
   <img src="https://img.shields.io/badge/PostgreSQL-16-336791?style=for-the-badge&logo=postgresql&logoColor=white" alt="PostgreSQL" />
-  <img src="https://img.shields.io/badge/Docker-Compose-2496ED?style=for-the-badge&logo=docker&logoColor=white" alt="Docker" />
+  <img src="https://img.shields.io/badge/Docker-29.1-2496ED?style=for-the-badge&logo=docker&logoColor=white" alt="Docker" />
+  <img src="https://img.shields.io/badge/Ubuntu-26.04_LTS-E95420?style=for-the-badge&logo=ubuntu&logoColor=white" alt="Ubuntu" />
 </div>
 
 <hr />
@@ -103,9 +104,9 @@ graph TD
 | Capa | Tecnología |
 |------|------------|
 | **Frontend** | React 18 + TypeScript + Vite + TailwindCSS + Recharts + Framer Motion + Lucide Icons |
-| **Backend** | Node.js 20 LTS + Express 4 + Socket.IO + JWT + Helmet + Sequelize 6 |
-| **Base de Datos** | PostgreSQL 16 (producción en Docker) |
-| **Infraestructura** | Docker Compose + Nginx + Ubuntu Server 24.04 LTS |
+| **Backend** | Node.js 20 LTS (v20.20+) + Express 4 + Socket.IO + JWT + Helmet + Sequelize 6 |
+| **Base de Datos** | PostgreSQL 16 (16.15 en Docker) |
+| **Infraestructura** | Docker 29.1+ + Docker Compose v2.40+ + Ubuntu Server 26.04.1 LTS (Resolute Raccoon) |
 | **Mercado & FX** | Scrapers y agregadores institucionales (BCRD, Yahoo Finance, banca comercial dominicana) |
 | **IA & Analítica** | Ollama *(desplegable bajo demanda)* + Python Sandbox |
 | **Calidad de Código** | TypeScript estricto + Biome + Jest |
@@ -207,9 +208,10 @@ Magnus-OS2/
 
 ### Prerequisitos
 
-- [Node.js](https://nodejs.org/) v20 LTS o superior
-- [Docker](https://www.docker.com/) + Docker Compose v2
-- [NPM](https://www.npmjs.com/) v9 o superior
+- [Ubuntu Server](https://ubuntu.com/) v26.04.1 LTS (Resolute Raccoon) o distribución compatible
+- [Node.js](https://nodejs.org/) v20 LTS (v20.20+)
+- [Docker](https://www.docker.com/) v29.1+ & Docker Compose v2.40+
+- [NPM](https://www.npmjs.com/) v10.8+
 
 ### Puertos y Entornos
 

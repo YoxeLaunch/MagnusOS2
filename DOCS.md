@@ -975,12 +975,12 @@ COMMIT;
 |---|---|---|
 | Core | Node.js/Express + PostgreSQL | ✅ Decidido |
 | Contabilidad | Ledger doble entrada | ✅ Decidido |
-| Infra | Ubuntu 24.04 + Docker + Portainer | ✅ Decidido |
+| Infra | Ubuntu 26.04.1 LTS + Docker 29+ + Portainer | ✅ Decidido |
 | Frontend | React + Vite (SPA responsive) | ✅ Decidido |
 | ORM | Sequelize 6 | ✅ Decidido |
 | Herramienta de migraciones | SQL puro vs Prisma/TypeORM | ⏳ Pendiente |
 | Estándar de signos en postings | Convención debit/credit | ⏳ Pendiente |
-| Multi-moneda en P0 | Si entra en P0 o P1 | ⏳ Pendiente |
+| Multi-moneda | Providence FX: USD & EUR / DOP (BCRD) | ✅ Implementado |
 | Reverse proxy | Traefik / Caddy / Nginx + TLS | ⏳ Pendiente |
 
 ---
