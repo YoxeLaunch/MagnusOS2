@@ -17,6 +17,13 @@ interface UpdatesModalProps {
 
 const MOCK_UPDATES: Update[] = [
     {
+        id: 'fx-usd-dop',
+        title: 'Providence FX: Mercado Cambiario USD/DOP',
+        date: '3 de Octubre, 2026',
+        description: 'Nuevo motor institucional en /finanza/mercado. Monitorea cotizaciones en tiempo real de más de 20 bancos de República Dominicana, referencias oficiales del Banco Central (BCRD), arbitraje inteligente (dónde comprar o vender al mejor precio) y gráficos históricos escalonados.',
+        tag: 'Finanza'
+    },
+    {
         id: '1',
         title: 'Nueva Interfaz de Usuario',
         date: '5 de Enero, 2026',
