@@ -351,7 +351,7 @@ export class EnergyService {
             const brent = quotes.find(q => q.symbol === 'BZ=F');
             const usdDop = quotes.find(q => q.symbol === 'DOP=X');
 
-            if (wti) {
+            if (wti && wti.price > 0) {
                 marketContext.wti = {
                     price: wti.price,
                     prevClose: wti.prev_close,
@@ -359,7 +359,7 @@ export class EnergyService {
                     unit: 'USD/bbl'
                 };
             }
-            if (brent) {
+            if (brent && brent.price > 0) {
                 marketContext.brent = {
                     price: brent.price,
                     prevClose: brent.prev_close,
@@ -367,7 +367,7 @@ export class EnergyService {
                     unit: 'USD/bbl'
                 };
             }
-            if (usdDop) {
+            if (usdDop && usdDop.price > 0) {
                 marketContext.usdDop = {
                     price: usdDop.price,
                     changePercent: usdDop.change_percent,

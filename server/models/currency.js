@@ -5,5 +5,14 @@ export const CurrencyHistory = sequelize.define('CurrencyHistory', {
     id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
     date: { type: DataTypes.DATEONLY, allowNull: false },
     code: { type: DataTypes.STRING, allowNull: false },
-    rate: { type: DataTypes.FLOAT, allowNull: false }
+    rate: { type: DataTypes.FLOAT, allowNull: false },
+    rateExact: { type: DataTypes.DECIMAL(12, 6), allowNull: true, field: 'rate_exact' }
+}, {
+    hooks: {
+        beforeSave: (instance) => {
+            if (instance.rate !== undefined && instance.rate !== null && !instance.rateExact) {
+                instance.rateExact = Number(instance.rate).toFixed(6);
+            }
+        }
+    }
 });

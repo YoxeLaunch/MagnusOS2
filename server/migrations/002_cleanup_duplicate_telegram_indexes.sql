@@ -5,13 +5,15 @@ DO $$
 DECLARE
     r RECORD;
 BEGIN
-    FOR r IN (
-        SELECT conname
-        FROM pg_constraint
-        WHERE conrelid = 'telegram_links'::regclass
-          AND conname ~ '^telegram_links_chatId_key[0-9]+$'
-    ) LOOP
-        EXECUTE 'ALTER TABLE telegram_links DROP CONSTRAINT ' || quote_ident(r.conname);
-        RAISE NOTICE 'Dropped duplicate constraint %', r.conname;
-    END LOOP;
+    IF to_regclass('public.telegram_links') IS NOT NULL THEN
+        FOR r IN (
+            SELECT conname
+            FROM pg_constraint
+            WHERE conrelid = 'public.telegram_links'::regclass
+              AND conname ~ '^telegram_links_chatId_key[0-9]+$'
+        ) LOOP
+            EXECUTE 'ALTER TABLE telegram_links DROP CONSTRAINT ' || quote_ident(r.conname);
+            RAISE NOTICE 'Dropped duplicate constraint %', r.conname;
+        END LOOP;
+    END IF;
 END $$;

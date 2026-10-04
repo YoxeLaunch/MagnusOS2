@@ -8,10 +8,16 @@ import { CurriculumModule, Mission } from './Curriculum.js';
 import { Publication } from './Publication.js';
 import TelegramLink from '../TelegramLink.js';
 
+import { sequelize } from '../../config/database.js';
+
 export const initSystemDb = async () => {
     try {
-        await sequelizeSystem.sync();
-        console.log('[SYSTEM DB] Database synced (SQLite)');
+        if (sequelizeSystem !== sequelize) {
+            await sequelizeSystem.sync();
+            console.log('[SYSTEM DB] Database synced (SQLite)');
+        } else {
+            console.log('[SYSTEM DB] PostgreSQL shared connection detected. Skipped redundant sync.');
+        }
     } catch (error) {
         console.error('[SYSTEM DB] Error syncing database:', error);
         throw error;

@@ -19,7 +19,9 @@
     "test:postgres": "NODE_ENV=test DATABASE_URL_TEST=postgresql://magnus_test_user:magnus_test_secret_pass@127.0.0.1:5433/magnus_test node --test --test-concurrency=1 tests/integration/*.test.js",
     "test:all": "npm test && npm run test:postgres",
     "test:ui": "jest src/__tests__",
-    "mcp": "node server/mcp-server.js"
+    "mcp": "node server/mcp-server.js",
+    "db:migrate": "node scripts/migrate.js up",
+    "db:status": "node scripts/migrate.js status"
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",

@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { sequelize } from '../../server/models/index.js';
+import { sequelize, MigrationRunner } from '../../server/models/index.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -51,33 +51,9 @@ export async function initializeTestPostgres() {
         await sequelize.query('SELECT pg_advisory_lock(987654321);');
 
         try {
-            const [tables] = await sequelize.query(`
-                SELECT tablename FROM pg_catalog.pg_tables WHERE schemaname = 'public' AND tablename = 'ledger_transactions';
-            `);
-
-            if (tables.length === 0) {
-                // 1. Force sync all Sequelize models onto test PostgreSQL
-                await sequelize.sync({ force: true });
-            }
-
-            // 2. Always apply migration 001: Constraint trigger for double entry & ownership
-            const migration001Path = path.join(ROOT_DIR, 'server', 'migrations', '001_ledger_balance_constraint_trigger.sql');
-            const sql001 = fs.readFileSync(migration001Path, 'utf8');
-            await sequelize.query(sql001);
-
-            // 3. Always apply migration 003: Monthly snapshots user isolation
-            const migration003Path = path.join(ROOT_DIR, 'server', 'migrations', '003_monthly_snapshots_user_id.sql');
-            if (fs.existsSync(migration003Path)) {
-                const sql003 = fs.readFileSync(migration003Path, 'utf8');
-                await sequelize.query(sql003).catch(() => {});
-            }
-
-            // 4. Apply the Phase II-B financial invariants under test.
-            const migration006Path = path.join(ROOT_DIR, 'server', 'migrations', '006_financial_invariants.sql');
-            if (fs.existsSync(migration006Path)) {
-                const sql006 = fs.readFileSync(migration006Path, 'utf8');
-                await sequelize.query(sql006);
-            }
+            // Apply all versioned migrations via MigrationRunner (Migration-First)
+            const runner = new MigrationRunner(sequelize);
+            await runner.up();
         } finally {
             await sequelize.query('SELECT pg_advisory_unlock(987654321);').catch(() => {});
         }
