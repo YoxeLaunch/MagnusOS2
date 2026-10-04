@@ -10,6 +10,7 @@
  */
 
 import { DailyTransaction, FinancialAnomaly, Account } from '../models/index.js';
+import { getEffectiveUserId } from '../middleware/auth.js';
 import {
     calculateMPC,
     forecastLiquidity,
@@ -26,14 +27,11 @@ import { Op } from 'sequelize';
 // ========================================
 export const getDashboard = async (req, res) => {
     try {
-        const { userId } = req.query;
-        if (!userId) {
-            return res.status(400).json({ error: 'userId is required' });
-        }
+        const effectiveUserId = getEffectiveUserId(req, req.query.userId);
 
         // Fetch all daily transactions for this user
         const transactions = await DailyTransaction.findAll({
-            where: { userId },
+            where: { userId: effectiveUserId },
             order: [['date', 'ASC']],
             raw: true
         });
@@ -48,21 +46,21 @@ export const getDashboard = async (req, res) => {
         let currentBalance = 0;
         try {
             const accounts = await Account.findAll({
-                where: { userId, status: 'active' },
+                where: { userId: effectiveUserId, isArchived: false },
                 attributes: ['currentBalanceMinor'],
                 raw: true
             });
             // fromMinorUnits equivalent: divide by 100
-            currentBalance = accounts.reduce((sum, a) => sum + (a.currentBalanceMinor || 0) / 100, 0);
-        } catch {
-            // Accounts table may not exist for all users; use 0 as fallback
+            currentBalance = accounts.reduce((sum, a) => sum + (Number(a.currentBalanceMinor) || 0) / 100, 0);
+        } catch (err) {
+            console.warn('[Econometrics] Account fetch fallback:', err.message);
         }
 
         const forecastResult = forecastLiquidity(dailyFlows, currentBalance);
 
         // 3. Pending anomaly count
         const pendingAnomalies = await FinancialAnomaly.count({
-            where: { userId, status: 'pending' }
+            where: { userId: effectiveUserId, status: 'pending' }
         });
 
         res.json({
@@ -90,13 +88,10 @@ export const getDashboard = async (req, res) => {
 // ========================================
 export const getForecast = async (req, res) => {
     try {
-        const { userId } = req.query;
-        if (!userId) {
-            return res.status(400).json({ error: 'userId is required' });
-        }
+        const effectiveUserId = getEffectiveUserId(req, req.query.userId);
 
         const transactions = await DailyTransaction.findAll({
-            where: { userId },
+            where: { userId: effectiveUserId },
             order: [['date', 'ASC']],
             raw: true
         });
@@ -106,13 +101,13 @@ export const getForecast = async (req, res) => {
         let currentBalance = 0;
         try {
             const accounts = await Account.findAll({
-                where: { userId, status: 'active' },
+                where: { userId: effectiveUserId, isArchived: false },
                 attributes: ['currentBalanceMinor'],
                 raw: true
             });
-            currentBalance = accounts.reduce((sum, a) => sum + (a.currentBalanceMinor || 0) / 100, 0);
-        } catch {
-            // Fallback
+            currentBalance = accounts.reduce((sum, a) => sum + (Number(a.currentBalanceMinor) || 0) / 100, 0);
+        } catch (err) {
+            console.warn('[Econometrics] Account fetch fallback:', err.message);
         }
 
         const result = forecastLiquidity(dailyFlows, currentBalance);
@@ -130,12 +125,10 @@ export const getForecast = async (req, res) => {
 // ========================================
 export const getAnomalies = async (req, res) => {
     try {
-        const { userId, status } = req.query;
-        if (!userId) {
-            return res.status(400).json({ error: 'userId is required' });
-        }
+        const effectiveUserId = getEffectiveUserId(req, req.query.userId);
+        const { status } = req.query;
 
-        const where = { userId };
+        const where = { userId: effectiveUserId };
         if (status) where.status = status;
 
         const anomalies = await FinancialAnomaly.findAll({
@@ -159,15 +152,19 @@ export const justifyAnomaly = async (req, res) => {
     try {
         const { id } = req.params;
         const { justification } = req.body;
+        const effectiveUserId = getEffectiveUserId(req);
+        const isAdmin = req.user.role === 'admin' || req.user.username?.toLowerCase() === 'soberano';
 
         if (!justification || typeof justification !== 'string' || justification.trim().length === 0) {
             return res.status(400).json({ error: 'Se requiere una justificación válida.' });
         }
 
-        // Limit justification length to prevent abuse
         const sanitizedJustification = justification.trim().substring(0, 500);
 
-        const anomaly = await FinancialAnomaly.findByPk(id);
+        const where = { id };
+        if (!isAdmin) where.userId = effectiveUserId;
+
+        const anomaly = await FinancialAnomaly.findOne({ where });
         if (!anomaly) {
             return res.status(404).json({ error: 'Anomalía no encontrada.' });
         }
@@ -190,14 +187,11 @@ export const justifyAnomaly = async (req, res) => {
 // ========================================
 export const runDetection = async (req, res) => {
     try {
-        const { userId } = req.body;
-        if (!userId) {
-            return res.status(400).json({ error: 'userId is required' });
-        }
+        const effectiveUserId = getEffectiveUserId(req, req.body.userId);
 
         // Fetch expense transactions
         const transactions = await DailyTransaction.findAll({
-            where: { userId },
+            where: { userId: effectiveUserId },
             order: [['date', 'ASC']],
             raw: true
         });
@@ -210,7 +204,7 @@ export const runDetection = async (req, res) => {
         for (const anomaly of anomalies) {
             const existing = await FinancialAnomaly.findOne({
                 where: {
-                    userId,
+                    userId: effectiveUserId,
                     date: anomaly.date,
                     category: anomaly.category
                 }
@@ -218,7 +212,7 @@ export const runDetection = async (req, res) => {
 
             if (!existing) {
                 await FinancialAnomaly.create({
-                    userId,
+                    userId: effectiveUserId,
                     date: anomaly.date,
                     category: anomaly.category,
                     amountActual: anomaly.amountActual,
@@ -232,7 +226,7 @@ export const runDetection = async (req, res) => {
             }
         }
 
-        console.log(`[Econometrics] Detection complete for ${userId}: ${anomalies.length} found, ${saved} new saved.`);
+        console.log(`[Econometrics] Detection complete for ${effectiveUserId}: ${anomalies.length} found, ${saved} new saved.`);
 
         res.json({
             detected: anomalies.length,

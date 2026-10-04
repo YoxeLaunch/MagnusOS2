@@ -137,24 +137,36 @@ async function fetchBatch(tickers, targetMap) {
 }
 
 /**
- * Sincroniza las tasas de cambio principales en la base de datos si cambiaron
+ * Sincroniza las tasas de cambio principales en la base de datos con deduplicación.
+ * Solo debe ser invocado por jobs programados o comandos POST explícitos, NUNCA por consultas GET.
  */
-async function syncDatabaseRates(usdDop, eurUsd) {
+export async function syncDatabaseRates(usdDop, eurUsd) {
   try {
     if (!usdDop || !eurUsd) return;
     const eurDop = r2(usdDop * eurUsd);
     const today = new Date().toISOString().split('T')[0];
 
-    // Actualiza o inserta en CurrencyHistory para que toda la app esté en sincronía
-    await CurrencyHistory.create({ date: today, code: 'USD', rate: r2(usdDop) });
-    await CurrencyHistory.create({ date: today, code: 'EUR', rate: eurDop });
+    // Actualiza o inserta en CurrencyHistory con deduplicación por fecha y código
+    const existingUsd = await CurrencyHistory.findOne({ where: { date: today, code: 'USD' } });
+    if (existingUsd) {
+      await existingUsd.update({ rate: r2(usdDop) });
+    } else {
+      await CurrencyHistory.create({ date: today, code: 'USD', rate: r2(usdDop) });
+    }
+
+    const existingEur = await CurrencyHistory.findOne({ where: { date: today, code: 'EUR' } });
+    if (existingEur) {
+      await existingEur.update({ rate: eurDop });
+    } else {
+      await CurrencyHistory.create({ date: today, code: 'EUR', rate: eurDop });
+    }
   } catch (err) {
-    // Si la DB falla temporalmente, no bloquea el feed de mercado
+    console.error('[MarketController] syncDatabaseRates error:', err.message);
   }
 }
 
 /**
- * Orquestador principal de mercado
+ * Orquestador principal de mercado (PURAMENTE DE LECTURA - Query != Command)
  */
 export async function getMarketIntelData() {
   const now = Date.now();
@@ -202,8 +214,8 @@ export async function getMarketIntelData() {
   const eurUsd = quotes.find(q => q.symbol === 'EURUSD=X')?.price || 1.085;
   const eurDop = r2(usdDop * eurUsd);
 
-  // Auto-sync de tasas a la DB en segundo plano
-  syncDatabaseRates(usdDop, eurUsd).catch(() => {});
+  // NOTA ARQUITECTÓNICA: Se eliminó la escritura en base de datos de esta consulta GET
+  // Para persistir tasas, use el job programado o POST /api/markets/sync-rates.
 
   const responsePayload = {
     status: 'ONLINE',
@@ -464,6 +476,18 @@ export const refreshFxRates = async (req, res) => {
   } catch (error) {
     console.error('[FX_API] Error en refresco forzado:', error.message);
     return res.status(500).json({ success: false, error: 'Fallo al forzar refresco de proveedores' });
+  }
+};
+
+export const handleSyncRates = async (req, res) => {
+  try {
+    const data = await getMarketIntelData();
+    const usdDop = data.rates?.usd_dop;
+    const eurUsd = data.rates?.eur_usd;
+    await syncDatabaseRates(usdDop, eurUsd);
+    return res.json({ success: true, rates: { usd_dop: usdDop, eur_usd: eurUsd } });
+  } catch (error) {
+    return res.status(500).json({ error: error.message });
   }
 };
 
