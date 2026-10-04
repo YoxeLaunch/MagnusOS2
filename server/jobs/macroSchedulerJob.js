@@ -8,6 +8,7 @@
 
 import cron from 'node-cron';
 import { macroService } from '../services/macro/macroService.js';
+import { jobObservability } from '../services/jobObservabilityService.js';
 
 export const scheduleMacroJob = () => {
     const isEnabled = process.env.MACRO_SCHEDULER_ENABLED !== 'false';
@@ -22,7 +23,14 @@ export const scheduleMacroJob = () => {
     cron.schedule(standardCron, async () => {
         console.log(`[MACRO_SCHEDULER] Ejecutando sincronización inteligente BCRD (${new Date().toLocaleTimeString('es-DO', { timeZone: 'America/Santo_Domingo' })})...`);
         try {
-            await macroService.getMacroSummary({ forceRefresh: true });
+            await jobObservability.executeMonitoredJob('macro_indicators_sync', async () => {
+                const summary = await macroService.getMacroSummary({ forceRefresh: true });
+                return {
+                    summary: 'BCRD macro indicators synchronized',
+                    itemsProcessed: summary?.indicators?.length || 0,
+                    failuresCount: 0
+                };
+            });
         } catch (error) {
             console.error('[MACRO_SCHEDULER] Error en sincronización habitual:', error.message);
         }

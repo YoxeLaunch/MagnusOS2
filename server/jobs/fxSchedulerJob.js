@@ -9,6 +9,7 @@
 
 import cron from 'node-cron';
 import { fxService } from '../services/fx/fxService.js';
+import { jobObservability } from '../services/jobObservabilityService.js';
 
 export const scheduleFxJob = () => {
     // Configuración desde variables de entorno
@@ -23,10 +24,18 @@ export const scheduleFxJob = () => {
     cron.schedule(hourlyCron, async () => {
         console.log(`[FX_SCHEDULER] Disparando actualización programada USD/DOP y EUR/DOP en horario bancario RD (${new Date().toLocaleTimeString('es-DO', { timeZone: 'America/Santo_Domingo' })})...`);
         try {
-            await Promise.allSettled([
-                fxService.getRates('USD/DOP', { forceRefresh: true }),
-                fxService.getRates('EUR/DOP', { forceRefresh: true })
-            ]);
+            await jobObservability.executeMonitoredJob('fx_rates_sync', async () => {
+                const results = await Promise.allSettled([
+                    fxService.getRates('USD/DOP', { forceRefresh: true }),
+                    fxService.getRates('EUR/DOP', { forceRefresh: true })
+                ]);
+                const failures = results.filter(r => r.status === 'rejected').length;
+                return {
+                    summary: 'Hourly FX rates sync for USD/DOP and EUR/DOP',
+                    itemsProcessed: results.length,
+                    failuresCount: failures
+                };
+            });
         } catch (error) {
             console.error('[FX_SCHEDULER] Error en refresco programado horario:', error.message);
         }
