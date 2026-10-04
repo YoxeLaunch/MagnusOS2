@@ -16,6 +16,7 @@ import { scheduleFxJob } from './jobs/fxSchedulerJob.js';
 import { scheduleMacroJob } from './jobs/macroSchedulerJob.js';
 import { scheduleEnergyJob } from './jobs/energySchedulerJob.js';
 import { eventEngine } from './services/macro/eventEngine.js';
+import { jobObservability } from './services/jobObservabilityService.js';
 import { fileURLToPath } from 'url';
 import path from 'path';
 
@@ -94,6 +95,9 @@ const startServer = async () => {
         console.log('>>> [OPTIMIZED] Starting Critical DB Init...');
         // Parallelize critical database initialization
         await Promise.all([initDb(), initSystemDb(), initAuditorDb()]);
+
+        // Recover any jobs orphaned by unexpected shutdowns / crashes
+        await jobObservability.recoverCrashedJobsOnStartup();
 
         // Start Server immediately after DBs are ready
         server.listen(PORT, '0.0.0.0', () => {

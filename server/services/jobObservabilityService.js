@@ -11,6 +11,7 @@
  */
 
 import crypto from 'node:crypto';
+import os from 'node:os';
 import { sequelize } from '../models/index.js';
 
 const SENSITIVE_PATTERNS = [
@@ -68,6 +69,8 @@ export class JobObservabilityService {
         // In-memory telemetry cache for quick health check reads
         this.telemetryCache = new Map();
         this.tableExists = null;
+        this.leasesTableExists = null;
+        this.instanceId = `${process.env.INSTANCE_ID || os.hostname()}:${process.pid}`;
     }
 
     async #checkTableExists() {
@@ -90,6 +93,74 @@ export class JobObservabilityService {
         return this.tableExists;
     }
 
+    async #checkLeasesTableExists() {
+        if (this.leasesTableExists !== null) return this.leasesTableExists;
+        try {
+            if (this.sequelize.getDialect() === 'postgres') {
+                const [[res]] = await this.sequelize.query(
+                    "SELECT to_regclass('public.job_leases') AS reg;"
+                );
+                this.leasesTableExists = Boolean(res?.reg);
+            } else {
+                this.leasesTableExists = false;
+            }
+        } catch (_) {
+            this.leasesTableExists = false;
+        }
+        return this.leasesTableExists;
+    }
+
+    async #acquireDistributedLease(jobName, executionId, timeoutMs) {
+        if (!(await this.#checkLeasesTableExists())) {
+            return true; // Fallback to local in-memory lock
+        }
+
+        const timeoutSeconds = Math.max(1, Math.ceil(timeoutMs / 1000));
+        const lockedBy = `${this.instanceId}:${executionId.slice(0, 8)}`;
+
+        try {
+            // Atomic lease acquisition or takeover of expired lease
+            const [result] = await this.sequelize.query(`
+                INSERT INTO public.job_leases (job_name, locked_by, locked_at, lease_expires_at, execution_id)
+                VALUES (:jobName, :lockedBy, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP + (:timeoutSeconds || ' seconds')::INTERVAL, :executionId)
+                ON CONFLICT (job_name) DO UPDATE
+                SET
+                    locked_by = EXCLUDED.locked_by,
+                    locked_at = CURRENT_TIMESTAMP,
+                    lease_expires_at = EXCLUDED.lease_expires_at,
+                    execution_id = EXCLUDED.execution_id
+                WHERE public.job_leases.lease_expires_at < CURRENT_TIMESTAMP
+                RETURNING job_name;
+            `, {
+                replacements: {
+                    jobName,
+                    lockedBy,
+                    timeoutSeconds: String(timeoutSeconds),
+                    executionId
+                }
+            });
+
+            return Array.isArray(result) && result.length > 0;
+        } catch (err) {
+            console.error(`[JOB_OBSERVABILITY] Failed to acquire distributed lease for ${jobName}:`, err.message);
+            return false;
+        }
+    }
+
+    async #releaseDistributedLease(jobName, executionId) {
+        if (!(await this.#checkLeasesTableExists())) return;
+        try {
+            await this.sequelize.query(`
+                DELETE FROM public.job_leases
+                WHERE job_name = :jobName AND execution_id = :executionId;
+            `, {
+                replacements: { jobName, executionId }
+            });
+        } catch (err) {
+            console.error(`[JOB_OBSERVABILITY] Failed to release distributed lease for ${jobName}:`, err.message);
+        }
+    }
+
     /**
      * Executes a job with automatic lifecycle telemetry, concurrency guard, and sanitized reporting.
      * @param {string} jobName
@@ -103,7 +174,7 @@ export class JobObservabilityService {
         const now = Date.now();
         const executionId = crypto.randomUUID();
 
-        // 1. Concurrency Check
+        // 1. In-memory Local Concurrency Check
         const existingLock = this.activeLocks.get(jobName);
         if (existingLock) {
             const elapsed = now - existingLock.startedAt;
@@ -122,6 +193,19 @@ export class JobObservabilityService {
                 await this.#recordTimeout(jobName, existingLock.executionId, elapsed);
                 this.activeLocks.delete(jobName);
             }
+        }
+
+        // 2. Distributed Database Lease Check
+        const leaseAcquired = await this.#acquireDistributedLease(jobName, executionId, timeoutMs);
+        if (!leaseAcquired) {
+            await this.#recordSkipped(jobName, executionId, 'Skipped due to concurrent execution in progress (distributed lease held)');
+            return {
+                executionId,
+                jobName,
+                status: 'skipped',
+                reason: 'CONCURRENT_EXECUTION_IN_PROGRESS',
+                durationMs: 0
+            };
         }
 
         // Acquire lock
@@ -178,6 +262,7 @@ export class JobObservabilityService {
 
         } finally {
             this.activeLocks.delete(jobName);
+            await this.#releaseDistributedLease(jobName, executionId);
         }
     }
 
@@ -424,6 +509,66 @@ export class JobObservabilityService {
         } catch (err) {
             return { success: false, error: err.message };
         }
+    }
+
+    /**
+     * Startup crash recovery: Detects and marks orphaned 'running' jobs as failed
+     * and clears expired/orphaned distributed leases.
+     */
+    async recoverCrashedJobsOnStartup() {
+        const hasTable = await this.#checkTableExists();
+        if (!hasTable) return { recoveredCount: 0, clearedLeasesCount: 0 };
+
+        let recoveredCount = 0;
+        let clearedLeasesCount = 0;
+
+        try {
+            if (this.sequelize.getDialect() === 'postgres') {
+                const [updateResult] = await this.sequelize.query(`
+                    UPDATE public.job_executions
+                    SET
+                        status = 'failed',
+                        finished_at = CURRENT_TIMESTAMP,
+                        duration_ms = GREATEST(0, ROUND(EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - started_at)) * 1000)),
+                        summary = 'Execution abandoned due to abnormal process termination / crash',
+                        error_sanitized = 'Process crashed or restarted while job was in running state'
+                    WHERE status = 'running'
+                    RETURNING execution_id;
+                `);
+                recoveredCount = Array.isArray(updateResult) ? updateResult.length : (updateResult?.rowCount || 0);
+
+                if (await this.#checkLeasesTableExists()) {
+                    const [deleteResult] = await this.sequelize.query(`
+                        DELETE FROM public.job_leases
+                        WHERE lease_expires_at < CURRENT_TIMESTAMP
+                        RETURNING job_name;
+                    `);
+                    clearedLeasesCount = Array.isArray(deleteResult) ? deleteResult.length : (deleteResult?.rowCount || 0);
+                }
+            } else {
+                const [updateResult] = await this.sequelize.query(`
+                    UPDATE job_executions
+                    SET
+                        status = 'failed',
+                        finished_at = CURRENT_TIMESTAMP,
+                        duration_ms = 0,
+                        summary = 'Execution abandoned due to abnormal process termination / crash',
+                        error_sanitized = 'Process crashed or restarted while job was in running state'
+                    WHERE status = 'running';
+                `);
+                recoveredCount = updateResult?.changes || 0;
+            }
+
+            await this.purgeOldExecutions({ retentionDays: 30, maxPerJob: 100 });
+
+            if (recoveredCount > 0) {
+                console.log(`[JOB_OBSERVABILITY] Recovered ${recoveredCount} orphaned running job(s) from previous crash`);
+            }
+        } catch (err) {
+            console.error('[JOB_OBSERVABILITY] Error during startup recovery:', err.message);
+        }
+
+        return { recoveredCount, clearedLeasesCount };
     }
 }
 

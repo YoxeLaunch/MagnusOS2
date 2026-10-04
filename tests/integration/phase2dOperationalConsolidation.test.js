@@ -10,6 +10,7 @@
 
 import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert/strict';
+import crypto from 'node:crypto';
 import { Sequelize, Op } from 'sequelize';
 import {
     sequelize,
@@ -287,6 +288,109 @@ describe('Phase II-D Operational Consolidation & Resilience', () => {
             assert.ok(telemetry.monitoredJobsCount >= 1);
             assert.ok(telemetry.jobs['telemetry_test_job']);
             assert.equal(telemetry.jobs['telemetry_test_job'].status, 'success');
+        });
+
+        it('previene ejecuciones concurrentes entre instancias distintas usando public.job_leases', async () => {
+            const instance1 = new JobObservabilityService(sequelize);
+            const instance2 = new JobObservabilityService(sequelize);
+            instance1.instanceId = 'node_instance_1:1001';
+            instance2.instanceId = 'node_instance_2:1002';
+
+            let resolveFirst;
+            const firstPromise = new Promise(res => resolveFirst = res);
+
+            // Instance 1 starts job
+            const job1 = instance1.executeMonitoredJob('distributed_test_job', async () => {
+                await firstPromise;
+                return { summary: 'Instance 1 done' };
+            });
+
+            // Allow instance 1 to acquire lease in DB
+            await new Promise(r => setTimeout(r, 50));
+
+            // Instance 2 attempts to run the exact same job concurrently
+            const job2 = await instance2.executeMonitoredJob('distributed_test_job', async () => {
+                return { summary: 'Instance 2 done' };
+            });
+
+            assert.equal(job2.status, 'skipped');
+            assert.equal(job2.reason, 'CONCURRENT_EXECUTION_IN_PROGRESS');
+
+            resolveFirst();
+            const res1 = await job1;
+            assert.equal(res1.status, 'success');
+
+            // Verify distributed lease was cleanly released in DB
+            const [leases] = await sequelize.query(`
+                SELECT * FROM public.job_leases WHERE job_name = 'distributed_test_job';
+            `);
+            assert.equal(leases.length, 0, 'Lease debe liberarse en finally');
+        });
+
+        it('recupera jobs huerfanos en estado running tras un crash / reinicio no controlado', async () => {
+            const obs = new JobObservabilityService(sequelize);
+            const orphanId = crypto.randomUUID();
+
+            // Simulate orphaned running execution left by a hard crash
+            await sequelize.query(`
+                INSERT INTO public.job_executions (execution_id, job_name, status, started_at, summary)
+                VALUES (:id, 'crashed_worker_job', 'running', CURRENT_TIMESTAMP - INTERVAL '15 minutes', 'Running prior to power cut');
+            `, { replacements: { id: orphanId } });
+
+            // Simulate expired lease left by the crashed process
+            await sequelize.query(`
+                INSERT INTO public.job_leases (job_name, locked_by, locked_at, lease_expires_at, execution_id)
+                VALUES ('crashed_worker_job', 'crashed_host:999', CURRENT_TIMESTAMP - INTERVAL '15 minutes', CURRENT_TIMESTAMP - INTERVAL '5 minutes', :id)
+                ON CONFLICT (job_name) DO UPDATE
+                SET lease_expires_at = CURRENT_TIMESTAMP - INTERVAL '5 minutes';
+            `, { replacements: { id: orphanId } });
+
+            const recoveryReport = await obs.recoverCrashedJobsOnStartup();
+            assert.ok(recoveryReport.recoveredCount >= 1, 'Debe marcar jobs huerfanos');
+
+            // Verify the orphaned job is now marked failed with proper diagnostics
+            const [[recovered]] = await sequelize.query(`
+                SELECT status, summary, error_sanitized FROM public.job_executions WHERE execution_id = :id;
+            `, { replacements: { id: orphanId } });
+
+            assert.equal(recovered.status, 'failed');
+            assert.ok(recovered.summary.includes('abandoned due to abnormal process termination'));
+            assert.ok(recovered.error_sanitized.includes('Process crashed'));
+
+            // Verify expired lease was purged
+            const [leases] = await sequelize.query(`
+                SELECT * FROM public.job_leases WHERE job_name = 'crashed_worker_job';
+            `);
+            assert.equal(leases.length, 0, 'Lease expirado debe ser eliminado');
+        });
+
+        it('purga ejecuciones antiguas o excedentes segun politica de retencion', async () => {
+            const obs = new JobObservabilityService(sequelize);
+            const purgeJobName = 'retention_test_job';
+
+            // Insert 10 executions
+            for (let i = 0; i < 10; i++) {
+                await sequelize.query(`
+                    INSERT INTO public.job_executions (execution_id, job_name, status, started_at, finished_at, duration_ms, summary)
+                    VALUES (:id, :jobName, 'success', CURRENT_TIMESTAMP - (:minutes || ' minutes')::INTERVAL, CURRENT_TIMESTAMP, 100, 'Batch run');
+                `, {
+                    replacements: {
+                        id: crypto.randomUUID(),
+                        jobName: purgeJobName,
+                        minutes: String((10 - i) * 10)
+                    }
+                });
+            }
+
+            // Purge with maxPerJob = 3
+            const purgeResult = await obs.purgeOldExecutions({ retentionDays: 30, maxPerJob: 3 });
+            assert.equal(purgeResult.success, true);
+
+            const [remaining] = await sequelize.query(`
+                SELECT id FROM public.job_executions WHERE job_name = :jobName;
+            `, { replacements: { jobName: purgeJobName } });
+
+            assert.equal(remaining.length, 3, 'Debe mantener unicamente las 3 ejecuciones mas recientes');
         });
     });
 
