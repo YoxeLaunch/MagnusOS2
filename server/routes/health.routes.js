@@ -1,13 +1,20 @@
 import { Router } from 'express';
-import { getHealth, getDeepHealth } from '../controllers/healthController.js';
+import { getLiveness, getReadiness, getDeepHealth } from '../controllers/healthController.js';
 import { requireAuthenticated } from '../middleware/auth.js';
 
 const router = Router();
 
-// Fast healthcheck for Docker and basic monitoring
-router.get('/health', getHealth);
+// 1. Liveness Probes
+router.get('/health', getLiveness);
+router.get('/health/live', getLiveness);
+router.get('/api/health/liveness', getLiveness);
 
-// Deep healthcheck (requires authentication to protect memory/service topology)
+// 2. Readiness Probes
+router.get('/health/ready', getReadiness);
+router.get('/api/health/readiness', getReadiness);
+
+// 3. Deep Health (Protected)
 router.get('/health/deep', requireAuthenticated, getDeepHealth);
+router.get('/api/health/deep', requireAuthenticated, getDeepHealth);
 
 export default router;
