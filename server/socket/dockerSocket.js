@@ -1,11 +1,25 @@
 import { listContainers, getContainerStats, getDockerInstance } from '../services/dockerService.js';
 import { getGlobalStats } from '../services/systemService.js';
+import { socketAuthMiddleware } from './chatHandler.js';
 
 export const initDockerSocket = (io) => {
     const dockerNamespace = io.of('/docker');
 
+    // 1. JWT Authentication on Handshake
+    dockerNamespace.use(socketAuthMiddleware);
+
+    // 2. Strict Admin Role Authorization
+    dockerNamespace.use((socket, next) => {
+        const isAdmin = socket.user?.role === 'admin' || socket.user?.username?.toLowerCase() === 'soberano';
+        if (!isAdmin) {
+            console.warn(`[SECURITY:DOCKER] Denied /docker connection to non-admin: ${socket.user?.username}`);
+            return next(new Error('Acceso denegado: Solo administradores tienen acceso al namespace /docker'));
+        }
+        next();
+    });
+
     dockerNamespace.on('connection', (socket) => {
-        console.log('[DockerSocket] Client connected:', socket.id);
+        console.log('[DockerSocket] Admin client connected:', socket.user?.username, socket.id);
         let statusInterval = null;
         let systemInterval = null;
         let stream = null;
@@ -34,16 +48,13 @@ export const initDockerSocket = (io) => {
 
         // --- Stats Streaming ---
         socket.on('subscribe-stats', async (containerId) => {
-            // Clear existing interval if any
             if (statusInterval) clearInterval(statusInterval);
 
             console.log(`[DockerSocket] Subscribing to stats for ${containerId}`);
 
-            // Initial emit
             const stats = await getContainerStats(containerId);
             socket.emit('container-stats', { id: containerId, stats });
 
-            // Poll every 2 seconds
             statusInterval = setInterval(async () => {
                 const liveStats = await getContainerStats(containerId);
                 socket.emit('container-stats', { id: containerId, stats: liveStats });
@@ -55,8 +66,15 @@ export const initDockerSocket = (io) => {
             statusInterval = null;
         });
 
-        // --- Terminal Streaming ---
+        // --- Terminal Streaming (DENY BY DEFAULT) ---
         socket.on('terminal-init', async ({ containerId }) => {
+            // DENY BY DEFAULT unless explicitly enabled via environment variable
+            if (process.env.ENABLE_DOCKER_TERMINAL !== 'true') {
+                console.warn(`[SECURITY:DOCKER] Terminal exec blocked for container ${containerId}. ENABLE_DOCKER_TERMINAL is not enabled.`);
+                socket.emit('terminal-error', 'Terminal Docker deshabilitada por defecto por política de seguridad');
+                return;
+            }
+
             const docker = getDockerInstance();
             if (!docker) return;
 
