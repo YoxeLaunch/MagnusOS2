@@ -22,8 +22,11 @@
     "mcp": "node server/mcp-server.js",
     "db:migrate": "node scripts/migrate.js up",
     "db:status": "node scripts/migrate.js status",
+    "db:migrate:status": "node scripts/migrate.js status",
     "db:baseline": "node scripts/migrate.js baseline 000_base_schema.sql --confirm-baseline",
-    "db:drift": "node scripts/schema-drift.js"
+    "db:drift": "node scripts/schema-drift.js",
+    "db:reconcile": "node scripts/reconcile-ledger.js",
+    "db:restore:drill": "node scripts/restore-drill.js"
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
