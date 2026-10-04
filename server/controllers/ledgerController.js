@@ -4,12 +4,14 @@ import {
     Account,
     Category,
     Payee,
+    DailyTransaction,
     toMinorUnits,
     fromMinorUnits,
     sequelize
 } from '../models/index.js';
 import { getEffectiveUserId } from '../middleware/auth.js';
 import { Op } from 'sequelize';
+import { LedgerReadService } from '../services/ledgerReadService.js';
 
 // ========================================
 // GET /api/finanza/ledger
@@ -492,4 +494,76 @@ const updateAccountBalances = async (lines, accountMap, transaction) => {
         }
     }
 };
+
+// ========================================
+// GET /api/finanza/cashflow
+// Centralized Cash Flow summary (Pilot Module Phase II)
+// Supports diagnostic source switch: ?source=ledger | ?source=legacy | ?source=compare
+// ========================================
+export const getCashFlowSummary = async (req, res) => {
+    try {
+        const effectiveUserId = getEffectiveUserId(req, req.query.userId);
+        const { from, to, currency = 'DOP', accountId, source = 'ledger' } = req.query;
+
+        // Diagnostic Comparison Mode
+        if (source === 'compare') {
+            const comparison = await LedgerReadService.compareLegacyVsLedger({
+                userId: effectiveUserId,
+                startDate: from,
+                endDate: to,
+                currency
+            });
+            return res.json(comparison);
+        }
+
+        // Diagnostic Legacy Mode
+        if (source === 'legacy') {
+            const where = { userId: effectiveUserId };
+            if (from || to) {
+                where.date = {};
+                if (from) where.date[Op.gte] = from;
+                if (to) where.date[Op.lte] = to;
+            }
+            const txs = await DailyTransaction.findAll({ where, raw: true });
+            let income = 0;
+            let expense = 0;
+            let invested = 0;
+            txs.forEach(t => {
+                const amt = Number(t.amount) || 0;
+                if (t.type === 'income') income += amt;
+                else if (t.type === 'expense') expense += amt;
+                else if (t.type === 'investment') invested += amt;
+            });
+            return res.json({
+                source: 'legacy',
+                currency,
+                period: { startDate: from || null, endDate: to || null },
+                totalIncome: Number(income.toFixed(2)),
+                totalExpense: Number(expense.toFixed(2)),
+                totalInvested: Number(invested.toFixed(2)),
+                netCashFlow: Number((income - expense - invested).toFixed(2)),
+                transactionCount: txs.length
+            });
+        }
+
+        // Default & Primary: LEDGER = SOURCE OF TRUTH
+        const accountIds = accountId ? [accountId] : undefined;
+        const result = await LedgerReadService.getCashFlow({
+            userId: effectiveUserId,
+            startDate: from,
+            endDate: to,
+            currency,
+            accountIds
+        });
+
+        res.json({
+            source: 'ledger',
+            ...result
+        });
+    } catch (error) {
+        console.error('[LedgerController] Error getting cashflow summary:', error);
+        res.status(500).json({ error: error.message });
+    }
+};
+
 

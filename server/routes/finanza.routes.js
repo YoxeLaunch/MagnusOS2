@@ -34,6 +34,7 @@ router.post('/finanza/accounts/reorder', accountsController.reorderAccounts);
 // ========================================
 router.get('/finanza/ledger/reconciliation', ledgerController.reconcileBalances);
 router.get('/finanza/ledger', ledgerController.getLedgerTransactions);
+router.get('/finanza/cashflow', ledgerController.getCashFlowSummary);
 router.post('/finanza/ledger/transactions', ledgerController.createTransaction);
 router.patch('/finanza/ledger/transactions/:id', ledgerController.updateTransaction);
 router.delete('/finanza/ledger/transactions/:id', ledgerController.deleteTransaction);
