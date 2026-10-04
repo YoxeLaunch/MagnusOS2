@@ -8,6 +8,7 @@ import { initAuditorDb } from './models/auditor.js';
 import { initSocket } from './socket/chatHandler.js';
 import { initDockerSocket } from './socket/dockerSocket.js';
 import routes from './routes/index.js';
+import healthRoutes from './routes/health.routes.js';
 import { initSystemDb } from './models/system/index.js';
 import { securityHeaders, apiLimiter } from './middleware/security.js';
 import { scheduleCurrencyRateJob, fetchAndStoreRates } from './jobs/currencyRateJob.js';
@@ -64,10 +65,9 @@ const io = new Server(server, {
 app.use(apiLimiter);
 app.use(express.json({ limit: '1mb' })); // Rutas de importación usan su propio límite extendido
 
-// Health Check Endpoint para Docker
-app.get('/api/health', (req, res) => {
-    res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
-});
+// Health Check Probes (Liveness & Readiness public, Deep protected)
+app.use('/health', healthRoutes);
+app.use('/api/health', healthRoutes);
 
 // Logger & Socket Injection
 app.use((req, res, next) => {

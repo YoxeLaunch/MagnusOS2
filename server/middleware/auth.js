@@ -12,7 +12,8 @@ const JWT_SECRET = process.env.JWT_SECRET;
  * Modo STRICT: rechaza requests sin token válido (401).
  */
 export const verifyJWT = (req, res, next) => {
-    if (!JWT_SECRET) {
+    const secret = process.env.JWT_SECRET;
+    if (!secret) {
         console.error('[AUTH] JWT_SECRET no está configurado. Verificar .env');
         return res.status(500).json({ error: 'Configuración de seguridad incorrecta' });
     }
@@ -27,7 +28,7 @@ export const verifyJWT = (req, res, next) => {
     }
 
     try {
-        const decoded = jwt.verify(token, JWT_SECRET);
+        const decoded = jwt.verify(token, secret);
         req.user = decoded; // { username, role, iat, exp }
         next();
     } catch (err) {
@@ -49,9 +50,10 @@ export const optionalJWT = (req, res, next) => {
         ? authHeader.slice(7)
         : null;
 
-    if (token && JWT_SECRET) {
+    const secret = process.env.JWT_SECRET;
+    if (token && secret) {
         try {
-            req.user = jwt.verify(token, JWT_SECRET);
+            req.user = jwt.verify(token, secret);
         } catch {
             // Token inválido o expirado — continuamos sin usuario autenticado
             req.user = null;

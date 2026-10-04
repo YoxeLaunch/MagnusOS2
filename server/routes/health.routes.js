@@ -1,20 +1,16 @@
 import { Router } from 'express';
 import { getLiveness, getReadiness, getDeepHealth } from '../controllers/healthController.js';
-import { requireAuthenticated } from '../middleware/auth.js';
+import { verifyJWT, requireAdmin } from '../middleware/auth.js';
 
 const router = Router();
 
-// 1. Liveness Probes
-router.get('/health', getLiveness);
-router.get('/health/live', getLiveness);
-router.get('/api/health/liveness', getLiveness);
+// 1. Liveness Probes (Public, fast process heartbeat)
+router.get(['/', '/live', '/liveness', '/health', '/health/live', '/api/health', '/api/health/liveness'], getLiveness);
 
-// 2. Readiness Probes
-router.get('/health/ready', getReadiness);
-router.get('/api/health/readiness', getReadiness);
+// 2. Readiness Probes (Public, checks DB, migrations, checksums, drift)
+router.get(['/ready', '/readiness', '/health/ready', '/api/health/readiness'], getReadiness);
 
-// 3. Deep Health (Protected)
-router.get('/health/deep', requireAuthenticated, getDeepHealth);
-router.get('/api/health/deep', requireAuthenticated, getDeepHealth);
+// 3. Deep Health (Protected by [verifyJWT, requireAdmin], returns sanitized telemetry)
+router.get(['/deep', '/health/deep', '/api/health/deep'], [verifyJWT, requireAdmin], getDeepHealth);
 
 export default router;

@@ -21,12 +21,13 @@ export const securityHeaders = helmet({
     }
 });
 
-// 2. Rate Limiting global (ajustado: 300 req / 15 min por IP)
+// 2. Rate Limiting global (ajustado: 300 req / 15 min por IP, skips health probes)
 export const apiLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
     max: 300,
     standardHeaders: true,
     legacyHeaders: false,
+    skip: (req) => req.path.includes('/health'),
     message: {
         error: "Too many requests",
         message: "Has excedido el límite de peticiones. Por favor intenta más tarde."
