@@ -1,4 +1,4 @@
-import { LedgerTransaction, TransactionLine, Account, Category, Payee, toMinorUnits, toMinorUnitsBigInt, sequelize } from '../models/index.js';
+import { LedgerTransaction, TransactionLine, Account, Category, Payee, toMinorUnitsBigInt, minorToDecimalString, sequelize } from '../models/index.js';
 import crypto from 'crypto';
 import { Op } from 'sequelize';
 import { getEffectiveUserId } from '../middleware/auth.js';
@@ -23,13 +23,13 @@ const generateTransactionHash = (date, amount, description, accountId) => {
  * - "(500.00)" → -500.00 (credit card style)
  * - "-500.00" → -500.00
  */
-const parseAmount = (value) => {
-    if (!value || value === '') return 0;
+const parseAmountMinor = (value) => {
+    if (!value || value === '') return 0n;
     const str = String(value).trim();
 
     // Handle parentheses as negative (accounting style)
     if (str.startsWith('(') && str.endsWith(')')) {
-        return -parseAmount(str.slice(1, -1));
+        return -parseAmountMinor(str.slice(1, -1));
     }
 
     // Remove currency symbols and thousand separators
@@ -37,7 +37,7 @@ const parseAmount = (value) => {
         .replace(/[$€RD\s]/g, '')
         .replace(/,(?=\d{3})/g, ''); // Remove thousand separators
 
-    return parseFloat(cleaned) || 0;
+    return toMinorUnitsBigInt(cleaned);
 };
 
 /**
@@ -153,15 +153,15 @@ export const previewImport = async (req, res) => {
 
         // Transform rows to preview format
         const preview = rows.slice(0, 20).map(row => {
-            let amount = 0;
+            let amountMinor = 0n;
 
             // Handle single amount column or debit/credit split
             if (columns.amount !== undefined) {
-                amount = parseAmount(row[headers[columns.amount]]);
+                amountMinor = parseAmountMinor(row[headers[columns.amount]]);
             } else if (columns.debit !== undefined || columns.credit !== undefined) {
-                const debit = columns.debit !== undefined ? parseAmount(row[headers[columns.debit]]) : 0;
-                const credit = columns.credit !== undefined ? parseAmount(row[headers[columns.credit]]) : 0;
-                amount = credit - debit; // Credits are income, debits are expenses
+                const debit = columns.debit !== undefined ? parseAmountMinor(row[headers[columns.debit]]) : 0n;
+                const credit = columns.credit !== undefined ? parseAmountMinor(row[headers[columns.credit]]) : 0n;
+                amountMinor = credit - debit; // Credits are income, debits are expenses
             }
 
             const date = columns.date !== undefined ? parseDate(row[headers[columns.date]]) : null;
@@ -171,9 +171,10 @@ export const previewImport = async (req, res) => {
             return {
                 date,
                 description,
-                amount,
+                amount: minorToDecimalString(amountMinor),
+                amountMinor: amountMinor.toString(),
                 reference,
-                hash: date ? generateTransactionHash(date, amount, description, accountId) : null,
+                hash: date ? generateTransactionHash(date, minorToDecimalString(amountMinor), description, accountId) : null,
                 raw: row
             };
         });
@@ -232,7 +233,7 @@ export const importTransactions = async (req, res) => {
 
         // Get default fallback categories for income and expense
         const defaultExpenseCat = await Category.findOne({
-            where: { userId: effectiveUserId, type: 'expense' },
+            where: { userId: { [Op.in]: [effectiveUserId, 'system'] }, type: 'expense' },
             order: [
                 [sequelize.literal("CASE WHEN name ILIKE '%otro%' OR name ILIKE '%varios%' OR name ILIKE '%uncategorized%' THEN 0 ELSE 1 END"), 'ASC'],
                 ['createdAt', 'ASC']
@@ -241,7 +242,7 @@ export const importTransactions = async (req, res) => {
         });
 
         const defaultIncomeCat = await Category.findOne({
-            where: { userId: effectiveUserId, type: 'income' },
+            where: { userId: { [Op.in]: [effectiveUserId, 'system'] }, type: 'income' },
             order: [
                 [sequelize.literal("CASE WHEN name ILIKE '%otro%' OR name ILIKE '%varios%' OR name ILIKE '%uncategorized%' THEN 0 ELSE 1 END"), 'ASC'],
                 ['createdAt', 'ASC']
@@ -277,17 +278,17 @@ export const importTransactions = async (req, res) => {
 
             try {
                 // Parse amount
-                let amount = 0;
+                let amountMinor = 0n;
                 if (columns.amount !== undefined) {
-                    amount = parseAmount(row[headers[columns.amount]]);
+                    amountMinor = parseAmountMinor(row[headers[columns.amount]]);
                 } else if (columns.debit !== undefined || columns.credit !== undefined) {
-                    const debit = columns.debit !== undefined ? parseAmount(row[headers[columns.debit]]) : 0;
-                    const credit = columns.credit !== undefined ? parseAmount(row[headers[columns.credit]]) : 0;
-                    amount = credit - debit;
+                    const debit = columns.debit !== undefined ? parseAmountMinor(row[headers[columns.debit]]) : 0n;
+                    const credit = columns.credit !== undefined ? parseAmountMinor(row[headers[columns.credit]]) : 0n;
+                    amountMinor = credit - debit;
                 }
 
-                if (invertAmounts) amount = -amount;
-                if (amount === 0) continue; // Skip zero-amount rows
+                if (invertAmounts) amountMinor = -amountMinor;
+                if (amountMinor === 0n) continue; // Skip zero-amount rows
 
                 // Parse other fields
                 const date = columns.date !== undefined ? parseDate(row[headers[columns.date]]) : null;
@@ -299,7 +300,7 @@ export const importTransactions = async (req, res) => {
                 const description = columns.description !== undefined ? row[headers[columns.description]] : '';
 
                 // Generate hash for deduplication
-                const hash = generateTransactionHash(date, amount, description, accountId);
+                const hash = generateTransactionHash(date, minorToDecimalString(amountMinor), description, accountId);
 
                 if (skipDuplicates && existingHashes.has(hash)) {
                     results.skipped++;
@@ -307,8 +308,8 @@ export const importTransactions = async (req, res) => {
                 }
 
                 // Determine transaction type and minor units
-                const type = amount > 0 ? 'income' : 'expense';
-                const minorAmt = toMinorUnitsBigInt(Math.abs(amount));
+                const type = amountMinor > 0n ? 'income' : 'expense';
+                const minorAmt = amountMinor < 0n ? -amountMinor : amountMinor;
 
                 // Create transaction
                 const txn = await LedgerTransaction.create({
@@ -316,7 +317,7 @@ export const importTransactions = async (req, res) => {
                     date,
                     payeeName: description.substring(0, 255) || 'Importación',
                     memo: description.length > 255 ? description : null,
-                    status: 'completed',
+                    status: 'cleared',
                     type,
                     reference: `import:${hash}`
                 }, { transaction: t });

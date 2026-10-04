@@ -68,14 +68,19 @@ export const createAccount = async (req, res) => {
         // Get max sort order for user
         const maxOrder = await Account.max('sortOrder', { where: { userId: effectiveUserId } }) || 0;
 
+        let openingMinor = toMinorUnitsBigInt(openingBalance);
+        if ((type === 'credit_card' || type === 'loan') && openingMinor > 0n) {
+            openingMinor = -openingMinor;
+        }
+
         const account = await Account.create({
             userId: effectiveUserId,
             name: name.trim(),
             type,
             currency,
             institution,
-            openingBalanceMinor: toMinorUnits(openingBalance),
-            currentBalanceMinor: toMinorUnits(openingBalance), // Initial balance = opening
+            openingBalanceMinor: openingMinor.toString(),
+            currentBalanceMinor: openingMinor.toString(), // Liabilities use negative credit balances.
             notes,
             sortOrder: maxOrder + 1
         });
@@ -120,7 +125,11 @@ export const updateAccount = async (req, res) => {
                 });
             }
             const rawVal = updates.openingBalance !== undefined ? updates.openingBalance : updates.openingBalanceMinor;
-            const newOpeningMinor = toMinorUnitsBigInt(rawVal).toString();
+            let parsedOpeningMinor = toMinorUnitsBigInt(rawVal);
+            if ((account.type === 'credit_card' || account.type === 'loan') && parsedOpeningMinor > 0n) {
+                parsedOpeningMinor = -parsedOpeningMinor;
+            }
+            const newOpeningMinor = parsedOpeningMinor.toString();
             updates.openingBalanceMinor = newOpeningMinor;
             updates.currentBalanceMinor = newOpeningMinor;
             delete updates.openingBalance;
@@ -252,4 +261,3 @@ export const reorderAccounts = async (req, res) => {
         res.status(500).json({ error: error.message });
     }
 };
-

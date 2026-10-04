@@ -307,7 +307,7 @@ const LedgerCashFlowView: React.FC = () => {
                         <div className="p-4 rounded-xl bg-card border border-border">
                             <div className="text-xs text-gray-500 font-semibold uppercase">Ingresos Reales</div>
                             <div className="text-2xl font-bold text-success mt-1">
-                                {formatCurrency(Number(cashFlow.totalIncome))}
+                                {formatCurrency(cashFlow.totalIncome)}
                             </div>
                             <div className="text-[11px] text-gray-400 mt-1">
                                 {cashFlow.totalIncomeMinor} centavos
@@ -317,7 +317,7 @@ const LedgerCashFlowView: React.FC = () => {
                         <div className="p-4 rounded-xl bg-card border border-border">
                             <div className="text-xs text-gray-500 font-semibold uppercase">Gastos Operativos</div>
                             <div className="text-2xl font-bold text-error mt-1">
-                                {formatCurrency(Number(cashFlow.totalExpense))}
+                                {formatCurrency(cashFlow.totalExpense)}
                             </div>
                             <div className="text-[11px] text-gray-400 mt-1">
                                 {cashFlow.totalExpenseMinor} centavos
@@ -327,7 +327,7 @@ const LedgerCashFlowView: React.FC = () => {
                         <div className="p-4 rounded-xl bg-card border border-border">
                             <div className="text-xs text-gray-500 font-semibold uppercase">Inversiones</div>
                             <div className="text-2xl font-bold text-amber-500 mt-1">
-                                {formatCurrency(Number(cashFlow.totalInvested))}
+                                {formatCurrency(cashFlow.totalInvested)}
                             </div>
                             <div className="text-[11px] text-gray-400 mt-1">
                                 {cashFlow.totalInvestedMinor} centavos
@@ -336,8 +336,8 @@ const LedgerCashFlowView: React.FC = () => {
 
                         <div className="p-4 rounded-xl bg-card border border-border">
                             <div className="text-xs text-gray-500 font-semibold uppercase">Flujo de Caja Neto</div>
-                            <div className={`text-2xl font-bold mt-1 ${Number(cashFlow.netCashFlow) >= 0 ? 'text-primary' : 'text-error'}`}>
-                                {formatCurrency(Number(cashFlow.netCashFlow))}
+                            <div className={`text-2xl font-bold mt-1 ${BigInt(cashFlow.netCashFlowMinor) >= 0n ? 'text-primary' : 'text-error'}`}>
+                                {formatCurrency(cashFlow.netCashFlow)}
                             </div>
                             <div className="text-[11px] text-gray-400 mt-1">
                                 {cashFlow.transactionCount} transacciones en período
@@ -374,21 +374,21 @@ const LedgerCashFlowView: React.FC = () => {
                                     </thead>
                                     <tbody className="divide-y divide-border">
                                         {cashFlow.timeline.map((day) => {
-                                            const netVal = Number(day.net);
+                                            const netMinor = BigInt(day.netMinor);
                                             return (
                                                 <tr key={day.date} className="hover:bg-muted/10 transition-colors">
                                                     <td className="p-3 font-mono text-xs text-text">{day.date}</td>
                                                     <td className="p-3 text-right font-medium text-success">
-                                                        {Number(day.income) > 0 ? formatCurrency(Number(day.income)) : '—'}
+                                                        {BigInt(day.incomeMinor) > 0n ? formatCurrency(day.income) : '—'}
                                                     </td>
                                                     <td className="p-3 text-right font-medium text-error">
-                                                        {Number(day.expense) > 0 ? formatCurrency(Number(day.expense)) : '—'}
+                                                        {BigInt(day.expenseMinor) > 0n ? formatCurrency(day.expense) : '—'}
                                                     </td>
                                                     <td className="p-3 text-right font-medium text-amber-500">
-                                                        {Number(day.invested) > 0 ? formatCurrency(Number(day.invested)) : '—'}
+                                                        {BigInt(day.investedMinor) > 0n ? formatCurrency(day.invested) : '—'}
                                                     </td>
-                                                    <td className={`p-3 text-right font-bold ${netVal >= 0 ? 'text-primary' : 'text-error'}`}>
-                                                        {formatCurrency(netVal)}
+                                                    <td className={`p-3 text-right font-bold ${netMinor >= 0n ? 'text-primary' : 'text-error'}`}>
+                                                        {formatCurrency(day.net)}
                                                     </td>
                                                 </tr>
                                             );

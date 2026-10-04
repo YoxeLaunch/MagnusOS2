@@ -114,11 +114,18 @@ export const createTransaction = async (req, res) => {
         // Validate lines sum to 0 in minor units using exact BigInt parser
         let totalMinor = 0n;
         for (const line of lines) {
-            if (line.amount === undefined || line.amount === null || isNaN(Number(line.amount))) {
+            if (line.amount === undefined && line.amountMinor === undefined) {
                 await t.rollback();
                 return res.status(400).json({ error: 'Cada línea debe tener un importe numérico válido' });
             }
-            totalMinor += toMinorUnitsBigInt(line.amount);
+            try {
+                totalMinor += line.amountMinor !== undefined
+                    ? BigInt(String(line.amountMinor))
+                    : toMinorUnitsBigInt(line.amount);
+            } catch {
+                await t.rollback();
+                return res.status(400).json({ error: 'Cada línea debe tener un importe numérico válido' });
+            }
         }
 
         if (totalMinor !== 0n) {
@@ -168,7 +175,7 @@ export const createTransaction = async (req, res) => {
             const payee = await Payee.findOne({
                 where: {
                     id: payeeId,
-                    [Op.or]: [{ userId: effectiveUserId }, { userId: null }]
+                    [Op.or]: [{ userId: effectiveUserId }, { userId: 'system' }]
                 },
                 transaction: t
             });
@@ -184,7 +191,7 @@ export const createTransaction = async (req, res) => {
             const validCategories = await Category.findAll({
                 where: {
                     id: categoryIds,
-                    [Op.or]: [{ userId: effectiveUserId }, { userId: null }]
+                    [Op.or]: [{ userId: effectiveUserId }, { userId: 'system' }]
                 },
                 transaction: t
             });
@@ -213,7 +220,9 @@ export const createTransaction = async (req, res) => {
                     transactionId: transaction.id,
                     accountId: line.accountId,
                     categoryId: line.categoryId,
-                    amountMinor: toMinorUnits(line.amount),
+                    amountMinor: line.amountMinor !== undefined
+                        ? BigInt(String(line.amountMinor)).toString()
+                        : toMinorUnitsBigInt(line.amount).toString(),
                     currency: line.currency || accountMap.get(line.accountId)?.currency || 'DOP',
                     fxRate: line.fxRate,
                     memo: line.memo
@@ -257,8 +266,13 @@ export const createTransfer = async (req, res) => {
             });
         }
 
-        const numericAmount = Number(amount);
-        if (isNaN(numericAmount) || !Number.isFinite(numericAmount) || numericAmount <= 0) {
+        let amountMinor;
+        try {
+            amountMinor = toMinorUnitsBigInt(amount);
+        } catch {
+            return res.status(400).json({ error: 'amount debe ser un número positivo finito' });
+        }
+        if (amountMinor <= 0n) {
             return res.status(400).json({ error: 'amount debe ser un número positivo finito' });
         }
 
@@ -295,8 +309,8 @@ export const createTransfer = async (req, res) => {
             type: 'transfer',
             reference,
             lines: [
-                { accountId: fromAccountId, amount: -Math.abs(numericAmount), currency: sourceAccount.currency },
-                { accountId: toAccountId, amount: Math.abs(numericAmount), currency: destAccount.currency }
+                { accountId: fromAccountId, amountMinor: (-amountMinor).toString(), currency: sourceAccount.currency },
+                { accountId: toAccountId, amountMinor: amountMinor.toString(), currency: destAccount.currency }
             ]
         };
 
@@ -501,11 +515,15 @@ const inferTransactionType = (lines) => {
     const hasCategories = lines.some(l => l.categoryId);
     if (!hasCategories) return 'transfer';
 
-    const hasPositive = lines.some(l => l.amount > 0 && l.categoryId);
-    const hasNegative = lines.some(l => l.amount < 0 && l.categoryId);
+    const categoryAmounts = lines
+        .filter(l => l.categoryId)
+        .map(l => l.amountMinor !== undefined ? BigInt(String(l.amountMinor)) : toMinorUnitsBigInt(l.amount));
+    const hasPositive = categoryAmounts.some(amount => amount > 0n);
+    const hasNegative = categoryAmounts.some(amount => amount < 0n);
 
-    if (hasPositive && !hasNegative) return 'income';
-    if (hasNegative && !hasPositive) return 'expense';
+    // Debit (positive) category lines are expenses; credit (negative) category lines are income.
+    if (hasPositive && !hasNegative) return 'expense';
+    if (hasNegative && !hasPositive) return 'income';
     return 'expense';
 };
 
@@ -602,5 +620,4 @@ export const getCashFlowSummary = async (req, res) => {
         res.status(500).json({ error: error.message });
     }
 };
-
 

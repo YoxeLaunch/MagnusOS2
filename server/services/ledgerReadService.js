@@ -527,8 +527,10 @@ export class LedgerReadService {
             if (assetTypes.includes(acc.type)) {
                 assetsMinor += balMinor;
             } else if (liabilityTypes.includes(acc.type)) {
-                // Liabilities: negative balance is debt
-                liabilitiesMinor += balMinor < 0n ? -balMinor : balMinor;
+                // Canonical convention: liabilities are credits (negative balances).
+                // A positive balance on a liability account is an overpayment and therefore an asset.
+                if (balMinor < 0n) liabilitiesMinor += -balMinor;
+                else assetsMinor += balMinor;
             } else {
                 assetsMinor += balMinor;
             }
@@ -545,7 +547,15 @@ export class LedgerReadService {
             assets: fromMinorUnits(assetsMinor),
             liabilities: fromMinorUnits(liabilitiesMinor),
             netWorth: fromMinorUnits(netWorthMinor),
-            accountsCount: balances.count
+            accountsCount: balances.count,
+            accounts: balances.accounts.map(account => ({
+                id: account.id,
+                name: account.name,
+                type: account.type,
+                currency: account.currency,
+                balanceMinor: account.derivedBalanceMinor,
+                balance: fromMinorUnits(account.derivedBalanceMinor)
+            }))
         };
     }
 
@@ -891,4 +901,3 @@ export class LedgerReadService {
 }
 
 export default LedgerReadService;
-

@@ -141,8 +141,16 @@ export const calculateTotalAnnual = (transactions: Transaction[], currencies?: C
  * @param currency - Código de moneda ('DOP', 'USD', 'EUR'). Default: 'DOP'.
  * @returns String formateado (ej: RD$ 1,500.00).
  */
-export const formatCurrency = (amount: number, currency: 'DOP' | 'USD' | 'EUR' = 'DOP') => {
-  return new Intl.NumberFormat('es-DO', { style: 'currency', currency }).format(amount);
+export const formatCurrency = (amount: number | string, currency: 'DOP' | 'USD' | 'EUR' = 'DOP') => {
+  if (typeof amount === 'string' && /^[+-]?\d+(?:\.\d{1,2})?$/.test(amount)) {
+    const negative = amount.startsWith('-');
+    const unsigned = amount.replace(/^[+-]/, '');
+    const [integer, fraction = ''] = unsigned.split('.');
+    const grouped = new Intl.NumberFormat('es-DO', { maximumFractionDigits: 0 }).format(BigInt(integer));
+    const symbols = { DOP: 'RD$', USD: 'US$', EUR: '€' } as const;
+    return `${negative ? '-' : ''}${symbols[currency]}\u00a0${grouped}.${fraction.padEnd(2, '0')}`;
+  }
+  return new Intl.NumberFormat('es-DO', { style: 'currency', currency }).format(Number(amount));
 };
 
 /**
@@ -152,6 +160,13 @@ export const formatCurrency = (amount: number, currency: 'DOP' | 'USD' | 'EUR' =
  */
 export const formatUSD = (amount: number) => {
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
+};
+
+/** Converts exact minor units only when every cent remains representable for charting. */
+export const minorUnitsToChartNumber = (minor: string): number | null => {
+  const value = BigInt(minor);
+  if (value > BigInt(Number.MAX_SAFE_INTEGER) || value < BigInt(Number.MIN_SAFE_INTEGER)) return null;
+  return Number(value) / 100;
 };
 
 export interface PortfolioSnapshot {
@@ -184,7 +199,8 @@ export const getPortfolioSnapshot = (data: any, dailyTransactions: any[] = [], c
     const balance = convertToDOP(Number(acc.currentBalance) || 0, acc.currency);
 
     if (acc.type === 'credit_card' || acc.type === 'loan') {
-      totals.debts += balance;
+      if (balance < 0) totals.debts += -balance;
+      else totals.liquid += balance; // overpayment / credit balance
     } else if (acc.type === 'investment') {
       totals.invested += balance;
     } else {

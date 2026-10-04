@@ -27,6 +27,7 @@ import {
 import { LedgerReadService } from '../../server/services/ledgerReadService.js';
 import {
     createTransaction,
+    createTransfer,
     deleteTransaction,
     getCashFlowSummary
 } from '../../server/controllers/ledgerController.js';
@@ -172,9 +173,18 @@ describe('PostgreSQL Adversarial Remediation — Codex Review Phase II-B', () =>
         assert.equal(balances.accounts[0].isReconciled, true);
     });
 
-    it('BLOCKER-01 (Savings): addContribution suma en BigInt sin concatenación', async () => {
+    it('BLOCKER-01 (Savings): solo registra una transferencia ledger y no duplica el ahorro', async () => {
         const userId = 'pg_blk1_sav_' + uuidv4().slice(0, 8);
         await User.create({ username: userId, password: 'x', name: 'Savings User' });
+
+        const source = await Account.create({
+            id: uuidv4(), userId, name: 'Operativa', type: 'checking', currency: 'DOP',
+            openingBalanceMinor: '100000', currentBalanceMinor: '100000'
+        });
+        const savings = await Account.create({
+            id: uuidv4(), userId, name: 'Ahorro', type: 'savings', currency: 'DOP',
+            openingBalanceMinor: '100000', currentBalanceMinor: '100000'
+        });
 
         const goal = await SavingsGoal.create({
             id: uuidv4(),
@@ -182,21 +192,45 @@ describe('PostgreSQL Adversarial Remediation — Codex Review Phase II-B', () =>
             name: 'Fondo Emergencia',
             targetAmountMinor: '500000', // 5,000.00 DOP
             currentAmountMinor: '100000', // 1,000.00 DOP inicial
-            currency: 'DOP'
+            currency: 'DOP',
+            linkedAccountId: savings.id
         });
 
-        const { req, res, getStatus } = mockReqRes({
+        const unbacked = mockReqRes({
             user: { username: userId, role: 'user' },
             params: { id: goal.id },
             body: { amount: 5.00 } // 500 minor units
         });
+        await addContribution(unbacked.req, unbacked.res);
+        assert.equal(unbacked.getStatus(), 400, 'Un aporte sin asiento contable debe rechazarse');
 
-        await addContribution(req, res);
-        assert.equal(getStatus(), 201);
+        const transfer = mockReqRes({
+            user: { username: userId, role: 'user' },
+            body: {
+                date: '2026-10-04',
+                type: 'transfer',
+                lines: [
+                    { accountId: source.id, amountMinor: '-500', currency: 'DOP' },
+                    { accountId: savings.id, amountMinor: '500', currency: 'DOP' }
+                ]
+            }
+        });
+        await createTransaction(transfer.req, transfer.res);
+        assert.equal(transfer.getStatus(), 201);
+
+        const backed = mockReqRes({
+            user: { username: userId, role: 'user' },
+            params: { id: goal.id },
+            body: { transactionId: transfer.getData().id }
+        });
+        await addContribution(backed.req, backed.res);
+        assert.equal(backed.getStatus(), 201);
 
         const updatedGoal = await SavingsGoal.findByPk(goal.id);
-        assert.equal(updatedGoal.currentAmountMinor, '100500', 'Debe sumar 100000 + 500 = 100500 en BigInt');
-        assert.notEqual(updatedGoal.currentAmountMinor, '100000500');
+        const updatedSavings = await Account.findByPk(savings.id);
+        assert.equal(updatedGoal.currentAmountMinor, '100500');
+        assert.equal(updatedSavings.currentBalanceMinor, '100500');
+        assert.equal(backed.getData().goal.currentAmount, 1005, 'No debe sumar la transferencia dos veces');
     });
 
     it('BLOCKER-02: Entrada externa con contraparte no-account etiquetada "transfer" computa como ingreso', async () => {
@@ -486,10 +520,90 @@ describe('PostgreSQL Adversarial Remediation — Codex Review Phase II-B', () =>
         assert.equal(octSummary.transactionCount, 5, 'Debe contar 5 transacciones y no 1 día');
     });
 
+    it('BLOCKER: pagar una deuda mediante transferencia interna no altera patrimonio ni cash flow', async () => {
+        const userId = 'pg_liab_' + uuidv4().slice(0, 8);
+        await User.create({ username: userId, password: 'x', name: 'Liability User' });
+        const cash = await Account.create({
+            id: uuidv4(), userId, name: 'Banco', type: 'checking', currency: 'DOP',
+            openingBalanceMinor: '50000', currentBalanceMinor: '50000'
+        });
+        const card = await Account.create({
+            id: uuidv4(), userId, name: 'Tarjeta', type: 'credit_card', currency: 'DOP',
+            openingBalanceMinor: '-20000', currentBalanceMinor: '-20000'
+        });
+
+        const before = await LedgerReadService.getNetWorth({ userId, asOfDate: '2026-10-03' });
+        const transfer = mockReqRes({
+            user: { username: userId, role: 'user' },
+            body: {
+                userId,
+                date: '2026-10-04',
+                fromAccountId: cash.id,
+                toAccountId: card.id,
+                amount: '100.00'
+            }
+        });
+        await createTransfer(transfer.req, transfer.res);
+        assert.equal(transfer.getStatus(), 201);
+
+        const after = await LedgerReadService.getNetWorth({ userId, asOfDate: '2026-10-04' });
+        const cashFlow = await LedgerReadService.getCashFlow({ userId, startDate: '2026-10-04', endDate: '2026-10-04' });
+        assert.equal(before.netWorthMinor, '30000');
+        assert.equal(after.netWorthMinor, before.netWorthMinor);
+        assert.equal(after.assetsMinor, '40000');
+        assert.equal(after.liabilitiesMinor, '10000');
+        assert.equal(cashFlow.totalIncomeMinor, '0');
+        assert.equal(cashFlow.totalExpenseMinor, '0');
+        assert.equal(cashFlow.netCashFlowMinor, '0');
+    });
+
+    it('HIGH: createTransfer conserva centavos por encima de Number.MAX_SAFE_INTEGER', async () => {
+        const userId = 'pg_big_tx_' + uuidv4().slice(0, 8);
+        await User.create({ username: userId, password: 'x', name: 'Exact Transfer User' });
+        const source = await Account.create({
+            id: uuidv4(), userId, name: 'Origen', type: 'checking', currency: 'DOP',
+            openingBalanceMinor: '9007199254740993', currentBalanceMinor: '9007199254740993'
+        });
+        const destination = await Account.create({ id: uuidv4(), userId, name: 'Destino', type: 'savings', currency: 'DOP' });
+        const transfer = mockReqRes({
+            user: { username: userId, role: 'user' },
+            body: { userId, date: '2026-10-04', fromAccountId: source.id, toAccountId: destination.id, amount: '90071992547409.93' }
+        });
+        await createTransfer(transfer.req, transfer.res);
+        assert.equal(transfer.getStatus(), 201);
+        assert.equal((await Account.findByPk(source.id)).currentBalanceMinor, '0');
+        assert.equal((await Account.findByPk(destination.id)).currentBalanceMinor, '9007199254740993');
+    });
+
+    it('HIGH: infiere gasto por el signo contable de categoría y acepta categoría system', async () => {
+        const userId = 'pg_infer_' + uuidv4().slice(0, 8);
+        await User.create({ username: userId, password: 'x', name: 'Inference User' });
+        const account = await Account.create({
+            id: uuidv4(), userId, name: 'Caja', type: 'cash', currency: 'DOP',
+            openingBalanceMinor: '10000', currentBalanceMinor: '10000'
+        });
+        const category = await Category.create({ id: uuidv4(), userId: 'system', name: `Sistema ${userId}`, type: 'expense' });
+        const created = mockReqRes({
+            user: { username: userId, role: 'user' },
+            body: {
+                date: '2026-10-04',
+                lines: [
+                    { accountId: account.id, amountMinor: '-10000', currency: 'DOP' },
+                    { categoryId: category.id, amountMinor: '10000', currency: 'DOP' }
+                ]
+            }
+        });
+        await createTransaction(created.req, created.res);
+        assert.equal(created.getStatus(), 201);
+        assert.equal(created.getData().type, 'expense');
+        const cashFlow = await LedgerReadService.getCashFlow({ userId, startDate: '2026-10-04', endDate: '2026-10-04' });
+        assert.equal(cashFlow.totalIncomeMinor, '0');
+        assert.equal(cashFlow.totalExpenseMinor, '10000');
+    });
+
     after(async () => {
         try {
             await sequelize.close();
         } catch (_) {}
     });
 });
-

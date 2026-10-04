@@ -165,7 +165,7 @@ export interface TransferRequest {
     date: string;
     fromAccountId: string;
     toAccountId: string;
-    amount: number;
+    amount: number | string;
     memo?: string;
     reference?: string;
 }
@@ -257,6 +257,14 @@ export interface NetWorthResponse {
     liabilities: number | string;
     netWorth: number | string;
     accountsCount: number;
+    accounts: Array<{
+        id: string;
+        name: string;
+        type: Account['type'];
+        currency: Account['currency'];
+        balanceMinor: string;
+        balance: number | string;
+    }>;
 }
 
 export const cashFlowApi = {

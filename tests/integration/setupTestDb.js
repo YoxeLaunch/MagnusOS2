@@ -71,6 +71,13 @@ export async function initializeTestPostgres() {
                 const sql003 = fs.readFileSync(migration003Path, 'utf8');
                 await sequelize.query(sql003).catch(() => {});
             }
+
+            // 4. Apply the Phase II-B financial invariants under test.
+            const migration006Path = path.join(ROOT_DIR, 'server', 'migrations', '006_financial_invariants.sql');
+            if (fs.existsSync(migration006Path)) {
+                const sql006 = fs.readFileSync(migration006Path, 'utf8');
+                await sequelize.query(sql006);
+            }
         } finally {
             await sequelize.query('SELECT pg_advisory_unlock(987654321);').catch(() => {});
         }

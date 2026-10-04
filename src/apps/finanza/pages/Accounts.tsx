@@ -37,8 +37,10 @@ const AccountCard: React.FC<AccountCardProps> = ({ account, onEdit, onArchive })
     const config = ACCOUNT_TYPE_CONFIG[account.type] || ACCOUNT_TYPE_CONFIG.checking;
     const Icon = config.icon;
 
-    const isNegative = account.currentBalance < 0;
-    const isCredit = account.type === 'credit_card' || account.type === 'loan';
+    const balanceNumber = Number(account.currentBalance);
+    const isNegative = balanceNumber < 0;
+    const isLiabilityAccount = account.type === 'credit_card' || account.type === 'loan';
+    const isDebt = isLiabilityAccount && isNegative;
 
     return (
         <div className="bg-card border border-border rounded-xl p-4 hover:shadow-lg transition-all group">
@@ -84,10 +86,13 @@ const AccountCard: React.FC<AccountCardProps> = ({ account, onEdit, onArchive })
             </div>
 
             <div className="mt-4">
-                <p className={`text-2xl font-bold ${isNegative && !isCredit ? 'text-destructive' : 'text-foreground'}`}>
-                    {formatCurrency(Math.abs(account.currentBalance), account.currency)}
-                    {isCredit && account.currentBalance > 0 && (
+                <p className={`text-2xl font-bold ${isNegative && !isLiabilityAccount ? 'text-destructive' : 'text-foreground'}`}>
+                    {formatCurrency(Math.abs(balanceNumber), account.currency)}
+                    {isDebt && (
                         <span className="text-xs font-normal text-muted-foreground ml-1">(deuda)</span>
+                    )}
+                    {isLiabilityAccount && balanceNumber > 0 && (
+                        <span className="text-xs font-normal text-muted-foreground ml-1">(saldo a favor)</span>
                     )}
                 </p>
             </div>
@@ -298,9 +303,8 @@ export const Accounts: React.FC = () => {
         const currency = account.currency;
         if (!acc[currency]) acc[currency] = 0;
 
-        // For credit/loans, balance represents debt
-        const isDebt = account.type === 'credit_card' || account.type === 'loan';
-        acc[currency] += isDebt ? -account.currentBalance : account.currentBalance;
+        // Liability balances are canonical credits (negative), so direct addition yields net worth.
+        acc[currency] += Number(account.currentBalance);
 
         return acc;
     }, {} as Record<string, number>);

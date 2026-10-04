@@ -89,15 +89,18 @@ export const toMinorUnitsBigInt = (amount) => {
 
     const str = String(amount).trim();
     if (!str || str === 'NaN') return 0n;
+    if (!/^[+-]?\d+(?:\.\d+)?$/.test(str)) {
+        throw new TypeError(`Invalid decimal monetary amount: ${str}`);
+    }
 
     const isNegative = str.startsWith('-');
     const cleanStr = str.replace(/^[+-]/, '');
 
     const parts = cleanStr.split('.');
-    let intPart = parts[0] ? parts[0].replace(/\D/g, '') : '0';
+    let intPart = parts[0] || '0';
     if (!intPart) intPart = '0';
 
-    let fracPart = parts[1] ? parts[1].replace(/\D/g, '') : '';
+    let fracPart = parts[1] || '';
     let fracInt = 0n;
 
     if (fracPart.length === 0) {
