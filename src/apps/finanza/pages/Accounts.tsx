@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { Account, accountsApi } from '../api/finanzaApi';
 import { formatCurrency } from '../utils/calculations';
+import { parseDecimalToSafeNumber } from '../utils/moneySafety';
 import { useAuth } from '../../../shared/context/AuthContext';
 
 // Account type icons and colors
@@ -37,7 +38,7 @@ const AccountCard: React.FC<AccountCardProps> = ({ account, onEdit, onArchive })
     const config = ACCOUNT_TYPE_CONFIG[account.type] || ACCOUNT_TYPE_CONFIG.checking;
     const Icon = config.icon;
 
-    const balanceNumber = Number(account.currentBalance);
+    const balanceNumber = parseDecimalToSafeNumber(account.currentBalance, 'AccountCard balance');
     const isNegative = balanceNumber < 0;
     const isLiabilityAccount = account.type === 'credit_card' || account.type === 'loan';
     const isDebt = isLiabilityAccount && isNegative;
@@ -304,7 +305,7 @@ export const Accounts: React.FC = () => {
         if (!acc[currency]) acc[currency] = 0;
 
         // Liability balances are canonical credits (negative), so direct addition yields net worth.
-        acc[currency] += Number(account.currentBalance);
+        acc[currency] += parseDecimalToSafeNumber(account.currentBalance, 'Accounts total');
 
         return acc;
     }, {} as Record<string, number>);
