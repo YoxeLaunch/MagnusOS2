@@ -14,8 +14,9 @@
     "format": "npx @biomejs/biome format --write .",
     "analyze": "npm run lint && npm run type-check",
     "help": "cat GUIA_COMANDOS.md",
-    "type-check": "tsc --noEmit",
-    "test": "jest",
+    "test": "NODE_ENV=test node --test tests/*.test.js",
+    "test:backend": "NODE_ENV=test node --test tests/*.test.js",
+    "test:ui": "jest src/__tests__",
     "mcp": "node server/mcp-server.js"
   },
   "dependencies": {
@@ -92,7 +93,7 @@
     "eslint-plugin-react-hooks": "^7.0.1",
     "identity-obj-proxy": "^3.0.0",
     "jest": "^26.5.3",
-    "jest-environment-jsdom": "^30.2.0",
+    "jest-environment-jsdom": "^26.6.2",
     "postcss": "^8.4.35",
     "prettier": "^3.3.2",
     "tailwindcss": "^3.4.1",

@@ -18,10 +18,30 @@ const SYSTEM_DB_PATH = path.join(DATA_DIR, 'magnus_system.db');
 // Priority: DATABASE_URL (PostgreSQL) > SQLite fallback
 
 const createSequelizeInstance = (dbPath, name) => {
+    // TEST GUARDRAIL: Strict protection against running tests on production DB
+    if (process.env.NODE_ENV === 'test') {
+        const targetUrl = process.env.DATABASE_URL_TEST || process.env.DATABASE_URL;
+        if (targetUrl) {
+            const isSafe = targetUrl.toLowerCase().includes('test') || targetUrl.includes(':memory:');
+            if (!isSafe) {
+                console.error('\n======================================================');
+                console.error('[FATAL GUARDRAIL] NODE_ENV=test active on non-test DB!');
+                console.error(`Target URL: ${targetUrl.replace(/:[^:@]+@/, ':****@')}`);
+                console.error('Tests are strictly prohibited from touching production database.');
+                console.error('======================================================\n');
+                throw new Error('[TEST GUARDRAIL] Aborting: Tests cannot run against production database.');
+            }
+        }
+    }
+
     // Check for PostgreSQL connection string
-    if (process.env.DATABASE_URL) {
-        console.log(`>>> [${name}] Using PostgreSQL: ${process.env.DATABASE_URL.replace(/:[^:@]+@/, ':****@')}`);
-        return new Sequelize(process.env.DATABASE_URL, {
+    const dbUrl = (process.env.NODE_ENV === 'test' && process.env.DATABASE_URL_TEST) 
+        ? process.env.DATABASE_URL_TEST 
+        : process.env.DATABASE_URL;
+
+    if (dbUrl) {
+        console.log(`>>> [${name}] Using PostgreSQL: ${dbUrl.replace(/:[^:@]+@/, ':****@')}`);
+        return new Sequelize(dbUrl, {
             dialect: 'postgres',
             logging: process.env.NODE_ENV === 'development' ? console.log : false,
             dialectOptions: {
@@ -39,11 +59,12 @@ const createSequelizeInstance = (dbPath, name) => {
         });
     }
 
-    // Fallback to SQLite for local development
-    console.log(`>>> [${name}] Using SQLite: ${dbPath}`);
+    // Fallback to SQLite
+    const sqlitePath = process.env.NODE_ENV === 'test' ? ':memory:' : dbPath;
+    console.log(`>>> [${name}] Using SQLite: ${sqlitePath}`);
     return new Sequelize({
         dialect: 'sqlite',
-        storage: dbPath,
+        storage: sqlitePath,
         logging: false
     });
 };
