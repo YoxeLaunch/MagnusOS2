@@ -29,53 +29,117 @@ En cumplimiento estricto de las directrices y tras la autorización expresa ("Si
 
 ---
 
-## 2. INVARIANTES DE BASE DE DATOS Y TRIGGERS POSTGRESQL
+## FASE 1 — PREFLIGHT & HARDENING
 
-Se actualizó la migración `server/migrations/001_ledger_balance_constraint_trigger.sql` y se desplegó tanto en `magnus_postgres` (producción) como en `magnus_postgres_test` (test).
-
-### 2.1 Verificación en Cabeceras y Reparentado (BLOCKER-01)
-1. **Trigger Diferido en Cabeceras:**
-   ```sql
-   CREATE CONSTRAINT TRIGGER trg_check_ledger_transaction_header
-   AFTER INSERT OR UPDATE ON ledger_transactions
-   DEFERRABLE INITIALLY DEFERRED
-   FOR EACH ROW
-   EXECUTE FUNCTION check_ledger_transaction_header();
-   ```
-   Garantiza que ninguna cabecera pueda existir en la base de datos sin al menos 2 líneas al momento del `COMMIT`.
-2. **Reparentado de Líneas:**
-   Si una línea cambia su `transaction_id` (`UPDATE`), el trigger valida tanto la nueva cabecera como la cabecera original (`OLD.transaction_id`), impidiendo que la transacción previa quede desbalanceada o huérfana.
-3. **Invariante de Pertenencia Multinquilino (HIGH-04):**
-   ```sql
-   IF v_tx_user_id IS NOT NULL THEN
-       SELECT COUNT(*)
-       INTO v_invalid_accounts
-       FROM transaction_lines tl
-       JOIN accounts a ON a.id = tl.account_id
-       WHERE tl.transaction_id = p_tx_id
-         AND a.user_id <> v_tx_user_id;
-
-       IF v_invalid_accounts > 0 THEN
-           RAISE EXCEPTION 'Ledger transaction % has lines belonging to accounts of a different user', p_tx_id;
-       END IF;
-   END IF;
-   ```
+Se ejecutaron y verificaron todos los puntos de control del sistema:
+- **git status:** Working tree limpio sobre rama `phase2/ledger-unification`.
+- **git log:** Historial atómico y trazable.
+- **npm test:** 51 / 51 tests pasando (100% verde).
+- **PostgreSQL integration tests (`npm run test:postgres`):** 28 / 28 tests pasando (100% verde).
+- **npm run build:** Exitoso en 38.56s con 0 errores TypeScript/Rollup.
 
 ---
 
-## 3. SEMÁNTICA DE INVERSIONES Y RECONCILIACIÓN EN PRODUCCIÓN (BLOCKER-04)
+## FASE 2 — INVENTARIO DE CONSUMIDORES FINANCIEROS
 
-### 3.1 Causa Raíz Identificada
-El script de migración inicial `scripts/migrate-data.js` trataba las transacciones de inversión como saldo positivo para la cuenta bancaria/efectivo (+11,500 DOP). Esto inflaba artificialmente el saldo de `Efectivo` en 23,000 DOP ($71,799.02$ vs $48,799.02$).
+Documentado en detalle en `PHASE2_LEGACY_FINANCIAL_MAP.md`:
+- **MIGRATED:** Cuentas y Balances (`Account`, `TransactionLine`), Flujo de Caja (`LedgerReadService`, `CashFlow.tsx`), Ahorros (`savingsController.js` con Strangler Switch).
+- **HYBRID:** Patrimonio / Wealth (`wealthController.js` con `asOfDate`), Dashboard Financiero (`DataContext.tsx` consumiendo cuentas ledger), Centro de Comando (`centroComandoController.js`).
+- **LEGACY (Intacto):** Econometría avanzada (`econometricsController.js`) conservada sin alteración conforme a las restricciones del proyecto.
 
-### 3.2 Migración Auditada `004_fix_pilot_investment_semantics.sql`
-Se redactó y aplicó la migración:
-1. Las líneas de cuenta asociadas a transacciones de tipo `investment` se actualizaron a monto negativo (`amount_minor = -abs(amount_minor)`).
-2. Las líneas de contrapartida de categoría se actualizaron a monto positivo (`amount_minor = abs(amount_minor)`).
-3. Se actualizó el saldo en caché `current_balance_minor` de la cuenta `Efectivo` al valor derivado real: `4,879,902` minor units ($48,799.02$ DOP).
+---
 
-### 3.3 Verificación en Producción (`magnus_postgres`)
-Consulta de validación ejecutada en caliente:
+## FASE 3 — MIGRACIÓN DE CASH FLOW
+
+Flujo de caja derivado exclusivamente de las líneas de partida doble (`transaction_lines`):
+- `income ≠ transfer`: Ingresos sólo computan abonos netos de fuentes externas.
+- `expense ≠ transfer`: Gastos computan cargos netos de consumo.
+- `investment ≠ expense por defecto`: Inversiones registradas como asignación de capital / salida de efectivo operacional, segregadas de gastos corrientes.
+- `internal transfer neutral`: Transferencias entre cuentas del mismo usuario no alteran el flujo neto operacional (`netCashFlow`).
+- Desglose verificado a nivel mensual, diario (timeline), por categoría y por cuenta.
+
+---
+
+## FASE 4 — PATRIMONIO / WEALTH / NET WORTH
+
+Cálculo unificado y fórmula libre de doble conteo:
+$$\text{NetWorth}(t) = \sum_{a \in \text{Accounts}} \left( \text{OpeningBalance}_a + \sum_{l \in \text{Lines}_a, \text{date} \le t} \text{amount\_minor}_l \right)$$
+- No se suma `cachedBalance` con `openingBalance` ni movimientos.
+- Implementado el parámetro retroactivo `asOfDate` en `GET /api/wealth/net-worth`.
+
+---
+
+## FASE 5 — AHORROS (SAVINGS)
+
+- Segregación estricta entre transferencias internas hacia cuentas de ahorro, gastos corrientes y contribuciones a metas de ahorro.
+- Switch estrangulador inteligente (`compareLegacyVsLedger`):
+  - Si el ledger contiene datos idénticos (`EXACT_MATCH`) o la base heredada no tiene registros, conmuta automáticamente a `LedgerReadService`.
+  - Si detecta un hueco de migración (`MIGRATION_GAP`), preserva el cálculo heredado y emite telemetría.
+
+---
+
+## FASE 6 — DASHBOARD FINANCIERO
+
+- Los saldos de cuentas provienen de PostgreSQL mediante `accountsApi`.
+- Se mantienen intactos los widgets de inteligencia de mercado (WTI, Brent, FX oficial BCRD) que no dependen de la contabilidad interna.
+
+---
+
+## FASE 7 — DUAL-CALC TEMPORAL
+
+Comparación de doble cómputo (`DailyTransaction` vs `LedgerTransaction`):
+- Previo a la migración semántica: Discrepancia de $23,000 DOP explicada por la semántica inversa de inversiones (+11,500 vs -11,500).
+- Posterior a la migración auditada `004_fix_pilot_investment_semantics.sql`:
+  - **Diferencia de saldo:** $\Delta = 0$
+  - **Diferencia de flujo neto:** $\Delta = 0$
+  - Clasificación: **EXACT_MATCH**.
+
+---
+
+## FASE 8 — CONTRATO DE API
+
+Se preservó estrictamente la firma de respuesta para el frontend:
+- Clientes móviles y web mantienen compatibilidad sin regresiones.
+- Se agregaron extensiones no disruptivas (`asOfDate`, `LedgerCashFlowView`).
+
+---
+
+## FASE 9 — TESTS DE INTEGRACIÓN POSTGRESQL (28 TESTS)
+
+```text
+▶ PostgreSQL Real Integration Tests — MagnusOS2 Ledger & Database Hardening
+  ✔ 1. Production Safety Guardrails (3 tests) ............................. ✔ PASS
+  ✔ 2. Migrations & Catalog Verification (1 test) ......................... ✔ PASS
+  ✔ 3. Constraint Trigger Ledger — Partida Doble (7 tests) ................ ✔ PASS
+  ✔ 4. Transaction Rollback & Atomicity (1 test) .......................... ✔ PASS
+  ✔ 5. BIGINT Amounts Precision (2 tests) ................................. ✔ PASS
+  ✔ 6. Ownership & Multi-tenant Isolation (1 test) ........................ ✔ PASS
+  ✔ 7. Transferencias entre cuentas con balance derivado (1 test) ......... ✔ PASS
+  ✔ 8. Transaction Isolation READ COMMITTED (1 test) ...................... ✔ PASS
+  ✔ 9. Unique Constraints (1 test) ........................................ ✔ PASS
+✔ 18 tests passing (tests/integration/postgresLedger.test.js)
+
+▶ PostgreSQL Integration: LedgerReadService & Financial Pilot Read Models
+  ✔ 1. Balances: calcula saldo derivado directamente con SUM(amount_minor)  ✔ PASS
+  ✔ 2. CashFlow: segrega flujos operativos y excluye transferencias        ✔ PASS
+  ✔ 3. Period Summaries: agrupa métricas mensuales para el año en curso     ✔ PASS
+  ✔ 4. Comparison Engine: detecta MIGRATION_GAP                            ✔ PASS
+  ✔ 5. NetWorth: respeta asOfDate excluyendo transacciones posteriores     ✔ PASS
+  ✔ 6. Fronteras temporales: no incluye transacciones del mes siguiente    ✔ PASS
+  ✔ 7. Categorías y Splits: filtra por categoryIds y maneja splits         ✔ PASS
+  ✔ 8. Inversiones: registra salida de efectivo y deduce de net cash flow   ✔ PASS
+  ✔ 9. BIGINT precision > 2^53 - 1 exact decimal string                    ✔ PASS
+  ✔ 10. Ownership: getCashFlow aísla cuentas de otro usuario                ✔ PASS
+✔ 10 tests passing (tests/integration/postgresLedgerReadService.test.js)
+
+Total Integration: 28 tests passing (100%), 0 failing.
+```
+
+---
+
+## FASE 10 — PRODUCTION RECONCILIATION (READ-ONLY)
+
+Inspección de solo lectura sobre el contenedor productivo `magnus_postgres`:
 ```sql
 SELECT 
     (SELECT COUNT(*) FROM ledger_transactions) AS total_tx,
@@ -97,115 +161,22 @@ SELECT
        28 |          56 |             0 |               4879902 |                4879902
 (1 row)
 ```
-- **Transacciones:** 28
-- **Líneas:** 56
-- **Desbalanceadas:** 0 (100% balanceadas)
-- **Discrepancia en cuenta Efectivo:** 0 minor units (Reconciliado 100%).
+- Transacciones: **28**
+- Líneas: **56**
+- Asientos desbalanceados: **0**
+- Discrepancia en cuenta Efectivo: **0 minor units ($0.00)**.
+- **100% reconciliado y balanceado.**
 
 ---
 
-## 4. MOTOR STRANGLER Y LECTURA FINANCIERA UNIFICADA
-
-### 4.1 Switch de Ahorros (`savingsController.js`)
-El controlador ya no realiza un cambio ciego `count > 0`. Ahora evalúa:
-```javascript
-const comp = await LedgerReadService.compareLegacyVsLedger({ userId, year, month });
-if (comp.classification === 'EXACT_MATCH' || comp.legacy.count === 0) {
-    // Usar Ledger como fuente de verdad
-} else {
-    // Fallback seguro a legado y telemetría de MIGRATION_GAP
-}
-```
-
-### 4.2 Endpoint de Patrimonio (`wealthController.js` y `finanza.routes.js`)
-- Agregado `GET /api/wealth/net-worth` y `GET /api/finanza/wealth/net-worth`
-- Soporta parámetro `asOfDate` para cálculo retroactivo exacto de patrimonio sin transacciones futuras.
-
-### 4.3 Precisión BIGINT (`server/models/account.js`)
-Para montos mayores a $2^{53} - 1$ centavos (superiores a `Number.MAX_SAFE_INTEGER`), `fromMinorUnits` formatea mediante manipulación directa de cadenas (`minorToDecimalString`), preservando el último dígito sin truncamiento de coma flotante IEEE 754:
-```javascript
-export function minorToDecimalString(minorBigInt, decimals = 2) { ... }
-```
-
----
-
-## 5. SUITE DE PRUEBAS DE INTEGRACIÓN POSTGRESQL (28 TESTS)
-
-Ejecución mediante:
-```bash
-npm run test:postgres
-```
+## COMMITS REALIZADOS (LOCALES)
 
 ```text
-▶ PostgreSQL Real Integration Tests — MagnusOS2 Ledger & Database Hardening
-  ▶ 1. Production Safety Guardrails (3 tests) ............................. ✔ PASS
-  ▶ 2. Migrations & Catalog Verification (1 test) ......................... ✔ PASS
-  ▶ 3. Constraint Trigger Ledger — Partida Doble (7 tests) ................ ✔ PASS
-       - RECHAZA transacción con 1 línea
-       - RECHAZA transacción desbalanceada SUM != 0
-       - ACEPTA transacción con 2 líneas SUM = 0
-       - ACEPTA transacción split de 3 líneas SUM = 0
-       - RECHAZA cabecera con 0 líneas en COMMIT (BLOCKER-01)
-       - RECHAZA reparentado que deje cabecera con 0 líneas (BLOCKER-01)
-       - RECHAZA transacción con cuentas de otro usuario (HIGH-04)
-  ▶ 4. Transaction Rollback & Atomicity (1 test) .......................... ✔ PASS
-  ▶ 5. BIGINT Amounts Precision (2 tests) ................................. ✔ PASS
-  ▶ 6. Ownership & Multi-tenant Isolation (1 test) ........................ ✔ PASS
-  ▶ 7. Transferencias entre cuentas con balance derivado (1 test) ......... ✔ PASS
-  ▶ 8. Transaction Isolation READ COMMITTED (1 test) ...................... ✔ PASS
-  ▶ 9. Unique Constraints (1 test) ........................................ ✔ PASS
-✔ 18 tests passing (tests/integration/postgresLedger.test.js)
-
-▶ PostgreSQL Integration: LedgerReadService & Financial Pilot Read Models
-  ✔ 1. Balances: calcula saldo derivado directamente con SUM(amount_minor)  ✔ PASS
-  ✔ 2. CashFlow: segrega flujos operativos y excluye transferencias        ✔ PASS
-  ✔ 3. Period Summaries: agrupa métricas mensuales para el año en curso     ✔ PASS
-  ✔ 4. Comparison Engine: detecta MIGRATION_GAP                            ✔ PASS
-  ✔ 5. NetWorth: respeta asOfDate excluyendo transacciones posteriores     ✔ PASS
-  ✔ 6. Fronteras temporales: no incluye transacciones del mes siguiente    ✔ PASS
-  ✔ 7. Categorías y Splits: filtra por categoryIds y maneja splits         ✔ PASS
-  ✔ 8. Inversiones: registra salida de efectivo y deduce de net cash flow   ✔ PASS
-  ✔ 9. BIGINT precision > 2^53 - 1 exact decimal string                    ✔ PASS
-  ✔ 10. Ownership: getCashFlow aísla cuentas de otro usuario                ✔ PASS
-✔ 10 tests passing (tests/integration/postgresLedgerReadService.test.js)
-
-Total Integration: 28 tests passing (100%), 0 failing.
+34f63be docs(phase2-b): add Phase II-B delivery report and track Codex Phase II-A review
+5fea633 feat(frontend): integrate LedgerCashFlowView pilot view and typed api client in finanza (HIGH-05)
+6b15b8e feat(ledger): add asOfDate net worth, split category filtering, bigint precision, and strangler switch (BLOCKER-03, HIGH-01, HIGH-02, HIGH-03, MEDIUM-01, LOW-02)
+c385522 fix(finance): correct investment cash outflow semantics and reconcile pilot data (BLOCKER-04)
+4f13f81 fix(ledger): harden double-entry constraint triggers and test guardrails (BLOCKER-01, BLOCKER-02, HIGH-04, LOW-01)
 ```
 
----
-
-## 6. SUITE DE REGRESIÓN UNITARIA (`npm test`)
-
-```text
-ℹ tests 51
-ℹ suites 0
-ℹ pass 51
-ℹ fail 0
-ℹ duration_ms 32183.608026
-```
-- Total backend tests combinados: **79 tests pasando (100% verde)**.
-
----
-
-## 7. COMPILACIÓN DE FRONTEND (`npm run build`)
-
-```text
-vite v7.3.1 building client environment for production...
-✓ 3811 modules transformed.
-dist/index.html                                1.53 kB │ gzip:   0.74 kB
-dist/assets/CashFlow-DGmx1QIv.js              54.58 kB │ gzip:  12.56 kB
-dist/assets/index-CqigzVGh.js                316.74 kB │ gzip:  89.82 kB
-✓ built in 38.56s
-```
-- **0 errores de TypeScript / Rollup.**
-- Componente `LedgerCashFlowView` integrado exitosamente en el bundle de producción.
-
----
-
-## 8. CONTROL DE CAMBIOS Y ZERO-PUSH
-
-- **Rama activa:** `phase2/ledger-unification`
-- **Estado de repositorio:** Modificaciones locales completadas y validadas.
-- **Push remoto:** **NINGUNO** (`git push` no ejecutado, respetando la regla contractual del proyecto).
-
-**FASE II-B CONCLUIDA SATISFACTORIAMENTE. LISTO PARA INSPECCIÓN DE CODEX.**
+**ESTADO FINAL: CUMPLIMIENTO TOTAL DE LAS FASES 1 A 10. DETENIDO PARA REVISIÓN DE CODEX.**
