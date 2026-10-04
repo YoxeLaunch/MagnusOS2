@@ -35,7 +35,7 @@ describe('PostgreSQL Schema Governance & Migration Runner (Phase II-C)', () => {
         const status = await runner.status();
 
         assert.ok(Array.isArray(status), 'Status debe ser un array');
-        assert.ok(status.length >= 8, 'Debe incluir baseline y migraciones 001–007');
+        assert.ok(status.length >= 9, 'Debe incluir baseline y migraciones 001–008');
 
         const m001 = status.find(s => s.name === '001_ledger_balance_constraint_trigger.sql');
         assert.ok(m001, '001 debe existir en status');
@@ -48,6 +48,8 @@ describe('PostgreSQL Schema Governance & Migration Runner (Phase II-C)', () => {
         assert.equal(m005.checksumMatches, true, 'Checksum de 005 debe coincidir con el código');
         const m007 = status.find(s => s.name === '007_exact_money_integrity.sql');
         assert.equal(m007?.checksumMatches, true, 'Checksum de 007 debe ser válido');
+        const m008 = status.find(s => s.name === '008_job_observability.sql');
+        assert.equal(m008?.checksumMatches, true, 'Checksum de 008 debe ser válido');
     });
 
     it('2. MigrationRunner.up(): es idempotente y no reaplica migraciones ya confirmadas', async () => {
@@ -215,7 +217,7 @@ describe('PostgreSQL Schema Governance & Migration Runner (Phase II-C)', () => {
                 ("userId", date, amount, description, type, "createdAt", "updatedAt")
                 VALUES (NULL, '2026-10-04', 123.45, 'legacy', 'expense', NOW(), NOW())`);
             const result = await runner.up();
-            assert.equal(result.appliedCount, 3, 'Debe aplicar 005, 006 y 007');
+            assert.equal(result.appliedCount, 4, 'Debe aplicar 005, 006, 007 y 008');
             const [[reconciled]] = await upgradeDb.query(`SELECT amount_minor,
                 amount_minor = ROUND((amount * 100)::numeric)::bigint AS exact
                 FROM "DailyTransactions" WHERE description='legacy'`);
@@ -253,7 +255,7 @@ describe('PostgreSQL Schema Governance & Migration Runner (Phase II-C)', () => {
                 new MigrationRunner(firstDb).up(),
                 new MigrationRunner(secondDb).up()
             ]);
-            assert.equal(first.appliedCount + second.appliedCount, 8, 'Solo un runner aplica cada migración');
+            assert.equal(first.appliedCount + second.appliedCount, 9, 'Solo un runner aplica cada migración');
             const [duplicates] = await firstDb.query(`SELECT name, COUNT(*)::integer AS count
                 FROM schema_migrations GROUP BY name HAVING COUNT(*) > 1`);
             assert.equal(duplicates.length, 0);
