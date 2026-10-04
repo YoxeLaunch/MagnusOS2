@@ -1,4 +1,5 @@
 import { DailyTransaction, CurrencyHistory, Transaction } from '../models/index.js';
+import { getEffectiveUserId } from '../middleware/auth.js';
 
 // --- RATES CACHE ---
 let ratesCache = {
@@ -10,8 +11,7 @@ const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
 // --- TRANSACTIONS (Budget/Recurring) ---
 export const getTransactions = async (req, res) => {
     try {
-        const { userId } = req.query;
-        if (!userId || userId === 'undefined') return res.json([]);
+        const userId = getEffectiveUserId(req, req.query.userId);
 
         const transactions = await Transaction.findAll({
             where: { userId },
@@ -20,12 +20,7 @@ export const getTransactions = async (req, res) => {
 
         // Safety Clean-up
         const cleanTransactions = transactions.map(t => {
-            // Ensure deductions is a valid object if string or null
             let cleanDeductions = t.deductions;
-
-            // Note: Sequelize with DataTypes.JSON usually returns object or null.
-            // But if it returns string (legacy), we parse it.
-            // We handled this in migration, but being double safe here.
             if (typeof cleanDeductions === 'string') {
                 try {
                     cleanDeductions = JSON.parse(cleanDeductions);
@@ -62,7 +57,9 @@ export const getTransactions = async (req, res) => {
 
 export const createTransaction = async (req, res) => {
     try {
-        const transaction = await Transaction.create(req.body);
+        const userId = getEffectiveUserId(req, req.body.userId);
+        const data = { ...req.body, userId };
+        const transaction = await Transaction.create(data);
         res.json(transaction);
     } catch (error) {
         res.status(500).json({ error: error.message });
@@ -72,7 +69,17 @@ export const createTransaction = async (req, res) => {
 export const updateTransaction = async (req, res) => {
     try {
         const { id } = req.params;
-        const [updated] = await Transaction.update(req.body, { where: { id } });
+        const userId = getEffectiveUserId(req);
+        const isAdmin = req.user.role === 'admin' || req.user.username?.toLowerCase() === 'soberano';
+
+        const where = { id };
+        if (!isAdmin) where.userId = userId;
+
+        const data = { ...req.body };
+        delete data.userId;
+        delete data.id;
+
+        const [updated] = await Transaction.update(data, { where });
         if (updated) {
             const result = await Transaction.findOne({ where: { id } });
             res.json(result);
@@ -87,7 +94,13 @@ export const updateTransaction = async (req, res) => {
 export const deleteTransaction = async (req, res) => {
     try {
         const { id } = req.params;
-        const deleted = await Transaction.destroy({ where: { id } });
+        const userId = getEffectiveUserId(req);
+        const isAdmin = req.user.role === 'admin' || req.user.username?.toLowerCase() === 'soberano';
+
+        const where = { id };
+        if (!isAdmin) where.userId = userId;
+
+        const deleted = await Transaction.destroy({ where });
         if (deleted) res.status(204).send();
         else res.status(404).json({ error: 'Not found' });
     } catch (error) {
@@ -98,8 +111,7 @@ export const deleteTransaction = async (req, res) => {
 // --- DAILY TRANSACTIONS ---
 export const getDailyTransactions = async (req, res) => {
     try {
-        const { userId } = req.query;
-        if (!userId || userId === 'undefined') return res.json([]);
+        const userId = getEffectiveUserId(req, req.query.userId);
 
         const transactions = await DailyTransaction.findAll({
             where: { userId },
@@ -125,7 +137,9 @@ export const getDailyTransactions = async (req, res) => {
 
 export const createDailyTransaction = async (req, res) => {
     try {
-        const transaction = await DailyTransaction.create(req.body);
+        const userId = getEffectiveUserId(req, req.body.userId);
+        const data = { ...req.body, userId };
+        const transaction = await DailyTransaction.create(data);
         res.json(transaction);
     } catch (error) {
         res.status(500).json({ error: error.message });
@@ -135,7 +149,17 @@ export const createDailyTransaction = async (req, res) => {
 export const updateDailyTransaction = async (req, res) => {
     try {
         const { id } = req.params;
-        const [updated] = await DailyTransaction.update(req.body, { where: { id } });
+        const userId = getEffectiveUserId(req);
+        const isAdmin = req.user.role === 'admin' || req.user.username?.toLowerCase() === 'soberano';
+
+        const where = { id };
+        if (!isAdmin) where.userId = userId;
+
+        const data = { ...req.body };
+        delete data.userId;
+        delete data.id;
+
+        const [updated] = await DailyTransaction.update(data, { where });
         if (updated) {
             const result = await DailyTransaction.findOne({ where: { id } });
             res.json(result);
@@ -150,8 +174,15 @@ export const updateDailyTransaction = async (req, res) => {
 export const deleteDailyTransaction = async (req, res) => {
     try {
         const { id } = req.params;
-        await DailyTransaction.destroy({ where: { id } });
-        res.status(204).send();
+        const userId = getEffectiveUserId(req);
+        const isAdmin = req.user.role === 'admin' || req.user.username?.toLowerCase() === 'soberano';
+
+        const where = { id };
+        if (!isAdmin) where.userId = userId;
+
+        const deleted = await DailyTransaction.destroy({ where });
+        if (deleted) res.status(204).send();
+        else res.status(404).json({ error: 'Not found' });
     } catch (error) {
         res.status(500).json({ error: error.message });
     }

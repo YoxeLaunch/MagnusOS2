@@ -74,6 +74,69 @@ export const requireSoberano = (req, res, next) => {
     next();
 };
 
+export const requireAdmin = requireSoberano;
+export const requireAuthenticated = verifyJWT;
+
+/**
+ * Middleware que asegura que el usuario autenticado sólo pueda acceder a sus propios recursos
+ * a menos que sea administrador / soberano.
+ * @param {string} paramKey - Nombre del parámetro en req.params (por defecto 'username')
+ */
+export const requireSelfOrAdmin = (paramKey = 'username') => {
+    return (req, res, next) => {
+        if (!req.user) {
+            return res.status(401).json({ error: 'Autenticación requerida' });
+        }
+
+        const targetUser = req.params[paramKey] || req.query[paramKey] || req.body[paramKey];
+        const isAdmin = req.user.role === 'admin' || req.user.username?.toLowerCase() === 'soberano';
+        const isSelf = targetUser && req.user.username?.toLowerCase() === targetUser.toLowerCase();
+
+        if (!isAdmin && !isSelf) {
+            return res.status(403).json({ error: 'Acceso denegado: no autorizado para operar sobre este usuario' });
+        }
+
+        next();
+    };
+};
+
+/**
+ * Middleware estricto para operaciones exclusivas del propio usuario.
+ */
+export const requireSelf = (paramKey = 'username') => {
+    return (req, res, next) => {
+        if (!req.user) {
+            return res.status(401).json({ error: 'Autenticación requerida' });
+        }
+
+        const targetUser = req.params[paramKey] || req.query[paramKey] || req.body[paramKey];
+        const isSelf = targetUser && req.user.username?.toLowerCase() === targetUser.toLowerCase();
+
+        if (!isSelf) {
+            return res.status(403).json({ error: 'Acceso denegado: solo el propietario puede realizar esta acción' });
+        }
+
+        next();
+    };
+};
+
+/**
+ * Helper para derivar la identidad efectiva del request.
+ * REGLA DE ORO: req.user es la autoridad.
+ * Un admin puede consultar sobre un tercero si lo pasa explícitamente;
+ * un usuario regular SIEMPRE opera como sí mismo.
+ */
+export const getEffectiveUserId = (req, targetOverride = null) => {
+    if (!req.user || !req.user.username) {
+        throw new Error('Usuario no autenticado en el contexto de la solicitud');
+    }
+    const isAdmin = req.user.role === 'admin' || req.user.username?.toLowerCase() === 'soberano';
+    if (isAdmin && targetOverride) {
+        return targetOverride;
+    }
+    return req.user.username;
+};
+
 /**
  * Helper para generar un token JWT
  */
@@ -82,6 +145,7 @@ export const generateToken = (user) => {
     return jwt.sign(
         { username: user.username, role: user.role },
         JWT_SECRET,
-        { expiresIn: '1h' }
+        { expiresIn: '24h' }
     );
 };
+

@@ -14,7 +14,7 @@ import {
     Trash2,
     Edit2
 } from 'lucide-react';
-import { ledgerApi, LedgerTransaction, LedgerFilters, transfersApi } from '../api/finanzaApi';
+import { ledgerApi, LedgerTransaction, LedgerFilters, transfersApi, accountsApi } from '../api/finanzaApi';
 import { formatCurrency } from '../utils/calculations';
 import { useAuth } from '../../../shared/context/AuthContext';
 
@@ -280,11 +280,8 @@ export const Ledger: React.FC = () => {
     const loadAccounts = async () => {
         if (!user?.username) return;
         try {
-            const res = await fetch(`/api/finanza/accounts?userId=${user.username}`);
-            if (res.ok) {
-                const data = await res.json();
-                setAccounts(data);
-            }
+            const data = await accountsApi.getAll(user.username);
+            setAccounts(data);
         } catch (error) {
             console.error('Error loading accounts:', error);
         }

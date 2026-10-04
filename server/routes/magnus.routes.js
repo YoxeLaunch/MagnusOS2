@@ -2,7 +2,7 @@ import { Router } from 'express';
 import * as magnusController from '../controllers/magnusController.js';
 import * as publicationController from '../controllers/publicationController.js';
 import { updatePassword } from '../controllers/authController.js';
-import { verifyJWT, requireSoberano } from '../middleware/auth.js';
+import { verifyJWT, requireSoberano, requireSelfOrAdmin } from '../middleware/auth.js';
 import fs from 'fs';
 
 const router = Router();
@@ -10,23 +10,17 @@ const router = Router();
 // Todas las rutas de usuarios/sistema requieren JWT
 router.use(verifyJWT);
 
-// Users
-router.get('/users', magnusController.getUsers);
-router.put('/users/:username/password', updatePassword); // MUST be before /users/:username
-router.put('/users/:username', magnusController.updateUser);
-router.delete('/users/:username', magnusController.deleteUser);
-router.put('/users/:username/preferences', magnusController.updateUserPreferences);
-router.post('/users/:username/tags', magnusController.updateUserTags);
-// Note: tags logic was inline in old index.js, assuming front-end handles tags via simple update or need specific endpoint?
-// Old index.js had /api/users/:username/tags. Let's add that to controller.
-// Wait, I missed addTags in controller. I will add it to routes for now and patch controller later if needed, 
-// or just handle it via generic updateUser.
-// For now let's stick to generic user update or I'll quickly check if I need a specific one.
-// The old code had a specific push/remove logic. I should probably add that to controller to match 1:1 parity.
+// Users (con control de acceso estricto)
+router.get('/users', requireSoberano, magnusController.getUsers);
+router.put('/users/:username/password', requireSelfOrAdmin('username'), updatePassword); // MUST be before /users/:username
+router.put('/users/:username', requireSelfOrAdmin('username'), magnusController.updateUser);
+router.delete('/users/:username', requireSoberano, magnusController.deleteUser);
+router.put('/users/:username/preferences', requireSelfOrAdmin('username'), magnusController.updateUserPreferences);
+router.post('/users/:username/tags', requireSoberano, magnusController.updateUserTags);
 
 // Mentors
 router.get('/mentors', magnusController.getMentors);
-router.post('/mentors', magnusController.saveMentors);
+router.post('/mentors', requireSoberano, magnusController.saveMentors);
 
 // Data (Checklist/Calendar)
 router.get('/data', magnusController.getData);

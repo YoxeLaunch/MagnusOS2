@@ -49,81 +49,97 @@ export const login = async (req, res) => {
 
 export const register = async (req, res) => {
     try {
-        const newUser = req.body;
+        const { username, password, name } = req.body;
 
-        const existing = await User.findByPk(newUser.username);
+        if (!username || !password) {
+            return res.status(400).json({ error: 'Username y password son requeridos' });
+        }
+
+        const existing = await User.findByPk(username);
         if (existing) {
             return res.status(400).json({ error: 'El usuario ya existe' });
         }
 
         // Set role: admin only for the very first user when ALLOW_FIRST_ADMIN=true
+        let role = 'user';
         const userCount = await User.count();
         if (process.env.ALLOW_FIRST_ADMIN === 'true' && userCount === 0) {
-            newUser.role = 'admin';
+            role = 'admin';
             console.log(`[AUTH] First user registered as admin via ALLOW_FIRST_ADMIN flag.`);
-        } else {
-            newUser.role = 'user';
         }
 
         // Hash Password
-        newUser.password = await bcrypt.hash(newUser.password, 10);
+        const hashedPassword = await bcrypt.hash(password, 10);
 
-        const created = await User.create(newUser);
+        const created = await User.create({
+            username: username.trim(),
+            password: hashedPassword,
+            name: name ? name.trim() : username.trim(),
+            role
+        });
 
         const userData = created.toJSON();
-        const { password, ...safeUser } = userData;
-        res.json(safeUser);
+        const { password: _, ...safeUser } = userData;
+        const token = generateToken(created);
+
+        // Retornar usuario y token JWT para mantener sesión coherente de inmediato
+        res.status(201).json({ ...safeUser, token });
     } catch (error) {
-        console.error(error);
+        console.error('[AUTH] Error en registro:', error);
         res.status(500).json({ error: 'Error interno en registro' });
     }
 };
 
 export const updatePassword = async (req, res) => {
     try {
-        console.log('[UPDATE PASSWORD] Request received');
-        console.log('[UPDATE PASSWORD] Params:', req.params);
-        console.log('[UPDATE PASSWORD] Body:', { ...req.body, newPassword: '***' });
-
         const { username } = req.params;
-        const { newPassword, adminUsername } = req.body;
+        const { newPassword, currentPassword } = req.body;
 
-        // Security: Verify admin is making the request
-        if (!adminUsername) {
-            console.log('[UPDATE PASSWORD] Missing adminUsername');
-            return res.status(401).json({ error: 'Se requiere autenticación de administrador' });
+        if (!req.user || !req.user.username) {
+            return res.status(401).json({ error: 'Autenticación requerida' });
         }
 
-        console.log('[UPDATE PASSWORD] Looking up admin:', adminUsername);
-        const admin = await User.findByPk(adminUsername);
-        if (!admin) {
-            console.log('[UPDATE PASSWORD] Admin not found');
-            return res.status(403).json({ error: 'Administrador no encontrado' });
-        }
-        if (admin.role !== 'admin') {
-            console.log('[UPDATE PASSWORD] User is not admin, role:', admin.role);
-            return res.status(403).json({ error: 'Solo administradores pueden cambiar contraseñas' });
+        const authenticatedUsername = req.user.username;
+        const isAdmin = req.user.role === 'admin' || authenticatedUsername.toLowerCase() === 'soberano';
+        const isSelf = authenticatedUsername.toLowerCase() === username.toLowerCase();
+
+        // Seguridad: Solo el propio usuario o un administrador autenticado pueden cambiar contraseña
+        if (!isAdmin && !isSelf) {
+            console.warn(`[AUTH] Unauthorized password update attempt by ${authenticatedUsername} for ${username}`);
+            return res.status(403).json({ error: 'No autorizado para cambiar la contraseña de este usuario' });
         }
 
-        if (!newPassword) {
-            console.log('[UPDATE PASSWORD] Missing newPassword');
-            return res.status(400).json({ error: 'La nueva contraseña es requerida' });
+        if (!newPassword || typeof newPassword !== 'string' || newPassword.length < 6) {
+            return res.status(400).json({ error: 'La nueva contraseña debe tener al menos 6 caracteres' });
         }
 
-        console.log('[UPDATE PASSWORD] Looking up target user:', username);
-        const user = await User.findByPk(username);
-        if (!user) {
-            console.log('[UPDATE PASSWORD] Target user not found');
+        const targetUser = await User.findByPk(username);
+        if (!targetUser) {
             return res.status(404).json({ error: 'Usuario no encontrado' });
         }
 
-        // Hash new password
-        console.log('[UPDATE PASSWORD] Hashing new password');
-        user.password = await bcrypt.hash(newPassword, 10);
-        await user.save();
+        // Si el usuario cambia su propia contraseña y no es admin, validar la contraseña actual
+        if (isSelf && !isAdmin) {
+            if (!currentPassword) {
+                return res.status(400).json({ error: 'Se requiere la contraseña actual para verificar la identidad' });
+            }
+            const isMatch = targetUser.password.startsWith('$2')
+                ? await bcrypt.compare(currentPassword, targetUser.password)
+                : targetUser.password === currentPassword;
 
-        console.log(`[AUTH] Admin ${adminUsername} updated password for user ${username}`);
-        res.json({ message: 'Contraseña actualizada correctamente' });
+            if (!isMatch) {
+                return res.status(401).json({ error: 'La contraseña actual no es correcta' });
+            }
+        }
+
+        // Hash y persistencia segura
+        targetUser.password = await bcrypt.hash(newPassword, 10);
+        await targetUser.save();
+
+        // Registro de auditoría mínimo sin contraseñas
+        console.log(`[AUDIT:AUTH] Password changed for ${username} by ${authenticatedUsername} (role: ${req.user.role}) at ${new Date().toISOString()}`);
+
+        res.json({ success: true, message: 'Contraseña actualizada correctamente' });
     } catch (error) {
         console.error('[UPDATE PASSWORD] Exception:', error);
         res.status(500).json({ error: 'Error interno al actualizar la contraseña' });

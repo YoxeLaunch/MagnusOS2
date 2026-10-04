@@ -1,4 +1,5 @@
 import { SavingsGoal, SavingsContribution, Account, DailyTransaction, toMinorUnits, fromMinorUnits, sequelize } from '../models/index.js';
+import { getEffectiveUserId } from '../middleware/auth.js';
 import { Op } from 'sequelize';
 
 // ========================================
@@ -7,13 +8,10 @@ import { Op } from 'sequelize';
 // ========================================
 export const getSavingsGoals = async (req, res) => {
     try {
-        const { userId, activeOnly } = req.query;
+        const effectiveUserId = getEffectiveUserId(req, req.query.userId);
+        const { activeOnly } = req.query;
 
-        if (!userId) {
-            return res.status(400).json({ error: 'userId is required' });
-        }
-
-        const where = { userId };
+        const where = { userId: effectiveUserId };
         if (activeOnly === 'true') {
             where.isActive = true;
         }
@@ -70,8 +68,8 @@ export const getSavingsGoals = async (req, res) => {
 // ========================================
 export const createSavingsGoal = async (req, res) => {
     try {
+        const effectiveUserId = getEffectiveUserId(req, req.body.userId);
         const {
-            userId,
             name,
             targetAmount,
             targetDate,
@@ -82,24 +80,28 @@ export const createSavingsGoal = async (req, res) => {
             notes
         } = req.body;
 
-        if (!userId || !name || !targetAmount) {
+        if (!name || targetAmount === undefined) {
             return res.status(400).json({
-                error: 'userId, name, and targetAmount are required'
+                error: 'name and targetAmount are required'
             });
         }
 
-        // Calculate initial amount from linked account if provided
+        // Calculate initial amount from linked account if provided and verify ownership
         let initialAmount = 0;
         if (linkedAccountId) {
             const account = await Account.findByPk(linkedAccountId);
             if (account) {
+                const isAdmin = req.user.role === 'admin' || req.user.username?.toLowerCase() === 'soberano';
+                if (!isAdmin && account.userId !== effectiveUserId) {
+                    return res.status(403).json({ error: 'La cuenta vinculada no pertenece a este usuario' });
+                }
                 initialAmount = account.currentBalanceMinor;
             }
         }
 
         const goal = await SavingsGoal.create({
-            userId,
-            name,
+            userId: effectiveUserId,
+            name: name.trim(),
             targetAmountMinor: toMinorUnits(targetAmount),
             currentAmountMinor: initialAmount,
             currency,
@@ -132,8 +134,13 @@ export const updateSavingsGoal = async (req, res) => {
     try {
         const { id } = req.params;
         const updates = req.body;
+        const effectiveUserId = getEffectiveUserId(req);
+        const isAdmin = req.user.role === 'admin' || req.user.username?.toLowerCase() === 'soberano';
 
-        const goal = await SavingsGoal.findByPk(id);
+        const where = { id };
+        if (!isAdmin) where.userId = effectiveUserId;
+
+        const goal = await SavingsGoal.findOne({ where });
         if (!goal) {
             return res.status(404).json({ error: 'Goal not found' });
         }
@@ -147,6 +154,8 @@ export const updateSavingsGoal = async (req, res) => {
             updates.currentAmountMinor = toMinorUnits(updates.currentAmount);
             delete updates.currentAmount;
         }
+        delete updates.userId;
+        delete updates.id;
 
         await goal.update(updates);
 
@@ -177,8 +186,13 @@ export const updateSavingsGoal = async (req, res) => {
 export const deleteSavingsGoal = async (req, res) => {
     try {
         const { id } = req.params;
+        const effectiveUserId = getEffectiveUserId(req);
+        const isAdmin = req.user.role === 'admin' || req.user.username?.toLowerCase() === 'soberano';
 
-        const goal = await SavingsGoal.findByPk(id);
+        const where = { id };
+        if (!isAdmin) where.userId = effectiveUserId;
+
+        const goal = await SavingsGoal.findOne({ where });
         if (!goal) {
             return res.status(404).json({ error: 'Goal not found' });
         }
@@ -201,13 +215,18 @@ export const addContribution = async (req, res) => {
     try {
         const { id } = req.params;
         const { amount, date, notes, transactionId } = req.body;
+        const effectiveUserId = getEffectiveUserId(req);
+        const isAdmin = req.user.role === 'admin' || req.user.username?.toLowerCase() === 'soberano';
 
-        if (!amount) {
+        if (!amount || isNaN(Number(amount)) || Number(amount) <= 0) {
             await t.rollback();
-            return res.status(400).json({ error: 'amount is required' });
+            return res.status(400).json({ error: 'amount debe ser un número positivo' });
         }
 
-        const goal = await SavingsGoal.findByPk(id, { transaction: t });
+        const where = { id };
+        if (!isAdmin) where.userId = effectiveUserId;
+
+        const goal = await SavingsGoal.findOne({ where, transaction: t, lock: t.LOCK.UPDATE });
         if (!goal) {
             await t.rollback();
             return res.status(404).json({ error: 'Goal not found' });
@@ -259,8 +278,14 @@ export const addContribution = async (req, res) => {
 export const getGoalProgress = async (req, res) => {
     try {
         const { id } = req.params;
+        const effectiveUserId = getEffectiveUserId(req);
+        const isAdmin = req.user.role === 'admin' || req.user.username?.toLowerCase() === 'soberano';
 
-        const goal = await SavingsGoal.findByPk(id, {
+        const where = { id };
+        if (!isAdmin) where.userId = effectiveUserId;
+
+        const goal = await SavingsGoal.findOne({
+            where,
             include: [
                 { model: Account, as: 'linkedAccount' },
                 { model: SavingsContribution, as: 'contributions', order: [['date', 'DESC']] }
@@ -281,7 +306,6 @@ export const getGoalProgress = async (req, res) => {
         let monthlyNeeded = 0;
 
         if (goal.contributions && goal.contributions.length >= 2) {
-            // Calculate average monthly contribution
             const contributions = goal.contributions.map(c => ({
                 date: new Date(c.date),
                 amount: fromMinorUnits(c.amountMinor)
@@ -339,11 +363,8 @@ export const getGoalProgress = async (req, res) => {
 // ========================================
 export const getSavingsRate = async (req, res) => {
     try {
-        const { userId, month } = req.query;
-
-        if (!userId) {
-            return res.status(400).json({ error: 'userId is required' });
-        }
+        const effectiveUserId = getEffectiveUserId(req, req.query.userId);
+        const { month } = req.query;
 
         const targetMonth = month || new Date().toISOString().slice(0, 7); // YYYY-MM
         const monthStart = `${targetMonth}-01`;
@@ -351,10 +372,10 @@ export const getSavingsRate = async (req, res) => {
         monthEndDate.setMonth(monthEndDate.getMonth() + 1);
         const monthEnd = monthEndDate.toISOString().slice(0, 10);
 
-        // Fuente real: registro diario (DailyTransaction), igual que el resto del dashboard.
+        // Fuente real: registro diario (DailyTransaction), scoped to user
         const transactions = await DailyTransaction.findAll({
             where: {
-                userId,
+                userId: effectiveUserId,
                 date: { [Op.gte]: monthStart, [Op.lt]: monthEnd }
             }
         });
@@ -372,9 +393,9 @@ export const getSavingsRate = async (req, res) => {
         const totalSaved = totalIncome - totalExpense - totalInvested;
         const savingsRate = totalIncome > 0 ? (totalSaved / totalIncome) * 100 : 0;
 
-        // Aportes reales a metas de ahorro (ej. Fondo de Emergencia) registrados ese mes.
+        // Aportes a metas de ahorro del usuario
         const goalContributions = await SavingsContribution.findAll({
-            include: [{ model: SavingsGoal, as: 'goal', where: { userId }, attributes: [] }],
+            include: [{ model: SavingsGoal, as: 'goal', where: { userId: effectiveUserId }, attributes: [] }],
             where: { date: { [Op.gte]: monthStart, [Op.lt]: monthEnd } }
         });
         const totalGoalContributions = goalContributions.reduce((sum, c) => sum + fromMinorUnits(c.amountMinor), 0);
@@ -393,3 +414,4 @@ export const getSavingsRate = async (req, res) => {
         res.status(500).json({ error: error.message });
     }
 };
+

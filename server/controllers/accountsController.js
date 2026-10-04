@@ -1,4 +1,5 @@
 import { Account, toMinorUnits, fromMinorUnits } from '../models/index.js';
+import { getEffectiveUserId } from '../middleware/auth.js';
 import { Op } from 'sequelize';
 
 // ========================================
@@ -7,13 +8,10 @@ import { Op } from 'sequelize';
 // ========================================
 export const getAccounts = async (req, res) => {
     try {
-        const { userId, includeArchived } = req.query;
+        const { includeArchived } = req.query;
+        const effectiveUserId = getEffectiveUserId(req, req.query.userId);
 
-        if (!userId) {
-            return res.status(400).json({ error: 'userId is required' });
-        }
-
-        const where = { userId };
+        const where = { userId: effectiveUserId };
         if (includeArchived !== 'true') {
             where.isArchived = false;
         }
@@ -43,8 +41,8 @@ export const getAccounts = async (req, res) => {
 // ========================================
 export const createAccount = async (req, res) => {
     try {
+        const effectiveUserId = getEffectiveUserId(req, req.body.userId);
         const {
-            userId,
             name,
             type,
             currency = 'DOP',
@@ -53,9 +51,9 @@ export const createAccount = async (req, res) => {
             notes
         } = req.body;
 
-        if (!userId || !name || !type) {
+        if (!name || !type) {
             return res.status(400).json({
-                error: 'userId, name, and type are required'
+                error: 'name and type are required'
             });
         }
 
@@ -67,11 +65,11 @@ export const createAccount = async (req, res) => {
         }
 
         // Get max sort order for user
-        const maxOrder = await Account.max('sortOrder', { where: { userId } }) || 0;
+        const maxOrder = await Account.max('sortOrder', { where: { userId: effectiveUserId } }) || 0;
 
         const account = await Account.create({
-            userId,
-            name,
+            userId: effectiveUserId,
+            name: name.trim(),
             type,
             currency,
             institution,
@@ -99,9 +97,15 @@ export const createAccount = async (req, res) => {
 export const updateAccount = async (req, res) => {
     try {
         const { id } = req.params;
-        const updates = req.body;
+        const updates = { ...req.body };
+        const isAdmin = req.user.role === 'admin' || req.user.username?.toLowerCase() === 'soberano';
 
-        const account = await Account.findByPk(id);
+        const where = { id };
+        if (!isAdmin) {
+            where.userId = req.user.username;
+        }
+
+        const account = await Account.findOne({ where });
         if (!account) {
             return res.status(404).json({ error: 'Account not found' });
         }
@@ -112,9 +116,11 @@ export const updateAccount = async (req, res) => {
             delete updates.openingBalance;
         }
 
-        // Don't allow direct update of currentBalanceMinor (calculated field)
+        // Don't allow direct update of currentBalanceMinor or userId
         delete updates.currentBalanceMinor;
         delete updates.currentBalance;
+        delete updates.userId;
+        delete updates.id;
 
         await account.update(updates);
 
@@ -136,8 +142,14 @@ export const updateAccount = async (req, res) => {
 export const archiveAccount = async (req, res) => {
     try {
         const { id } = req.params;
+        const isAdmin = req.user.role === 'admin' || req.user.username?.toLowerCase() === 'soberano';
 
-        const account = await Account.findByPk(id);
+        const where = { id };
+        if (!isAdmin) {
+            where.userId = req.user.username;
+        }
+
+        const account = await Account.findOne({ where });
         if (!account) {
             return res.status(404).json({ error: 'Account not found' });
         }
@@ -159,14 +171,18 @@ export const getAccountBalance = async (req, res) => {
     try {
         const { id } = req.params;
         const { asOf } = req.query; // Optional date filter
+        const isAdmin = req.user.role === 'admin' || req.user.username?.toLowerCase() === 'soberano';
 
-        const account = await Account.findByPk(id);
+        const where = { id };
+        if (!isAdmin) {
+            where.userId = req.user.username;
+        }
+
+        const account = await Account.findOne({ where });
         if (!account) {
             return res.status(404).json({ error: 'Account not found' });
         }
 
-        // TODO: Calculate balance from transaction lines
-        // For now, return the cached balance
         res.json({
             accountId: id,
             accountName: account.name,
@@ -187,16 +203,17 @@ export const getAccountBalance = async (req, res) => {
 // ========================================
 export const reorderAccounts = async (req, res) => {
     try {
-        const { userId, order } = req.body; // order = [{id, sortOrder}, ...]
+        const effectiveUserId = getEffectiveUserId(req, req.body.userId);
+        const { order } = req.body; // order = [{id, sortOrder}, ...]
 
-        if (!userId || !Array.isArray(order)) {
-            return res.status(400).json({ error: 'userId and order array are required' });
+        if (!Array.isArray(order)) {
+            return res.status(400).json({ error: 'order array is required' });
         }
 
-        // Update each account's sort order
+        // Update each account's sort order belonging to the user
         await Promise.all(
             order.map(({ id, sortOrder }) =>
-                Account.update({ sortOrder }, { where: { id, userId } })
+                Account.update({ sortOrder }, { where: { id, userId: effectiveUserId } })
             )
         );
 
@@ -206,3 +223,4 @@ export const reorderAccounts = async (req, res) => {
         res.status(500).json({ error: error.message });
     }
 };
+
