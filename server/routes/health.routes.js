@@ -1,8 +1,13 @@
 import { Router } from 'express';
-import * as healthController from '../controllers/healthController.js';
+import { getHealth, getDeepHealth } from '../controllers/healthController.js';
+import { requireAuthenticated } from '../middleware/auth.js';
 
 const router = Router();
 
-router.get('/health', healthController.getHealth);
+// Fast healthcheck for Docker and basic monitoring
+router.get('/health', getHealth);
+
+// Deep healthcheck (requires authentication to protect memory/service topology)
+router.get('/health/deep', requireAuthenticated, getDeepHealth);
 
 export default router;
