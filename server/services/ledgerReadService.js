@@ -7,7 +7,9 @@ import {
     Payee,
     DailyTransaction,
     toMinorUnits,
+    toMinorUnitsBigInt,
     fromMinorUnits,
+    minorToDecimalString,
     sequelize
 } from '../models/index.js';
 
@@ -151,32 +153,21 @@ export class LedgerReadService {
         const includeLine = {
             model: TransactionLine,
             as: 'lines',
-            required: true,
-            where: {
-                accountId: { [Op.ne]: null } // Only account-affecting lines
-            },
             include: [
                 {
                     model: Account,
                     as: 'account',
                     attributes: ['id', 'name', 'type', 'currency', 'userId'],
-                    where: { userId } // Enforce ownership: reject lines linked to another user's account
+                    required: false
                 },
                 {
                     model: Category,
                     as: 'category',
-                    attributes: ['id', 'name', 'group', 'type']
+                    attributes: ['id', 'name', 'group', 'type'],
+                    required: false
                 }
             ]
         };
-
-        if (currency) {
-            includeLine.where.currency = currency;
-        }
-
-        if (accountIds && accountIds.length > 0) {
-            includeLine.where.accountId = { [Op.in]: accountIds };
-        }
 
         const transactions = await LedgerTransaction.findAll({
             where: whereTx,
@@ -191,43 +182,92 @@ export class LedgerReadService {
         const dailyMap = new Map();
 
         for (const tx of transactions) {
-            // Skip internal transfers between user accounts from cash flow income/expense
-            if (tx.type === 'transfer') {
+            const allLines = tx.lines || [];
+            const ownAccountLines = allLines.filter(l => l.accountId && (!l.account || l.account.userId === userId));
+            const foreignAccountLines = allLines.filter(l => l.accountId && l.account && l.account.userId !== userId);
+            if (foreignAccountLines.length > 0) continue; // Security isolation
+
+            const nonAccountLines = allLines.filter(l => !l.accountId);
+
+            // True internal transfer check:
+            // 1. All lines belong to user accounts (no external category or non-account counterparty)
+            // 2. At least two lines
+            // 3. Net sum per currency across user accounts is zero
+            let isInternalTransfer = false;
+            if (nonAccountLines.length === 0 && ownAccountLines.length >= 2 && ownAccountLines.length === allLines.length) {
+                const currencyTotals = new Map();
+                for (const l of ownAccountLines) {
+                    const c = l.currency || currency;
+                    const curSum = currencyTotals.get(c) || 0n;
+                    currencyTotals.set(c, curSum + BigInt(l.amountMinor));
+                }
+                const allCurrenciesZero = Array.from(currencyTotals.values()).every(sum => sum === 0n);
+                if (allCurrenciesZero) {
+                    isInternalTransfer = true;
+                }
+            }
+
+            if (isInternalTransfer) {
+                // Internal transfer between own accounts: neutral for consolidated operating cash flow
                 continue;
             }
 
             const dateStr = tx.date;
             if (!dailyMap.has(dateStr)) {
-                dailyMap.set(dateStr, { date: dateStr, incomeMinor: 0n, expenseMinor: 0n, investedMinor: 0n });
+                dailyMap.set(dateStr, { date: dateStr, incomeMinor: 0n, expenseMinor: 0n, investedMinor: 0n, transactionCount: 0 });
             }
             const dayEntry = dailyMap.get(dateStr);
             let hasFlowImpact = false;
 
-            for (const line of tx.lines) {
+            for (const line of ownAccountLines) {
+                if (accountIds && accountIds.length > 0 && !accountIds.includes(line.accountId)) {
+                    continue;
+                }
+                if (currency && line.currency && line.currency !== currency) {
+                    continue;
+                }
+
                 const amountMinor = BigInt(line.amountMinor);
 
-                if (tx.type === 'income' && amountMinor > 0n) {
-                    totalIncomeMinor += amountMinor;
-                    dayEntry.incomeMinor += amountMinor;
-                    hasFlowImpact = true;
-                } else if (tx.type === 'expense' && amountMinor < 0n) {
-                    const positiveExpense = -amountMinor;
-                    totalExpenseMinor += positiveExpense;
-                    dayEntry.expenseMinor += positiveExpense;
-                    hasFlowImpact = true;
-                } else if (tx.type === 'investment') {
-                    // For investments, negative amount on account represents capital cash outflow
-                    if (amountMinor < 0n) {
-                        const positiveInvested = -amountMinor;
-                        totalInvestedMinor += positiveInvested;
-                        dayEntry.investedMinor += positiveInvested;
-                        hasFlowImpact = true;
+                if (amountMinor > 0n) {
+                    // Money entering account
+                    if (tx.type === 'expense' || tx.type === 'refund') {
+                        // Refund reduces expense
+                        totalExpenseMinor -= amountMinor;
+                        dayEntry.expenseMinor -= amountMinor;
+                    } else if (tx.type === 'investment') {
+                        // Liquidation / return of investment reduces invested
+                        totalInvestedMinor -= amountMinor;
+                        dayEntry.investedMinor -= amountMinor;
+                    } else {
+                        // Standard income (including external entries tagged transfer)
+                        totalIncomeMinor += amountMinor;
+                        dayEntry.incomeMinor += amountMinor;
                     }
+                    hasFlowImpact = true;
+                } else if (amountMinor < 0n) {
+                    // Money leaving account
+                    const posAmt = -amountMinor;
+                    if (tx.type === 'income') {
+                        // Reversal of income reduces income
+                        totalIncomeMinor -= posAmt;
+                        dayEntry.incomeMinor -= posAmt;
+                    } else if (tx.type === 'investment') {
+                        // Outflow into external investment increases invested
+                        totalInvestedMinor += posAmt;
+                        dayEntry.investedMinor += posAmt;
+                    } else {
+                        // Standard expense (including external exits tagged transfer)
+                        totalExpenseMinor += posAmt;
+                        dayEntry.expenseMinor += posAmt;
+                    }
+                    hasFlowImpact = true;
                 }
             }
 
             if (hasFlowImpact) {
                 countedTxCount++;
+                dayEntry.transactionCount += 1;
             }
         }
 
@@ -242,7 +282,8 @@ export class LedgerReadService {
             income: fromMinorUnits(d.incomeMinor),
             expense: fromMinorUnits(d.expenseMinor),
             invested: fromMinorUnits(d.investedMinor),
-            net: fromMinorUnits(d.incomeMinor - d.expenseMinor - d.investedMinor)
+            net: fromMinorUnits(d.incomeMinor - d.expenseMinor - d.investedMinor),
+            transactionCount: d.transactionCount
         }));
 
         return {
@@ -314,7 +355,9 @@ export class LedgerReadService {
                 }
 
                 const rawAmount = BigInt(catLine.amountMinor);
-                const lineAmountMinor = rawAmount < 0n ? -rawAmount : rawAmount;
+                // In double entry, income category is credit (negative amountMinor).
+                // Reversal or debit is negative income.
+                const lineAmountMinor = -rawAmount;
                 totalMinor += lineAmountMinor;
 
                 const catName = catLine.category?.name || 'Otros Ingresos';
@@ -415,7 +458,9 @@ export class LedgerReadService {
                 }
 
                 const rawAmount = BigInt(catLine.amountMinor);
-                const lineAmountMinor = rawAmount > 0n ? rawAmount : -rawAmount;
+                // In double entry, expense category is debit (positive amountMinor).
+                // Refund or credit is negative expense (reduces total expenses).
+                const lineAmountMinor = rawAmount;
                 totalMinor += lineAmountMinor;
 
                 const catName = catLine.category?.name || 'Otros Gastos';
@@ -608,7 +653,7 @@ export class LedgerReadService {
                 entry.incomeMinor += BigInt(day.incomeMinor);
                 entry.expenseMinor += BigInt(day.expenseMinor);
                 entry.investedMinor += BigInt(day.investedMinor);
-                entry.transactionCount += 1;
+                entry.transactionCount += day.transactionCount || 0;
             }
         }
 
@@ -653,7 +698,56 @@ export class LedgerReadService {
         // 1. Calculate Ledger results
         const ledgerCashFlow = await this.getCashFlow({ userId, startDate, endDate, currency });
 
-        // 2. Calculate Legacy results from DailyTransaction
+        // 2. Query Ledger transactions for identity verification
+        const whereLedger = { userId };
+        if (startDate || endDate) {
+            whereLedger.date = {};
+            if (startDate) whereLedger.date[Op.gte] = startDate;
+            if (endDate) whereLedger.date[Op.lte] = endDate;
+        }
+
+        const ledgerTransactions = await LedgerTransaction.findAll({
+            where: whereLedger,
+            include: [
+                {
+                    model: TransactionLine,
+                    as: 'lines',
+                    include: [{ model: Account, as: 'account', attributes: ['id', 'userId', 'currency'] }]
+                }
+            ]
+        });
+
+        let ledgerTransfersCount = 0;
+        let ledgerTransfersTotalMinor = 0n;
+
+        // Categorize ledger transactions and build signature map
+        const ledgerSignatures = new Map();
+        for (const tx of ledgerTransactions) {
+            const ownAccLines = tx.lines.filter(l => l.accountId && (!l.account || l.account.userId === userId));
+            const nonAccLines = tx.lines.filter(l => !l.accountId);
+            const isInternal = nonAccLines.length === 0 && ownAccLines.length >= 2 && ownAccLines.length === tx.lines.length;
+
+            if (isInternal || tx.type === 'transfer') {
+                ledgerTransfersCount++;
+                const transferAmountMinor = ownAccLines.reduce((max, l) => {
+                    const amt = BigInt(l.amountMinor);
+                    return amt > max ? amt : max;
+                }, 0n);
+                ledgerTransfersTotalMinor += transferAmountMinor;
+                continue;
+            }
+
+            // Identify external cashflow transactions
+            for (const l of ownAccLines) {
+                const amt = BigInt(l.amountMinor);
+                const absAmt = amt < 0n ? -amt : amt;
+                const sigKey = `${tx.date}|${tx.type}|${absAmt.toString()}|${l.currency || currency}`;
+                const count = ledgerSignatures.get(sigKey) || 0;
+                ledgerSignatures.set(sigKey, count + 1);
+            }
+        }
+
+        // 3. Calculate Legacy results from DailyTransaction
         const whereLegacy = { userId };
         if (startDate || endDate) {
             whereLegacy.date = {};
@@ -669,15 +763,26 @@ export class LedgerReadService {
         let legacyIncomeMinor = 0n;
         let legacyExpenseMinor = 0n;
         let legacyInvestedMinor = 0n;
+        let identityMatches = 0;
+        let identityMismatches = 0;
 
         for (const tx of legacyTransactions) {
-            const amtMinor = BigInt(toMinorUnits(tx.amount || 0));
+            const amtMinor = toMinorUnitsBigInt(tx.amount || 0);
             if (tx.type === 'income') {
                 legacyIncomeMinor += amtMinor;
             } else if (tx.type === 'expense') {
                 legacyExpenseMinor += amtMinor;
             } else if (tx.type === 'investment') {
                 legacyInvestedMinor += amtMinor;
+            }
+
+            const sigKey = `${tx.date}|${tx.type}|${amtMinor.toString()}|${tx.currency || currency}`;
+            const available = ledgerSignatures.get(sigKey) || 0;
+            if (available > 0) {
+                ledgerSignatures.set(sigKey, available - 1);
+                identityMatches++;
+            } else {
+                identityMismatches++;
             }
         }
 
@@ -698,10 +803,11 @@ export class LedgerReadService {
                             expenseDiffMinor === 0n &&
                             investedDiffMinor === 0n &&
                             netDiffMinor === 0n &&
-                            countDiff === 0;
+                            countDiff === 0 &&
+                            identityMismatches === 0;
 
         let classification = 'EXACT_MATCH';
-        let explanation = 'Resultados contables idénticos.';
+        let explanation = 'Resultados contables idénticos y trazabilidad 1:1 verificada.';
 
         if (!isIdentical) {
             if (countDiff > 0) {
@@ -710,7 +816,10 @@ export class LedgerReadService {
             } else if (countDiff < 0) {
                 classification = 'LEDGER_EXCESS';
                 explanation = `Existen ${Math.abs(countDiff)} transacciones en ledger_transactions que no provienen del modelo DailyTransactions.`;
-            } else if (Math.abs(Number(netDiffMinor)) <= 100) {
+            } else if (identityMismatches > 0 && netDiffMinor === 0n) {
+                classification = 'ID_MISMATCH';
+                explanation = `Los totales coinciden pero ${identityMismatches} transacciones difieren en clave de identidad (fecha/tipo/monto).`;
+            } else if (netDiffMinor >= -100n && netDiffMinor <= 100n) {
                 classification = 'ROUNDING';
                 explanation = 'Divergencia centesimal menor debida al redondeo/truncamiento de coma flotante legacy al migrar a centavos BIGINT.';
             } else {
@@ -735,15 +844,31 @@ export class LedgerReadService {
                 transactionCount: legacyTransactions.length
             },
             ledger: {
-                incomeMinor: ledgerIncomeMinor.toString(),
-                expenseMinor: ledgerExpenseMinor.toString(),
-                investedMinor: ledgerInvestedMinor.toString(),
-                netMinor: ledgerNetMinor.toString(),
+                incomeMinor: ledgerCashFlow.totalIncomeMinor,
+                expenseMinor: ledgerCashFlow.totalExpenseMinor,
+                investedMinor: ledgerCashFlow.totalInvestedMinor,
+                netMinor: ledgerCashFlow.netCashFlowMinor,
                 income: ledgerCashFlow.totalIncome,
                 expense: ledgerCashFlow.totalExpense,
                 invested: ledgerCashFlow.totalInvested,
                 net: ledgerCashFlow.netCashFlow,
-                transactionCount: ledgerCashFlow.transactionCount
+                transactionCount: ledgerCashFlow.transactionCount,
+                transfersCount: ledgerTransfersCount,
+                transfersTotalMinor: ledgerTransfersTotalMinor.toString(),
+                transfersTotal: fromMinorUnits(ledgerTransfersTotalMinor)
+            },
+            discrepancy: {
+                incomeMinor: incomeDiffMinor.toString(),
+                expenseMinor: expenseDiffMinor.toString(),
+                investedMinor: investedDiffMinor.toString(),
+                netMinor: netDiffMinor.toString(),
+                income: fromMinorUnits(incomeDiffMinor),
+                expense: fromMinorUnits(expenseDiffMinor),
+                invested: fromMinorUnits(investedDiffMinor),
+                net: fromMinorUnits(netDiffMinor),
+                countDiff,
+                identityMatches,
+                identityMismatches
             },
             difference: {
                 incomeDiffMinor: incomeDiffMinor.toString(),
@@ -754,11 +879,13 @@ export class LedgerReadService {
                 expenseDiff: fromMinorUnits(expenseDiffMinor),
                 investedDiff: fromMinorUnits(investedDiffMinor),
                 netDiff: fromMinorUnits(netDiffMinor),
-                countDiff
+                countDiff,
+                identityMatches,
+                identityMismatches
             },
-            isIdentical,
             classification,
-            explanation
+            explanation,
+            isIdentical
         };
     }
 }

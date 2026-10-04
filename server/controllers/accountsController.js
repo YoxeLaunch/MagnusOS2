@@ -1,4 +1,5 @@
-import { Account, toMinorUnits, fromMinorUnits } from '../models/index.js';
+import { Account, TransactionLine, toMinorUnits, toMinorUnitsBigInt, fromMinorUnits, minorToDecimalString } from '../models/index.js';
+import { LedgerReadService } from '../services/ledgerReadService.js';
 import { getEffectiveUserId } from '../middleware/auth.js';
 import { Op } from 'sequelize';
 
@@ -110,14 +111,24 @@ export const updateAccount = async (req, res) => {
             return res.status(404).json({ error: 'Account not found' });
         }
 
-        // Convert opening balance if provided
-        if (updates.openingBalance !== undefined) {
-            updates.openingBalanceMinor = toMinorUnits(updates.openingBalance);
+        // Guard opening balance: block change if account has transactions, or atomically update both opening and cache
+        if (updates.openingBalance !== undefined || updates.openingBalanceMinor !== undefined) {
+            const lineCount = await TransactionLine.count({ where: { accountId: id } });
+            if (lineCount > 0) {
+                return res.status(400).json({
+                    error: 'No se puede modificar el saldo inicial de una cuenta con transacciones registradas. Registre un asiento de ajuste contable.'
+                });
+            }
+            const rawVal = updates.openingBalance !== undefined ? updates.openingBalance : updates.openingBalanceMinor;
+            const newOpeningMinor = toMinorUnitsBigInt(rawVal).toString();
+            updates.openingBalanceMinor = newOpeningMinor;
+            updates.currentBalanceMinor = newOpeningMinor;
             delete updates.openingBalance;
+        } else {
+            delete updates.currentBalanceMinor;
         }
 
-        // Don't allow direct update of currentBalanceMinor or userId
-        delete updates.currentBalanceMinor;
+        // Don't allow direct update of currentBalance or userId
         delete updates.currentBalance;
         delete updates.userId;
         delete updates.id;
@@ -183,11 +194,29 @@ export const getAccountBalance = async (req, res) => {
             return res.status(404).json({ error: 'Account not found' });
         }
 
+        let currentBalance = fromMinorUnits(account.currentBalanceMinor);
+        let currentBalanceMinor = account.currentBalanceMinor || '0';
+
+        if (asOf) {
+            const balances = await LedgerReadService.getBalances({
+                userId: account.userId,
+                accountIds: [id],
+                asOfDate: asOf
+            });
+            const derived = balances.accounts[0];
+            if (derived) {
+                currentBalance = derived.derivedBalance;
+                currentBalanceMinor = derived.derivedBalanceMinor;
+            }
+        }
+
         res.json({
             accountId: id,
             accountName: account.name,
             openingBalance: fromMinorUnits(account.openingBalanceMinor),
-            currentBalance: fromMinorUnits(account.currentBalanceMinor),
+            openingBalanceMinor: account.openingBalanceMinor || '0',
+            currentBalance,
+            currentBalanceMinor,
             currency: account.currency,
             asOf: asOf || new Date().toISOString().split('T')[0]
         });

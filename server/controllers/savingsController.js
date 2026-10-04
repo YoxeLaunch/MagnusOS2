@@ -1,4 +1,4 @@
-import { SavingsGoal, SavingsContribution, Account, DailyTransaction, toMinorUnits, fromMinorUnits, sequelize } from '../models/index.js';
+import { SavingsGoal, SavingsContribution, Account, DailyTransaction, LedgerTransaction, toMinorUnits, toMinorUnitsBigInt, fromMinorUnits, sequelize } from '../models/index.js';
 import { getEffectiveUserId } from '../middleware/auth.js';
 import { Op } from 'sequelize';
 import { LedgerReadService } from '../services/ledgerReadService.js';
@@ -26,12 +26,15 @@ export const getSavingsGoals = async (req, res) => {
             order: [['created_at', 'DESC']]
         });
 
-        // Format response with calculated fields
+        // Format response with calculated fields, deriving progress from linked account when attached
         const formatted = goals.map(goal => {
             const json = goal.toJSON();
+            const activeMinor = goal.linkedAccount?.currentBalanceMinor != null ? goal.linkedAccount.currentBalanceMinor : json.currentAmountMinor;
             const targetAmount = fromMinorUnits(json.targetAmountMinor);
-            const currentAmount = fromMinorUnits(json.currentAmountMinor);
-            const progress = targetAmount > 0 ? (currentAmount / targetAmount) * 100 : 0;
+            const currentAmount = fromMinorUnits(activeMinor);
+            const targetBig = BigInt(json.targetAmountMinor != null ? String(json.targetAmountMinor) : '0');
+            const currentBig = BigInt(activeMinor != null ? String(activeMinor) : '0');
+            const progress = targetBig > 0n ? Math.min(100, Math.round(Number(currentBig * 10000n / targetBig)) / 100) : 0;
 
             // Calculate monthly contribution needed
             let monthlyNeeded = 0;
@@ -45,9 +48,10 @@ export const getSavingsGoals = async (req, res) => {
 
             return {
                 ...json,
+                currentAmountMinor: activeMinor ? activeMinor.toString() : '0',
                 targetAmount,
                 currentAmount,
-                progress: Math.min(100, Math.round(progress * 10) / 10),
+                progress,
                 monthlyNeeded: Math.round(monthlyNeeded * 100) / 100,
                 contributions: json.contributions?.map(c => ({
                     ...c,
@@ -87,24 +91,27 @@ export const createSavingsGoal = async (req, res) => {
             });
         }
 
-        // Calculate initial amount from linked account if provided and verify ownership
-        let initialAmount = 0;
+        // Calculate initial amount from linked account if provided and strictly verify ownership
+        let initialAmountMinor = 0n;
         if (linkedAccountId) {
             const account = await Account.findByPk(linkedAccountId);
             if (account) {
-                const isAdmin = req.user.role === 'admin' || req.user.username?.toLowerCase() === 'soberano';
-                if (!isAdmin && account.userId !== effectiveUserId) {
+                if (account.userId !== effectiveUserId) {
                     return res.status(403).json({ error: 'La cuenta vinculada no pertenece a este usuario' });
                 }
-                initialAmount = account.currentBalanceMinor;
+                initialAmountMinor = BigInt(account.currentBalanceMinor != null ? String(account.currentBalanceMinor) : '0');
+            } else {
+                return res.status(404).json({ error: 'Cuenta vinculada no encontrada' });
             }
         }
+
+        const targetMinor = toMinorUnitsBigInt(targetAmount);
 
         const goal = await SavingsGoal.create({
             userId: effectiveUserId,
             name: name.trim(),
-            targetAmountMinor: toMinorUnits(targetAmount),
-            currentAmountMinor: initialAmount,
+            targetAmountMinor: targetMinor.toString(),
+            currentAmountMinor: initialAmountMinor.toString(),
             currency,
             targetDate,
             linkedAccountId,
@@ -112,14 +119,16 @@ export const createSavingsGoal = async (req, res) => {
             color,
             notes,
             isActive: true,
-            isCompleted: false
+            isCompleted: targetMinor > 0n && initialAmountMinor >= targetMinor
         });
+
+        const progress = targetMinor > 0n ? Math.min(100, Math.round(Number(initialAmountMinor * 10000n / targetMinor)) / 100) : 0;
 
         res.status(201).json({
             ...goal.toJSON(),
             targetAmount,
-            currentAmount: fromMinorUnits(initialAmount),
-            progress: 0
+            currentAmount: fromMinorUnits(initialAmountMinor),
+            progress
         });
     } catch (error) {
         console.error('[SavingsGoals] Error creating goal:', error);
@@ -233,35 +242,62 @@ export const addContribution = async (req, res) => {
             return res.status(404).json({ error: 'Goal not found' });
         }
 
+        // Validate transactionId if provided
+        if (transactionId) {
+            const ledgerTx = await LedgerTransaction.findOne({
+                where: { id: transactionId, userId: goal.userId },
+                transaction: t
+            });
+            if (!ledgerTx) {
+                await t.rollback();
+                return res.status(400).json({ error: 'La transacción referenciada no existe o no pertenece al usuario' });
+            }
+
+            const existingContribution = await SavingsContribution.findOne({
+                where: { transactionId },
+                transaction: t
+            });
+            if (existingContribution) {
+                await t.rollback();
+                return res.status(400).json({ error: 'Esta transacción ya fue asignada a otra contribución' });
+            }
+        }
+
+        const contribMinor = toMinorUnitsBigInt(amount);
+
         // Create contribution record
         const contribution = await SavingsContribution.create({
             goalId: id,
-            transactionId,
-            amountMinor: toMinorUnits(amount),
+            transactionId: transactionId || null,
+            amountMinor: contribMinor.toString(),
             date: date || new Date().toISOString().split('T')[0],
             notes
         }, { transaction: t });
 
-        // Update goal's current amount
-        const newAmount = goal.currentAmountMinor + toMinorUnits(amount);
-        const isCompleted = newAmount >= goal.targetAmountMinor;
+        // Update goal's current amount atomically in BigInt
+        const currentGoalMinor = BigInt(goal.currentAmountMinor != null ? String(goal.currentAmountMinor) : '0');
+        const newAmountMinor = currentGoalMinor + contribMinor;
+        const targetAmountMinor = BigInt(goal.targetAmountMinor != null ? String(goal.targetAmountMinor) : '0');
+        const isCompleted = targetAmountMinor > 0n && newAmountMinor >= targetAmountMinor;
 
         await goal.update({
-            currentAmountMinor: newAmount,
+            currentAmountMinor: newAmountMinor.toString(),
             isCompleted,
             completedAt: isCompleted && !goal.isCompleted ? new Date() : goal.completedAt
         }, { transaction: t });
 
         await t.commit();
 
+        const progress = targetAmountMinor > 0n ? Math.min(100, Math.round(Number(newAmountMinor * 10000n / targetAmountMinor)) / 100) : 0;
+
         res.status(201).json({
             contribution: {
                 ...contribution.toJSON(),
-                amount
+                amount: fromMinorUnits(contribMinor)
             },
             goal: {
-                currentAmount: fromMinorUnits(newAmount),
-                progress: Math.min(100, (newAmount / goal.targetAmountMinor) * 100),
+                currentAmount: fromMinorUnits(newAmountMinor),
+                progress,
                 isCompleted
             }
         });

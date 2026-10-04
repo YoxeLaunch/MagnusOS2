@@ -169,14 +169,49 @@ SELECT
 
 ---
 
-## COMMITS REALIZADOS (LOCALES)
+---
 
+## FASE 11 — REMEDIACIÓN INTEGRAL DE CODEX REVIEW PHASE II-B (40 TESTS DE INTEGRACIÓN)
+
+En respuesta a la auditoría `CODEX_REVIEW_PHASE2_B.md`, se ejecutó la remediación exhaustiva de todos los hallazgos identificados:
+
+| Hallazgo | Severidad | Estado | Remedio Implementado |
+|---|---|---|---|
+| **BLOCKER-01** | Crítica | RESUELTO | Corregida concatenación de cadenas en `updateAccountBalances`, `deleteTransaction` (`ledgerController.js`), `addContribution` (`savingsController.js`) e `importController.js`. Todo cálculo monetario se realiza estrictamente en `BigInt` y se almacena como string numérico entero. |
+| **BLOCKER-02** | Crítica | RESUELTO | `LedgerReadService.getCashFlow()` y `compareLegacyVsLedger()` inspeccionan la totalidad de líneas contables. Solo se clasifican como transferencias internas neutras aquellas donde todas las líneas pertenecen a cuentas del usuario y la suma neta por divisa es 0. Entradas/salidas externas etiquetadas "transfer" computan correctamente como ingreso/gasto operativo. |
+| **BLOCKER-03** | Crítica | RESUELTO | Eliminadas las heurísticas distorsionantes en `src/apps/finanza/utils/calculations.ts` y `Wealth.tsx` (reemplazo de balances negativos por `dailyNet`). `Wealth.tsx` consume `cashFlowApi.getNetWorth({ asOfDate })` y `cashFlowApi.getCashFlow()` directamente. |
+| **HIGH-01** | Alta | RESUELTO | En `LedgerReadService.getCashFlow()` y `getExpenses()`, los abonos de gasto (reembolsos con importe positivo a cuenta o crédito a categoría de gasto) netean el gasto total en lugar de inflar los ingresos brutos. |
+| **HIGH-02** | Alta | RESUELTO | Unificados parámetros de fecha (`startDate`/`endDate` y `from`/`to`) en `ledgerController.js` y `finanzaApi.ts`. |
+| **HIGH-03 & LOW-02** | Alta / Baja | RESUELTO | En `savingsController.js` se forzó pertenencia estricta (`account.userId === effectiveUserId`), unicidad y validación de `transactionId` en aportes, e inferencia reactiva desde el balance de la cuenta vinculada. |
+| **HIGH-04** | Alta | RESUELTO | En `server/models/account.js`, implementado `toMinorUnitsBigInt` con parseo decimal directo a `BigInt` sin truncamiento IEEE-754 ($90071992547409.93 \to 9007199254740993n$). `minorToDecimalString` garantiza centavos exactos en números grandes. |
+| **HIGH-05** | Media | RESUELTO | En `CashFlow.tsx`, la pestaña "Flujo Real (Ledger)" es la activa por defecto y las pestañas heredadas se rotulan explícitamente como "Plan Ingresos" y "Plan Gastos". |
+| **HIGH-06** | Alta | RESUELTO | En `accountsController.js`, `updateAccount` rechaza modificar `openingBalance` si la cuenta ya tiene líneas registradas (`TransactionLine.count > 0`). Si no tiene líneas, actualiza `currentBalanceMinor` atómicamente. |
+| **MEDIUM-01** | Media | RESUELTO | `compareLegacyVsLedger()` realiza conciliación 1 a 1 de firmas (`date|type|amount|currency`), segrega transferencias internas y devuelve tanto `difference` como `discrepancy`. |
+| **MEDIUM-02** | Media | RESUELTO | `createTransaction` en `ledgerController.js` valida que `payeeId` y `categoryId` pertenezcan estrictamente al `effectiveUserId`. |
+| **MEDIUM-03** | Media | RESUELTO | `getPeriodSummaries()` suma `day.transactionCount` para reflejar el número real de transacciones y no los días del calendario. |
+| **LOW-01** | Baja | RESUELTO | `getAccountBalance` en `accountsController.js` soporta el parámetro `asOf` derivando el saldo histórico vía `LedgerReadService.getBalances()`. |
+
+### Resultados de la Verificación en PostgreSQL 16 (magnus_test)
 ```text
-34f63be docs(phase2-b): add Phase II-B delivery report and track Codex Phase II-A review
-5fea633 feat(frontend): integrate LedgerCashFlowView pilot view and typed api client in finanza (HIGH-05)
-6b15b8e feat(ledger): add asOfDate net worth, split category filtering, bigint precision, and strangler switch (BLOCKER-03, HIGH-01, HIGH-02, HIGH-03, MEDIUM-01, LOW-02)
-c385522 fix(finance): correct investment cash outflow semantics and reconcile pilot data (BLOCKER-04)
-4f13f81 fix(ledger): harden double-entry constraint triggers and test guardrails (BLOCKER-01, BLOCKER-02, HIGH-04, LOW-01)
+▶ PostgreSQL Integration Tests:
+  ✔ tests/integration/postgresCodexPhase2BRemediation.test.js (12 tests) ... ✔ PASS
+  ✔ tests/integration/postgresHardening.test.js (18 tests) ................ ✔ PASS
+  ✔ tests/integration/postgresLedgerReadService.test.js (10 tests) ........ ✔ PASS
+Total PostgreSQL Integration: 40 tests passing (100%), 0 failing.
+
+▶ Unit & Regression Tests:
+  ✔ tests/*.test.js (51 tests) ............................................ ✔ PASS
+Total Unit Tests: 51 tests passing (100%), 0 failing.
+
+▶ Frontend Build (Vite + TypeScript):
+  ✔ vite build completed in 49.48s (0 errors).
+
+▶ Verificación Base de Datos Productiva (magnus / magnus_postgres - READ ONLY):
+  - Cabeceras ledger: 28
+  - Líneas de transacción: 56
+  - Transacciones desbalanceadas: 0
+  - Saldo cuenta 'soberano': 4,879,902 minor units (exacto, sin mutaciones)
 ```
 
-**ESTADO FINAL: CUMPLIMIENTO TOTAL DE LAS FASES 1 A 10. DETENIDO PARA REVISIÓN DE CODEX.**
+**ESTADO FINAL TRAS REMEDIACIÓN: LISTO PARA RE-EVALUACIÓN DE CODEX PHASE II-B ANTES DE PROCEDER A PHASE II-C.**
+

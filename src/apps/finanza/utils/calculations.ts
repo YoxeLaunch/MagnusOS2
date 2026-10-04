@@ -205,15 +205,17 @@ export const getPortfolioSnapshot = (data: any, dailyTransactions: any[] = [], c
   });
   const dailyNet = dailyIncome - dailyExpense - dailyInvestment;
 
-  // Preferir el saldo declarado de las cuentas; sumarlo con dailyNet duplicaría el dinero
-  // cuando la cuenta ya refleja ese acumulado del registro diario.
-  const liquidAssets = accountsBalance > 0 ? accountsBalance : dailyNet;
+  // Si existen cuentas registradas, su saldo es la verdad canónica (incluso si es 0 o negativo).
+  // Solo recurrir a dailyNet si no existen cuentas configuradas.
+  const hasDeclaredAccounts = (data?.accounts || []).length > 0;
+  const liquidAssets = hasDeclaredAccounts ? accountsBalance : dailyNet;
 
   const investmentsValue = (data?.investments || []).reduce((sum: number, inv: any) => sum + convertToDOP(inv.currentValue ?? inv.amount ?? 0, inv.currency), 0);
-  // Las inversiones antiguas no están vinculadas a cuentas. Para no contarlas dos
-  // veces, las cuentas de inversión se usan como respaldo solo si no hay inversiones
-  // declaradas en la fuente histórica.
-  const investedAssets = investmentsValue + (investmentsValue > 0 ? 0 : accountTotals.invested) + dailyInvestment;
+  // Las cuentas de inversión son la fuente canónica del libro mayor.
+  // Evitar sumar dailyInvestment cuando ya existe una cuenta de inversión o saldo declarado.
+  const investedAssets = accountTotals.invested > 0 
+    ? accountTotals.invested 
+    : (investmentsValue > 0 ? investmentsValue : dailyInvestment);
 
   const materialAssets = (data?.assets || []).reduce((sum: number, a: any) => sum + (a.value || 0), 0);
   const declaredDebts = (data?.debts || []).reduce((sum: number, d: any) => sum + convertToDOP(Number(d.amount) || 0, d.currency), 0);

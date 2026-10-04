@@ -20,6 +20,7 @@ import { getDaysInMonth, getDaysElapsed } from '../utils/financialMetrics';
 import { DashboardSkeleton } from '../../../shared/components/Skeleton';
 import { useAuth } from '../../../shared/context/AuthContext';
 import { apiFetch } from '../../../shared/utils/apiFetch';
+import { cashFlowApi, CashFlowResponse } from '../api/finanzaApi';
 
 export const Dashboard: React.FC = () => {
   const { data, dailyTransactions, currencies, isLoading } = useData();
@@ -63,6 +64,8 @@ export const Dashboard: React.FC = () => {
     return amount;
   };
 
+  const [ledgerCycleStats, setLedgerCycleStats] = useState<{ income: number; expense: number; investment: number; balance: number } | null>(null);
+
   // Calculate Real Stats (Current Financial Cycle)
   const realStats = useMemo(() => {
     const now = new Date();
@@ -81,8 +84,29 @@ export const Dashboard: React.FC = () => {
       }
     });
 
-    return { income, expense, investment, balance: income - expense - investment, cycleLabel: currentCycle.label };
-  }, [dailyTransactions, currencies]);
+    const calculated = { income, expense, investment, balance: income - expense - investment, cycleLabel: currentCycle.label };
+    return ledgerCycleStats ? { ...ledgerCycleStats, cycleLabel: currentCycle.label } : calculated;
+  }, [dailyTransactions, currencies, ledgerCycleStats]);
+
+  useEffect(() => {
+    let mounted = true;
+    const now = new Date();
+    const currentCycle = getFinancialCycle(now);
+    cashFlowApi.getCashFlow({
+      startDate: currentCycle.start.toISOString().slice(0, 10),
+      endDate: currentCycle.end.toISOString().slice(0, 10)
+    }).then((cf: CashFlowResponse) => {
+      if (mounted && cf) {
+        setLedgerCycleStats({
+          income: Number(cf.totalIncome),
+          expense: Number(cf.totalExpense),
+          investment: Number(cf.totalInvested),
+          balance: Number(cf.netCashFlow)
+        });
+      }
+    }).catch(() => null);
+    return () => { mounted = false; };
+  }, []);
 
   // Calculate Global Stats (All Time)
   const globalStats = useMemo(() => {

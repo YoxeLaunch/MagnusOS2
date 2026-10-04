@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { useData } from '../context/DataContext';
 import { getPortfolioSnapshot, formatCurrency } from '../utils/calculations';
+import { cashFlowApi, NetWorthResponse, CashFlowResponse } from '../api/finanzaApi';
 import { Building2, TrendingUp, PiggyBank, DollarSign, Wallet, ArrowUpRight, ArrowDownRight, RefreshCw, X } from 'lucide-react';
 import { AssetAllocation } from '../components/AssetAllocation';
 import { Investments } from './Investments';
@@ -24,24 +25,53 @@ export const Wealth: React.FC = () => {
         console.log('Wealth Dashboard Mounted - Triggering Snapshot Check');
     }, []);
 
+    const [ledgerNetWorth, setLedgerNetWorth] = useState<NetWorthResponse | null>(null);
+    const [ledgerCashFlow, setLedgerCashFlow] = useState<CashFlowResponse | null>(null);
+
+    // Fetch canonical ledger net worth and cash flow
+    useEffect(() => {
+        let mounted = true;
+        const now = currentDate.toISOString().slice(0, 10);
+        const monthStart = `${now.slice(0, 7)}-01`;
+        const [y, m] = now.slice(0, 7).split('-').map(Number);
+        const lastDay = new Date(y, m, 0).getDate();
+        const monthEnd = `${now.slice(0, 7)}-${String(lastDay).padStart(2, '0')}`;
+
+        Promise.all([
+            cashFlowApi.getNetWorth({ asOfDate: now }).catch(() => null),
+            cashFlowApi.getCashFlow({ startDate: monthStart, endDate: monthEnd }).catch(() => null)
+        ]).then(([nw, cf]) => {
+            if (mounted) {
+                if (nw) setLedgerNetWorth(nw);
+                if (cf) setLedgerCashFlow(cf);
+            }
+        });
+
+        return () => { mounted = false; };
+    }, [currentDate]);
+
     // Safety check for data
     if (!data) return <div className="p-8 text-center text-slate-500">Cargando datos financieros...</div>;
 
-    // Misma fuente de verdad que Investments.tsx, PrintReport.tsx y Projections.tsx
-    const { liquidAssets, investedAssets, materialAssets, netWorth, dailyInvestment } = getPortfolioSnapshot(data, dailyTransactions, currencies);
+    // Fallback baseline for non-account assets (e.g. material goods)
+    const { liquidAssets, investedAssets, materialAssets, dailyInvestment, netWorth, cashFlow, savingsRate } = (() => {
+        const snap = getPortfolioSnapshot(data, dailyTransactions, currencies);
+        const finalNetWorth = ledgerNetWorth ? Number(ledgerNetWorth.netWorth) : snap.netWorth;
+        const finalCashFlow = ledgerCashFlow ? Number(ledgerCashFlow.netCashFlow) : (snap.dailyNet || 0);
+        const finalIncome = ledgerCashFlow ? Number(ledgerCashFlow.totalIncome) : 0;
+        const finalSavingsRate = finalIncome > 0 ? (finalCashFlow / finalIncome) * 100 : 0;
+        const finalLiquid = ledgerNetWorth ? (Number(ledgerNetWorth.assets) - snap.investedAssets) : snap.liquidAssets;
 
-    // Fixed calculations with proper types and property checks
-    const monthlyTransactions = (data as any).transactions || [];
-    const monthlyIncome = monthlyTransactions
-        .filter((t: any) => t.type === 'income' && (t.date || '').startsWith(currentDate.toISOString().slice(0, 7)))
-        .reduce((sum: number, t: any) => sum + t.amount, 0);
-
-    const monthlyExpenses = monthlyTransactions
-        .filter((t: any) => t.type === 'expense' && (t.date || '').startsWith(currentDate.toISOString().slice(0, 7)))
-        .reduce((sum: number, t: any) => sum + t.amount, 0);
-
-    const cashFlow = monthlyIncome - monthlyExpenses;
-    const savingsRate = monthlyIncome > 0 ? (cashFlow / monthlyIncome) * 100 : 0;
+        return {
+            liquidAssets: Math.max(0, finalLiquid),
+            investedAssets: snap.investedAssets,
+            materialAssets: snap.materialAssets,
+            dailyInvestment: snap.dailyInvestment,
+            netWorth: finalNetWorth,
+            cashFlow: finalCashFlow,
+            savingsRate: finalSavingsRate
+        };
+    })();
 
     return (
         <div className="max-w-[1600px] mx-auto p-6 md:p-8 space-y-8 pb-32">

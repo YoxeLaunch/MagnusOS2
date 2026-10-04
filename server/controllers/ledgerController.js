@@ -6,7 +6,9 @@ import {
     Payee,
     DailyTransaction,
     toMinorUnits,
+    toMinorUnitsBigInt,
     fromMinorUnits,
+    minorToDecimalString,
     sequelize
 } from '../models/index.js';
 import { getEffectiveUserId } from '../middleware/auth.js';
@@ -109,17 +111,17 @@ export const createTransaction = async (req, res) => {
             });
         }
 
-        // Validate lines sum to 0 in minor units
-        let totalMinor = 0;
+        // Validate lines sum to 0 in minor units using exact BigInt parser
+        let totalMinor = 0n;
         for (const line of lines) {
             if (line.amount === undefined || line.amount === null || isNaN(Number(line.amount))) {
                 await t.rollback();
                 return res.status(400).json({ error: 'Cada línea debe tener un importe numérico válido' });
             }
-            totalMinor += toMinorUnits(line.amount);
+            totalMinor += toMinorUnitsBigInt(line.amount);
         }
 
-        if (totalMinor !== 0) {
+        if (totalMinor !== 0n) {
             await t.rollback();
             return res.status(400).json({
                 error: `Transaction lines must sum to 0. Current sum: ${fromMinorUnits(totalMinor)}`,
@@ -136,7 +138,6 @@ export const createTransaction = async (req, res) => {
         });
 
         const accountMap = new Map(accounts.map(a => [a.id, a]));
-        const isAdmin = req.user.role === 'admin' || req.user.username?.toLowerCase() === 'soberano';
 
         for (const accountId of accountIds) {
             const acc = accountMap.get(accountId);
@@ -150,6 +151,49 @@ export const createTransaction = async (req, res) => {
             }
         }
 
+        // Resolve and validate transaction type
+        const resolvedType = type || inferTransactionType(lines);
+
+        // Strict validation: an internal transfer MUST only involve accounts of the same user
+        if (resolvedType === 'transfer') {
+            const hasNonAccount = lines.some(l => !l.accountId);
+            if (hasNonAccount) {
+                await t.rollback();
+                return res.status(400).json({ error: 'Transferencias internas deben ser exclusivamente entre cuentas de balance' });
+            }
+        }
+
+        // Validate Payee tenant isolation if payeeId provided
+        if (payeeId) {
+            const payee = await Payee.findOne({
+                where: {
+                    id: payeeId,
+                    [Op.or]: [{ userId: effectiveUserId }, { userId: null }]
+                },
+                transaction: t
+            });
+            if (!payee) {
+                await t.rollback();
+                return res.status(400).json({ error: 'Payee no encontrado o no pertenece a este usuario' });
+            }
+        }
+
+        // Validate Category tenant isolation if categoryId provided
+        const categoryIds = [...new Set(lines.map(l => l.categoryId).filter(Boolean))];
+        if (categoryIds.length > 0) {
+            const validCategories = await Category.findAll({
+                where: {
+                    id: categoryIds,
+                    [Op.or]: [{ userId: effectiveUserId }, { userId: null }]
+                },
+                transaction: t
+            });
+            if (validCategories.length !== categoryIds.length) {
+                await t.rollback();
+                return res.status(400).json({ error: 'Una o más categorías no pertenecen a este usuario' });
+            }
+        }
+
         // Create transaction header
         const transaction = await LedgerTransaction.create({
             userId: effectiveUserId,
@@ -158,11 +202,11 @@ export const createTransaction = async (req, res) => {
             payeeName,
             memo,
             status,
-            type: type || inferTransactionType(lines),
+            type: resolvedType,
             reference
         }, { transaction: t });
 
-        // Create lines
+        // Create lines with string BIGINT amounts
         await Promise.all(
             lines.map(line =>
                 TransactionLine.create({
@@ -177,7 +221,7 @@ export const createTransaction = async (req, res) => {
             )
         );
 
-        // Update account balances atomically
+        // Update account balances atomically with BigInt arithmetic
         await updateAccountBalances(lines, accountMap, t);
 
         await t.commit();
@@ -232,11 +276,8 @@ export const createTransfer = async (req, res) => {
             return res.status(404).json({ error: 'Una o ambas cuentas no existen' });
         }
 
-        const isAdmin = req.user.role === 'admin' || req.user.username?.toLowerCase() === 'soberano';
-        if (!isAdmin) {
-            if (sourceAccount.userId !== effectiveUserId || destAccount.userId !== effectiveUserId) {
-                return res.status(403).json({ error: 'Solo puedes transferir entre cuentas propias' });
-            }
+        if (sourceAccount.userId !== effectiveUserId || destAccount.userId !== effectiveUserId) {
+            return res.status(403).json({ error: 'Solo puedes transferir entre cuentas propias del mismo usuario' });
         }
 
         // Monedas compatibles
@@ -346,10 +387,10 @@ export const deleteTransaction = async (req, res) => {
         });
         const accountMap = new Map(accounts.map(a => [a.id, a]));
 
-        // Reverse account balance updates
+        // Reverse account balance updates using exact negative BigInt delta
         const reversedLines = transaction.lines.map(line => ({
             accountId: line.accountId,
-            amount: -fromMinorUnits(line.amountMinor)
+            amountMinor: -BigInt(String(line.amountMinor))
         }));
         await updateAccountBalances(reversedLines, accountMap, t);
 
@@ -470,13 +511,17 @@ const inferTransactionType = (lines) => {
 
 const updateAccountBalances = async (lines, accountMap, transaction) => {
     for (const line of lines) {
+        if (!line.accountId) continue;
         let account = accountMap ? accountMap.get(line.accountId) : null;
         if (!account) {
             account = await Account.findByPk(line.accountId, { transaction, lock: transaction.LOCK.UPDATE });
         }
         if (account) {
-            const delta = toMinorUnits(line.amount);
-            const newBalanceMinor = (account.currentBalanceMinor || 0) + delta;
+            const deltaMinor = line.amountMinor !== undefined
+                ? BigInt(String(line.amountMinor))
+                : toMinorUnitsBigInt(line.amount);
+            const currentMinor = BigInt(account.currentBalanceMinor != null ? String(account.currentBalanceMinor) : '0');
+            const newBalanceMinor = (currentMinor + deltaMinor).toString();
             await account.update({
                 currentBalanceMinor: newBalanceMinor
             }, { transaction });
@@ -493,14 +538,16 @@ const updateAccountBalances = async (lines, accountMap, transaction) => {
 export const getCashFlowSummary = async (req, res) => {
     try {
         const effectiveUserId = getEffectiveUserId(req, req.query.userId);
-        const { from, to, currency = 'DOP', accountId, source = 'ledger' } = req.query;
+        const startDate = req.query.from || req.query.startDate;
+        const endDate = req.query.to || req.query.endDate;
+        const { currency = 'DOP', accountId, source = 'ledger' } = req.query;
 
         // Diagnostic Comparison Mode
         if (source === 'compare') {
             const comparison = await LedgerReadService.compareLegacyVsLedger({
                 userId: effectiveUserId,
-                startDate: from,
-                endDate: to,
+                startDate,
+                endDate,
                 currency
             });
             return res.json(comparison);
@@ -509,10 +556,10 @@ export const getCashFlowSummary = async (req, res) => {
         // Diagnostic Legacy Mode
         if (source === 'legacy') {
             const where = { userId: effectiveUserId };
-            if (from || to) {
+            if (startDate || endDate) {
                 where.date = {};
-                if (from) where.date[Op.gte] = from;
-                if (to) where.date[Op.lte] = to;
+                if (startDate) where.date[Op.gte] = startDate;
+                if (endDate) where.date[Op.lte] = endDate;
             }
             const txs = await DailyTransaction.findAll({ where, raw: true });
             let income = 0;
@@ -527,7 +574,7 @@ export const getCashFlowSummary = async (req, res) => {
             return res.json({
                 source: 'legacy',
                 currency,
-                period: { startDate: from || null, endDate: to || null },
+                period: { startDate: startDate || null, endDate: endDate || null },
                 totalIncome: Number(income.toFixed(2)),
                 totalExpense: Number(expense.toFixed(2)),
                 totalInvested: Number(invested.toFixed(2)),
@@ -540,8 +587,8 @@ export const getCashFlowSummary = async (req, res) => {
         const accountIds = accountId ? [accountId] : undefined;
         const result = await LedgerReadService.getCashFlow({
             userId: effectiveUserId,
-            startDate: from,
-            endDate: to,
+            startDate,
+            endDate,
             currency,
             accountIds
         });

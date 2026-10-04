@@ -1,4 +1,4 @@
-import { LedgerTransaction, TransactionLine, Account, Category, Payee, toMinorUnits, sequelize } from '../models/index.js';
+import { LedgerTransaction, TransactionLine, Account, Category, Payee, toMinorUnits, toMinorUnitsBigInt, sequelize } from '../models/index.js';
 import crypto from 'crypto';
 import { Op } from 'sequelize';
 import { getEffectiveUserId } from '../middleware/auth.js';
@@ -308,7 +308,7 @@ export const importTransactions = async (req, res) => {
 
                 // Determine transaction type and minor units
                 const type = amount > 0 ? 'income' : 'expense';
-                const minorAmt = toMinorUnits(Math.abs(amount));
+                const minorAmt = toMinorUnitsBigInt(Math.abs(amount));
 
                 // Create transaction
                 const txn = await LedgerTransaction.create({
@@ -326,7 +326,7 @@ export const importTransactions = async (req, res) => {
                     await TransactionLine.create({
                         transactionId: txn.id,
                         accountId: account.id,
-                        amountMinor: -minorAmt,
+                        amountMinor: (-minorAmt).toString(),
                         currency: account.currency
                     }, { transaction: t });
 
@@ -335,21 +335,24 @@ export const importTransactions = async (req, res) => {
                         transactionId: txn.id,
                         accountId: null,
                         categoryId: defaultExpenseCat?.id || null,
-                        amountMinor: minorAmt,
+                        amountMinor: minorAmt.toString(),
                         currency: account.currency,
                         memo: 'Importación pendiente de categorizar'
                     }, { transaction: t });
 
-                    // Update account balance
+                    // Update account balance atomically in BigInt
+                    const currentMinor = BigInt(account.currentBalanceMinor != null ? String(account.currentBalanceMinor) : '0');
+                    const newMinor = currentMinor - minorAmt;
                     await account.update({
-                        currentBalanceMinor: account.currentBalanceMinor - minorAmt
+                        currentBalanceMinor: newMinor.toString()
                     }, { transaction: t });
+                    account.currentBalanceMinor = newMinor.toString();
                 } else {
                     // Line 1: Asset account increased
                     await TransactionLine.create({
                         transactionId: txn.id,
                         accountId: account.id,
-                        amountMinor: minorAmt,
+                        amountMinor: minorAmt.toString(),
                         currency: account.currency
                     }, { transaction: t });
 
@@ -358,15 +361,18 @@ export const importTransactions = async (req, res) => {
                         transactionId: txn.id,
                         accountId: null,
                         categoryId: defaultIncomeCat?.id || null,
-                        amountMinor: -minorAmt,
+                        amountMinor: (-minorAmt).toString(),
                         currency: account.currency,
                         memo: 'Importación pendiente de categorizar'
                     }, { transaction: t });
 
-                    // Update account balance
+                    // Update account balance atomically in BigInt
+                    const currentMinor = BigInt(account.currentBalanceMinor != null ? String(account.currentBalanceMinor) : '0');
+                    const newMinor = currentMinor + minorAmt;
                     await account.update({
-                        currentBalanceMinor: account.currentBalanceMinor + minorAmt
+                        currentBalanceMinor: newMinor.toString()
                     }, { transaction: t });
+                    account.currentBalanceMinor = newMinor.toString();
                 }
 
                 existingHashes.add(hash);

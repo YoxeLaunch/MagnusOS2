@@ -115,7 +115,7 @@ const SummaryPreview: React.FC<{ draft: Partial<Transaction>; currencies: any; a
 
 export const CashFlow: React.FC = () => {
     const { t } = useTranslation(['cashflow', 'common']);
-    const [activeTab, setActiveTab] = useState<'income' | 'expense' | 'ledger'>('income');
+    const [activeTab, setActiveTab] = useState<'income' | 'expense' | 'ledger'>('ledger');
     const [showPrintModal, setShowPrintModal] = useState(false);
 
     const handlePrint = (options: PrintOptions) => {
@@ -144,33 +144,7 @@ export const CashFlow: React.FC = () => {
                 </div>
 
                 {/* Tab Switcher */}
-                <div className="flex bg-gray-100 dark:bg-gray-800 p-1 rounded-xl self-start md:self-auto" role="tablist" aria-label="Selector de tipo de transacción">
-                    <button
-                        onClick={() => setActiveTab('income')}
-                        role="tab"
-                        aria-selected={activeTab === 'income'}
-                        aria-controls="panel-income"
-                        id="tab-income"
-                        className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all ${activeTab === 'income'
-                            ? 'bg-card text-success shadow-sm'
-                            : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
-                            }`}
-                    >
-                        <ArrowUpCircle size={16} aria-hidden="true" /> {t('cashflow:incomes')}
-                    </button>
-                    <button
-                        onClick={() => setActiveTab('expense')}
-                        role="tab"
-                        aria-selected={activeTab === 'expense'}
-                        aria-controls="panel-expense"
-                        id="tab-expense"
-                        className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all ${activeTab === 'expense'
-                            ? 'bg-card text-error shadow-sm'
-                            : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
-                            }`}
-                    >
-                        <ArrowDownCircle size={16} aria-hidden="true" /> {t('cashflow:expenses')}
-                    </button>
+                <div className="flex bg-gray-100 dark:bg-gray-800 p-1 rounded-xl self-start md:self-auto" role="tablist" aria-label="Selector de flujo financiero">
                     <button
                         onClick={() => setActiveTab('ledger')}
                         role="tab"
@@ -183,6 +157,32 @@ export const CashFlow: React.FC = () => {
                             }`}
                     >
                         <ShieldCheck size={16} aria-hidden="true" /> Flujo Real (Ledger)
+                    </button>
+                    <button
+                        onClick={() => setActiveTab('income')}
+                        role="tab"
+                        aria-selected={activeTab === 'income'}
+                        aria-controls="panel-income"
+                        id="tab-income"
+                        className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all ${activeTab === 'income'
+                            ? 'bg-card text-success shadow-sm'
+                            : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
+                            }`}
+                    >
+                        <ArrowUpCircle size={16} aria-hidden="true" /> Plan Ingresos
+                    </button>
+                    <button
+                        onClick={() => setActiveTab('expense')}
+                        role="tab"
+                        aria-selected={activeTab === 'expense'}
+                        aria-controls="panel-expense"
+                        id="tab-expense"
+                        className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all ${activeTab === 'expense'
+                            ? 'bg-card text-error shadow-sm'
+                            : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
+                            }`}
+                    >
+                        <ArrowDownCircle size={16} aria-hidden="true" /> Plan Gastos
                     </button>
                 </div>
             </header>

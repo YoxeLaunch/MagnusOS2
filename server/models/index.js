@@ -5,7 +5,7 @@ import { User } from './user.js';
 import { WealthSnapshot } from './wealthSnapshot.js';
 
 // New Ledger Models (P1)
-import { Account, toMinorUnits, fromMinorUnits } from './account.js';
+import { Account, toMinorUnits, toMinorUnitsBigInt, fromMinorUnits, minorToDecimalString } from './account.js';
 import { Category, Payee } from './category.js';
 import { LedgerTransaction, TransactionLine } from './ledger.js';
 import { SavingsGoal, SavingsContribution } from './savingsGoal.js';
@@ -173,7 +173,9 @@ export {
 
     // Helpers
     toMinorUnits,
+    toMinorUnitsBigInt,
     fromMinorUnits,
+    minorToDecimalString,
 
     // Sequelize instance
     sequelize

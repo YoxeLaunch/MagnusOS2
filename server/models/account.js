@@ -80,37 +80,85 @@ export const Account = sequelize.define('Account', {
 });
 
 /**
- * Helper: Convert amount to minor units (centavos)
+ * Helper: Parse any decimal representation (string, number, bigint) directly to BigInt minor units (centavos)
+ * without intermediate floating point conversion.
+ */
+export const toMinorUnitsBigInt = (amount) => {
+    if (amount === null || amount === undefined || amount === '') return 0n;
+    if (typeof amount === 'bigint') return amount;
+
+    const str = String(amount).trim();
+    if (!str || str === 'NaN') return 0n;
+
+    const isNegative = str.startsWith('-');
+    const cleanStr = str.replace(/^[+-]/, '');
+
+    const parts = cleanStr.split('.');
+    let intPart = parts[0] ? parts[0].replace(/\D/g, '') : '0';
+    if (!intPart) intPart = '0';
+
+    let fracPart = parts[1] ? parts[1].replace(/\D/g, '') : '';
+    let fracInt = 0n;
+
+    if (fracPart.length === 0) {
+        fracInt = 0n;
+    } else if (fracPart.length === 1) {
+        fracInt = BigInt(fracPart) * 10n;
+    } else if (fracPart.length === 2) {
+        fracInt = BigInt(fracPart);
+    } else {
+        // Half-up rounding for sub-cent values (e.g. 3rd decimal >= 5)
+        const firstTwo = BigInt(fracPart.slice(0, 2));
+        const third = parseInt(fracPart[2], 10);
+        fracInt = third >= 5 ? firstTwo + 1n : firstTwo;
+    }
+
+    const minor = BigInt(intPart) * 100n + fracInt;
+    return isNegative ? -minor : minor;
+};
+
+/**
+ * Helper: Convert amount to minor units (centavos).
+ * Returns integer string to prevent floating-point and concatenation bugs.
  */
 export const toMinorUnits = (amount) => {
-    if (typeof amount === 'bigint') return amount;
-    return Math.round(Number(amount) * 100);
+    return toMinorUnitsBigInt(amount).toString();
 };
 
 /**
  * Helper: Convert minor units to exact decimal string (no floating-point rounding errors)
  */
 export const minorToDecimalString = (minor) => {
-    if (minor === null || minor === undefined) return '0.00';
-    const big = typeof minor === 'bigint' ? minor : BigInt(String(minor).split('.')[0]);
-    const sign = big < 0n ? '-' : '';
-    const abs = big < 0n ? -big : big;
-    const integerPart = abs / 100n;
-    const fractionalPart = (abs % 100n).toString().padStart(2, '0');
+    if (minor === null || minor === undefined || minor === '') return '0.00';
+    const str = String(minor).trim();
+    const isNegative = str.startsWith('-');
+    const clean = str.replace(/^[+-]/, '');
+    const big = BigInt(clean.split('.')[0] || '0');
+    const sign = isNegative ? '-' : '';
+    const integerPart = big / 100n;
+    const fractionalPart = (big % 100n).toString().padStart(2, '0');
     return `${sign}${integerPart}.${fractionalPart}`;
 };
 
 /**
- * Helper: Convert minor units to display amount
- * Returns exact decimal string if exceeding Number.MAX_SAFE_INTEGER to prevent precision loss.
+ * Helper: Convert minor units to display amount.
+ * Returns exact decimal string if exceeding safe floating point division (> 1e11 cents)
+ * to prevent centesimal precision loss (e.g. 9007199254740991 / 100 -> .9 instead of .91).
  */
 export const fromMinorUnits = (minor) => {
-    if (minor === null || minor === undefined) return 0;
-    const big = typeof minor === 'bigint' ? minor : BigInt(String(minor).split('.')[0]);
-    if (big >= BigInt(Number.MIN_SAFE_INTEGER) && big <= BigInt(Number.MAX_SAFE_INTEGER)) {
-        return Number(big) / 100;
+    if (minor === null || minor === undefined || minor === '') return 0;
+    const cleanStr = String(minor).trim();
+    const isNeg = cleanStr.startsWith('-');
+    const digitsOnly = cleanStr.replace(/^[+-]/, '').split('.')[0];
+    const big = BigInt(digitsOnly || '0');
+    const signedBig = isNeg ? -big : big;
+
+    // Threshold where Number division by 100 loses centesimal precision (approx 10 billion currency units)
+    const SAFE_CENTS_LIMIT = 10_000_000_000_00n;
+    if (signedBig >= -SAFE_CENTS_LIMIT && signedBig <= SAFE_CENTS_LIMIT) {
+        return Number(signedBig) / 100;
     }
-    return minorToDecimalString(big);
+    return minorToDecimalString(signedBig);
 };
 
 export default Account;

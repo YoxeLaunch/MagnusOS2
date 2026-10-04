@@ -262,8 +262,14 @@ export interface NetWorthResponse {
 export const cashFlowApi = {
     getCashFlow: async (params?: { startDate?: string; endDate?: string; currency?: string; source?: 'ledger' | 'legacy' | 'compare' }): Promise<CashFlowResponse> => {
         const search = new URLSearchParams();
-        if (params?.startDate) search.set('startDate', params.startDate);
-        if (params?.endDate) search.set('endDate', params.endDate);
+        if (params?.startDate) {
+            search.set('startDate', params.startDate);
+            search.set('from', params.startDate);
+        }
+        if (params?.endDate) {
+            search.set('endDate', params.endDate);
+            search.set('to', params.endDate);
+        }
         if (params?.currency) search.set('currency', params.currency);
         if (params?.source) search.set('source', params.source);
         const res = await apiFetch(`${API_BASE}/cashflow?${search.toString()}`);
