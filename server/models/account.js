@@ -85,10 +85,15 @@ export const Account = sequelize.define('Account', {
  */
 export const toMinorUnitsBigInt = (amount) => {
     if (amount === null || amount === undefined || amount === '') return 0n;
-    if (typeof amount === 'bigint') return amount;
+    if (typeof amount === 'bigint') {
+        if (amount < -9223372036854775808n || amount > 9223372036854775807n) {
+            throw new RangeError('Monetary minor units exceed PostgreSQL BIGINT range');
+        }
+        return amount;
+    }
 
     const str = String(amount).trim();
-    if (!str || str === 'NaN') return 0n;
+    if (!str) return 0n;
     if (!/^[+-]?\d+(?:\.\d+)?$/.test(str)) {
         throw new TypeError(`Invalid decimal monetary amount: ${str}`);
     }
@@ -117,7 +122,11 @@ export const toMinorUnitsBigInt = (amount) => {
     }
 
     const minor = BigInt(intPart) * 100n + fracInt;
-    return isNegative ? -minor : minor;
+    const signedMinor = isNegative ? -minor : minor;
+    if (signedMinor < -9223372036854775808n || signedMinor > 9223372036854775807n) {
+        throw new RangeError('Monetary amount exceeds PostgreSQL BIGINT range');
+    }
+    return signedMinor;
 };
 
 /**
@@ -156,12 +165,25 @@ export const fromMinorUnits = (minor) => {
     const big = BigInt(digitsOnly || '0');
     const signedBig = isNeg ? -big : big;
 
-    // Threshold where Number division by 100 loses centesimal precision (approx 10 billion currency units)
-    const SAFE_CENTS_LIMIT = 10_000_000_000_00n;
+    // Keep two decimal places stable when rendered as Number; larger values stay strings.
+    const SAFE_CENTS_LIMIT = 1_000_000_000_000n;
     if (signedBig >= -SAFE_CENTS_LIMIT && signedBig <= SAFE_CENTS_LIMIT) {
         return Number(signedBig) / 100;
     }
     return minorToDecimalString(signedBig);
+};
+
+/**
+ * Convert exact minor units for algorithms that intrinsically require Number.
+ * Refuses unsafe values instead of silently losing cents.
+ */
+export const minorUnitsToSafeNumber = (minor, label = 'monetary value') => {
+    const value = BigInt(String(minor ?? 0));
+    const limit = BigInt(Number.MAX_SAFE_INTEGER);
+    if (value < -limit || value > limit) {
+        throw new RangeError(`${label} exceeds JavaScript safe integer range`);
+    }
+    return Number(value) / 100;
 };
 
 export default Account;

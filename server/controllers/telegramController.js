@@ -1,6 +1,7 @@
 import { User, Transaction, DailyTransaction } from '../models/index.js';
 import TelegramLink from '../models/TelegramLink.js';
 import bcrypt from 'bcryptjs';
+import { fromMinorUnits } from '../models/account.js';
 
 /**
  * Link a Telegram chat ID to a Magnus username
@@ -117,16 +118,20 @@ export const getReport = async (req, res) => {
         const dailyTransactions = await DailyTransaction.findAll({ where: { userId: username } });
 
         // Calculate totals
-        const totalIncome = transactions
+        const totalIncomeMinor = transactions
             .filter(t => t.type === 'income')
-            .reduce((sum, t) => sum + (parseFloat(t.amount) || 0), 0);
+            .reduce((sum, t) => sum + BigInt(String(t.amountMinor ?? 0)), 0n);
 
-        const totalExpenses = transactions
+        const totalExpensesMinor = transactions
             .filter(t => t.type === 'expense')
-            .reduce((sum, t) => sum + (parseFloat(t.amount) || 0), 0);
+            .reduce((sum, t) => sum + BigInt(String(t.amountMinor ?? 0)), 0n);
 
-        const dailyTotal = dailyTransactions
-            .reduce((sum, t) => sum + (parseFloat(t.amount) || 0), 0);
+        const dailyTotalMinor = dailyTransactions
+            .reduce((sum, t) => sum + BigInt(String(t.amountMinor ?? 0)), 0n);
+        const totalIncome = fromMinorUnits(totalIncomeMinor);
+        const totalExpenses = fromMinorUnits(totalExpensesMinor);
+        const dailyTotal = fromMinorUnits(dailyTotalMinor);
+        const balance = fromMinorUnits(totalIncomeMinor - totalExpensesMinor);
 
         // Format the report
         const report = {
@@ -135,7 +140,7 @@ export const getReport = async (req, res) => {
             summary: {
                 totalIncome,
                 totalExpenses,
-                balance: totalIncome - totalExpenses,
+                balance,
                 dailyTracking: dailyTotal,
                 transactionCount: transactions.length,
                 dailyCount: dailyTransactions.length
@@ -146,12 +151,12 @@ export const getReport = async (req, res) => {
 👤 Usuario: ${user.name || username}
 
 📈 *Resumen*
-• Ingresos: +$${totalIncome.toLocaleString()}
-• Gastos: -$${totalExpenses.toLocaleString()}
-• Balance: $${(totalIncome - totalExpenses).toLocaleString()}
+• Ingresos: +$${String(totalIncome)}
+• Gastos: -$${String(totalExpenses)}
+• Balance: $${String(balance)}
 
 📅 *Seguimiento Diario*
-• Total: $${dailyTotal.toLocaleString()}
+• Total: $${String(dailyTotal)}
 • Registros: ${dailyTransactions.length}
 
 📝 Transacciones totales: ${transactions.length}

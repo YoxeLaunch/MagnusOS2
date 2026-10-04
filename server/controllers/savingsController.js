@@ -3,6 +3,22 @@ import { getEffectiveUserId } from '../middleware/auth.js';
 import { Op } from 'sequelize';
 import { LedgerReadService } from '../services/ledgerReadService.js';
 
+const savingsRateFromMinor = (savedMinor, incomeMinor) => {
+    if (incomeMinor <= 0n) return 0;
+    const tenths = savedMinor * 1000n / incomeMinor;
+    if (tenths < BigInt(Number.MIN_SAFE_INTEGER) || tenths > BigInt(Number.MAX_SAFE_INTEGER)) {
+        throw new RangeError('Savings rate exceeds JavaScript safe integer range');
+    }
+    return Number(tenths) / 10;
+};
+
+const progressFromMinor = (currentMinor, targetMinor, decimals = 2) => {
+    if (targetMinor <= 0n || currentMinor <= 0n) return 0;
+    if (currentMinor >= targetMinor) return 100;
+    const factor = decimals === 1 ? 1000n : 10000n;
+    return Number(currentMinor * factor / targetMinor) / (decimals === 1 ? 10 : 100);
+};
+
 // ========================================
 // GET /api/finanza/savings-goals
 // List all savings goals for a user
@@ -34,7 +50,7 @@ export const getSavingsGoals = async (req, res) => {
             const currentAmount = fromMinorUnits(activeMinor);
             const targetBig = BigInt(json.targetAmountMinor != null ? String(json.targetAmountMinor) : '0');
             const currentBig = BigInt(activeMinor != null ? String(activeMinor) : '0');
-            const progress = targetBig > 0n ? Math.min(100, Math.round(Number(currentBig * 10000n / targetBig)) / 100) : 0;
+            const progress = progressFromMinor(currentBig, targetBig);
             const isCompleted = targetBig > 0n && currentBig >= targetBig;
 
             // Calculate monthly contribution needed
@@ -131,7 +147,7 @@ export const createSavingsGoal = async (req, res) => {
             isCompleted: targetMinor > 0n && initialAmountMinor >= targetMinor
         });
 
-        const progress = targetMinor > 0n ? Math.min(100, Math.round(Number(initialAmountMinor * 10000n / targetMinor)) / 100) : 0;
+        const progress = progressFromMinor(initialAmountMinor, targetMinor);
 
         res.status(201).json({
             ...goal.toJSON(),
@@ -313,7 +329,7 @@ export const addContribution = async (req, res) => {
 
         await t.commit();
 
-        const progress = targetAmountMinor > 0n ? Math.min(100, Math.round(Number(newAmountMinor * 10000n / targetAmountMinor)) / 100) : 0;
+        const progress = progressFromMinor(newAmountMinor, targetAmountMinor);
 
         res.status(201).json({
             contribution: {
@@ -367,9 +383,7 @@ export const getGoalProgress = async (req, res) => {
         const remaining = Math.max(0, targetAmount - currentAmount);
         const targetBig = BigInt(targetMinor);
         const currentBig = BigInt(activeMinor);
-        const progress = targetBig > 0n
-            ? Math.min(100, Math.round(Number(currentBig * 1000n / targetBig)) / 10)
-            : 0;
+        const progress = progressFromMinor(currentBig, targetBig, 1);
         const isCompleted = targetBig > 0n && currentBig >= targetBig;
 
         // Calculate projections
@@ -448,7 +462,11 @@ export const getSavingsRate = async (req, res) => {
             include: [{ model: SavingsGoal, as: 'goal', where: { userId: effectiveUserId }, attributes: [] }],
             where: { date: { [Op.gte]: monthStart, [Op.lte]: monthEnd } }
         });
-        const totalGoalContributions = goalContributions.reduce((sum, c) => sum + fromMinorUnits(c.amountMinor), 0);
+        const totalGoalContributionsMinor = goalContributions.reduce(
+            (sum, contribution) => sum + BigInt(String(contribution.amountMinor ?? 0)),
+            0n
+        );
+        const totalGoalContributions = fromMinorUnits(totalGoalContributionsMinor);
 
         // Controlled Strangler Switch:
         let useLedger = source === 'ledger';
@@ -476,20 +494,20 @@ export const getSavingsRate = async (req, res) => {
                 endDate: monthEnd
             });
 
-            const totalIncome = ledgerCashFlow.totalIncome;
-            const totalExpense = ledgerCashFlow.totalExpense;
-            const totalInvested = ledgerCashFlow.totalInvested;
-            const totalSaved = ledgerCashFlow.netCashFlow;
-            const savingsRate = totalIncome > 0 ? (totalSaved / totalIncome) * 100 : 0;
+            const incomeMinor = BigInt(ledgerCashFlow.totalIncomeMinor);
+            const expenseMinor = BigInt(ledgerCashFlow.totalExpenseMinor);
+            const investedMinor = BigInt(ledgerCashFlow.totalInvestedMinor);
+            const savedMinor = BigInt(ledgerCashFlow.netCashFlowMinor);
+            const savingsRate = savingsRateFromMinor(savedMinor, incomeMinor);
 
             return res.json({
                 source: 'ledger',
                 month: targetMonth,
-                totalIncome,
-                totalExpense,
-                totalInvested,
-                totalSaved,
-                savingsRate: Math.round(savingsRate * 10) / 10,
+                totalIncome: fromMinorUnits(incomeMinor),
+                totalExpense: fromMinorUnits(expenseMinor),
+                totalInvested: fromMinorUnits(investedMinor),
+                totalSaved: fromMinorUnits(savedMinor),
+                savingsRate,
                 totalGoalContributions
             });
         }
@@ -502,27 +520,28 @@ export const getSavingsRate = async (req, res) => {
             }
         });
 
-        let totalIncome = 0;
-        let totalExpense = 0;
-        let totalInvested = 0;
+        let totalIncomeMinor = 0n;
+        let totalExpenseMinor = 0n;
+        let totalInvestedMinor = 0n;
         transactions.forEach(t => {
-            const amount = Number(t.amount) || 0;
-            if (t.type === 'income') totalIncome += amount;
-            else if (t.type === 'investment') totalInvested += amount;
-            else totalExpense += amount;
+            const amountMinor = BigInt(String(t.amountMinor ?? 0));
+            const absoluteMinor = amountMinor < 0n ? -amountMinor : amountMinor;
+            if (t.type === 'income') totalIncomeMinor += absoluteMinor;
+            else if (t.type === 'investment') totalInvestedMinor += absoluteMinor;
+            else totalExpenseMinor += absoluteMinor;
         });
 
-        const totalSaved = totalIncome - totalExpense - totalInvested;
-        const savingsRate = totalIncome > 0 ? (totalSaved / totalIncome) * 100 : 0;
+        const totalSavedMinor = totalIncomeMinor - totalExpenseMinor - totalInvestedMinor;
+        const savingsRate = savingsRateFromMinor(totalSavedMinor, totalIncomeMinor);
 
         res.json({
             source: 'legacy',
             month: targetMonth,
-            totalIncome: Number(totalIncome.toFixed(2)),
-            totalExpense: Number(totalExpense.toFixed(2)),
-            totalInvested: Number(totalInvested.toFixed(2)),
-            totalSaved: Number(totalSaved.toFixed(2)),
-            savingsRate: Math.round(savingsRate * 10) / 10,
+            totalIncome: fromMinorUnits(totalIncomeMinor),
+            totalExpense: fromMinorUnits(totalExpenseMinor),
+            totalInvested: fromMinorUnits(totalInvestedMinor),
+            totalSaved: fromMinorUnits(totalSavedMinor),
+            savingsRate,
             totalGoalContributions
         });
     } catch (error) {

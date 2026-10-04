@@ -21,7 +21,9 @@
     "test:ui": "jest src/__tests__",
     "mcp": "node server/mcp-server.js",
     "db:migrate": "node scripts/migrate.js up",
-    "db:status": "node scripts/migrate.js status"
+    "db:status": "node scripts/migrate.js status",
+    "db:baseline": "node scripts/migrate.js baseline 000_base_schema.sql --confirm-baseline",
+    "db:drift": "node scripts/schema-drift.js"
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",

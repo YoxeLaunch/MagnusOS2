@@ -580,23 +580,29 @@ export const getCashFlowSummary = async (req, res) => {
                 if (endDate) where.date[Op.lte] = endDate;
             }
             const txs = await DailyTransaction.findAll({ where, raw: true });
-            let income = 0;
-            let expense = 0;
-            let invested = 0;
+            let incomeMinor = 0n;
+            let expenseMinor = 0n;
+            let investedMinor = 0n;
             txs.forEach(t => {
-                const amt = Number(t.amount) || 0;
-                if (t.type === 'income') income += amt;
-                else if (t.type === 'expense') expense += amt;
-                else if (t.type === 'investment') invested += amt;
+                const amountMinor = BigInt(String(t.amountMinor ?? t.amount_minor ?? 0));
+                const absoluteMinor = amountMinor < 0n ? -amountMinor : amountMinor;
+                if (t.type === 'income') incomeMinor += absoluteMinor;
+                else if (t.type === 'expense') expenseMinor += absoluteMinor;
+                else if (t.type === 'investment') investedMinor += absoluteMinor;
             });
+            const netMinor = incomeMinor - expenseMinor - investedMinor;
             return res.json({
                 source: 'legacy',
                 currency,
                 period: { startDate: startDate || null, endDate: endDate || null },
-                totalIncome: Number(income.toFixed(2)),
-                totalExpense: Number(expense.toFixed(2)),
-                totalInvested: Number(invested.toFixed(2)),
-                netCashFlow: Number((income - expense - invested).toFixed(2)),
+                totalIncomeMinor: incomeMinor.toString(),
+                totalExpenseMinor: expenseMinor.toString(),
+                totalInvestedMinor: investedMinor.toString(),
+                netCashFlowMinor: netMinor.toString(),
+                totalIncome: fromMinorUnits(incomeMinor),
+                totalExpense: fromMinorUnits(expenseMinor),
+                totalInvested: fromMinorUnits(investedMinor),
+                netCashFlow: fromMinorUnits(netMinor),
                 transactionCount: txs.length
             });
         }
@@ -620,4 +626,3 @@ export const getCashFlowSummary = async (req, res) => {
         res.status(500).json({ error: error.message });
     }
 };
-

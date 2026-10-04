@@ -47,16 +47,9 @@ export async function initializeTestPostgres() {
     }
 
     initPromise = (async () => {
-        // Use an advisory lock in PostgreSQL so multiple concurrent test processes never collide on DDL
-        await sequelize.query('SELECT pg_advisory_lock(987654321);');
-
-        try {
-            // Apply all versioned migrations via MigrationRunner (Migration-First)
-            const runner = new MigrationRunner(sequelize);
-            await runner.up();
-        } finally {
-            await sequelize.query('SELECT pg_advisory_unlock(987654321);').catch(() => {});
-        }
+        // MigrationRunner owns one physical connection for lock → migration → unlock.
+        const runner = new MigrationRunner(sequelize);
+        await runner.up();
 
         return true;
     })();

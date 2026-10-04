@@ -1,4 +1,5 @@
 import { DailyTransaction, CurrencyHistory, Transaction } from '../models/index.js';
+import { fromMinorUnits } from '../models/account.js';
 import { getEffectiveUserId } from '../middleware/auth.js';
 
 // --- RATES CACHE ---
@@ -35,7 +36,8 @@ export const getTransactions = async (req, res) => {
                 id: t.id,
                 userId: t.userId,
                 name: t.name || 'Sin Nombre',
-                amount: Number(t.amount) || 0,
+                amount: fromMinorUnits(t.amountMinor),
+                amountMinor: String(t.amountMinor),
                 frequency: t.frequency || 'Mensual',
                 category: t.category || 'General',
                 currency: t.currency || 'DOP',
@@ -79,13 +81,10 @@ export const updateTransaction = async (req, res) => {
         delete data.userId;
         delete data.id;
 
-        const [updated] = await Transaction.update(data, { where });
-        if (updated) {
-            const result = await Transaction.findOne({ where: { id } });
-            res.json(result);
-        } else {
-            res.status(404).json({ error: 'Not found' });
-        }
+        const transaction = await Transaction.findOne({ where });
+        if (!transaction) return res.status(404).json({ error: 'Not found' });
+        await transaction.update(data);
+        res.json(transaction);
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
@@ -122,7 +121,8 @@ export const getDailyTransactions = async (req, res) => {
             id: tx.id,
             userId: tx.userId,
             date: tx.date, // YYYY-MM-DD
-            amount: Number(tx.amount) || 0,
+            amount: fromMinorUnits(tx.amountMinor),
+            amountMinor: String(tx.amountMinor),
             description: tx.description || 'Sin descripción',
             type: tx.type,
             category: tx.category || 'Varios'
@@ -159,13 +159,10 @@ export const updateDailyTransaction = async (req, res) => {
         delete data.userId;
         delete data.id;
 
-        const [updated] = await DailyTransaction.update(data, { where });
-        if (updated) {
-            const result = await DailyTransaction.findOne({ where: { id } });
-            res.json(result);
-        } else {
-            res.status(404).json({ error: 'Not found' });
-        }
+        const transaction = await DailyTransaction.findOne({ where });
+        if (!transaction) return res.status(404).json({ error: 'Not found' });
+        await transaction.update(data);
+        res.json(transaction);
     } catch (error) {
         res.status(500).json({ error: error.message });
     }

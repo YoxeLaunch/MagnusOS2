@@ -1,5 +1,6 @@
 import { DailyTransaction, WealthSnapshot, CurrencyHistory } from '../models/index.js';
 import { Op } from 'sequelize';
+import { minorUnitsToSafeNumber } from '../models/account.js';
 
 // Convert a transaction amount to DOP using the latest known exchange rate for its currency.
 const getLatestRates = async () => {
@@ -134,7 +135,7 @@ export const getAnual = async (req, res) => {
         const allCycles = new Set();
 
         yearTxs.forEach(t => {
-            const amount = toDOP(Number(t.amount), t.currency, rates);
+            const amount = toDOP(minorUnitsToSafeNumber(t.amountMinor, 'Command center transaction'), t.currency, rates);
             const type = t.type;
             const cycleId = getCycleId(t.date);
             const cycleEndYear = getCycleFromId(cycleId).end.getFullYear();
@@ -178,7 +179,7 @@ export const getAnual = async (req, res) => {
         // Cash global
         let cashGlobal = 0;
         transactions.forEach(t => {
-             const amt = toDOP(Number(t.amount), t.currency, rates);
+             const amt = toDOP(minorUnitsToSafeNumber(t.amountMinor, 'Command center transaction'), t.currency, rates);
              if (t.type==='income') cashGlobal += amt;
              else if(t.type==='expense'||t.type==='gasto') cashGlobal -= amt;
              else if(t.type==='investment'||t.type==='inversion') cashGlobal -= amt;
@@ -237,7 +238,7 @@ export const getMensual = async (req, res) => {
         let inversionAcumulada = 0;
 
         transactions.forEach(t => {
-            const amt = toDOP(Number(t.amount), t.currency, rates);
+            const amt = toDOP(minorUnitsToSafeNumber(t.amountMinor, 'Command center transaction'), t.currency, rates);
             const type = t.type;
             const tDate = new Date(t.date);
             const tCycleId = getCycleId(t.date);

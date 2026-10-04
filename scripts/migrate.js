@@ -4,6 +4,7 @@ import { MigrationRunner } from '../server/services/migrationRunner.js';
 
 const command = process.argv[2] || 'status';
 const dryRun = process.argv.includes('--dry-run');
+const confirmBaseline = process.argv.includes('--confirm-baseline');
 
 async function main() {
     const runner = new MigrationRunner(sequelize);
@@ -22,9 +23,15 @@ async function main() {
             console.log(`=== RUNNING MIGRATIONS ${dryRun ? '(DRY RUN)' : ''} ===`);
             const res = await runner.up({ dryRun });
             console.log(`Applied ${res.appliedCount} migration(s).`);
-            res.results.forEach(r => console.log(` - ${r.name}: ${r.status}`));
+            res.results.forEach(r => {
+                console.log(` - ${r.name}: ${r.status}`);
+            });
+        } else if (command === 'baseline') {
+            const name = process.argv[3];
+            const result = await runner.markBaseline(name, { confirmed: confirmBaseline });
+            console.log(`${result.name}: ${result.status}`);
         } else {
-            console.error(`Unknown command: ${command}. Available: status, up [--dry-run]`);
+            console.error(`Unknown command: ${command}. Available: status, up [--dry-run], baseline 000_base_schema.sql --confirm-baseline`);
             process.exit(1);
         }
     } catch (err) {

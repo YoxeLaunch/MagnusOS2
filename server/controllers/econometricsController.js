@@ -19,7 +19,12 @@ import {
     aggregateDailyFlows,
     aggregateExpensesByCategory
 } from '../services/econometricsService.js';
-import { Op } from 'sequelize';
+import { minorUnitsToSafeNumber } from '../models/account.js';
+
+const sumAccountBalancesForAnalytics = accounts => {
+    const totalMinor = accounts.reduce((sum, account) => sum + BigInt(String(account.currentBalanceMinor ?? 0)), 0n);
+    return minorUnitsToSafeNumber(totalMinor, 'Econometrics account balance');
+};
 
 // ========================================
 // GET /api/econometrics/dashboard
@@ -50,8 +55,7 @@ export const getDashboard = async (req, res) => {
                 attributes: ['currentBalanceMinor'],
                 raw: true
             });
-            // fromMinorUnits equivalent: divide by 100
-            currentBalance = accounts.reduce((sum, a) => sum + (Number(a.currentBalanceMinor) || 0) / 100, 0);
+            currentBalance = sumAccountBalancesForAnalytics(accounts);
         } catch (err) {
             console.warn('[Econometrics] Account fetch fallback:', err.message);
         }
@@ -105,7 +109,7 @@ export const getForecast = async (req, res) => {
                 attributes: ['currentBalanceMinor'],
                 raw: true
             });
-            currentBalance = accounts.reduce((sum, a) => sum + (Number(a.currentBalanceMinor) || 0) / 100, 0);
+            currentBalance = sumAccountBalancesForAnalytics(accounts);
         } catch (err) {
             console.warn('[Econometrics] Account fetch fallback:', err.message);
         }

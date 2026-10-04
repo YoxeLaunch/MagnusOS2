@@ -5,7 +5,7 @@ import { User } from './user.js';
 import { WealthSnapshot } from './wealthSnapshot.js';
 
 // New Ledger Models (P1)
-import { Account, toMinorUnits, toMinorUnitsBigInt, fromMinorUnits, minorToDecimalString } from './account.js';
+import { Account, toMinorUnits, toMinorUnitsBigInt, fromMinorUnits, minorToDecimalString, minorUnitsToSafeNumber } from './account.js';
 import { Category, Payee } from './category.js';
 import { LedgerTransaction, TransactionLine } from './ledger.js';
 import { SavingsGoal, SavingsContribution } from './savingsGoal.js';
@@ -75,9 +75,9 @@ export const initDb = async () => {
             // PostgreSQL Schema Governance:
             // En producción: NUNCA ejecutar sequelize.sync(). Gobernanza estricta por migraciones.
             if (process.env.NODE_ENV === 'production') {
-                console.log('[DB] Production environment detected: Schema governance via migrations only (no sync).');
+                console.log('[DB] Production environment detected: verifying migration state (read-only).');
                 const runner = new MigrationRunner(sequelize);
-                await runner.up();
+                await runner.assertUpToDate();
             } else {
                 // En desarrollo / test: aplica migraciones versionadas de forma determinista
                 const runner = new MigrationRunner(sequelize);
@@ -86,10 +86,6 @@ export const initDb = async () => {
         }
 
         console.log(`[DB] Database initialized and migrations verified (${dbInfo.type.toUpperCase()})`);
-
-        // Índices únicos seguros para integridad de series temporales
-        await sequelize.query('CREATE UNIQUE INDEX IF NOT EXISTS uq_fuel_price_fuel_validfrom ON fuel_price_observations(fuel_id, valid_from);').catch(() => {});
-        await sequelize.query('CREATE UNIQUE INDEX IF NOT EXISTS uq_fuel_policy_valid_from ON fuel_policy_weeks(valid_from);').catch(() => {});
 
         // Seed default categories if none exist
         await seedDefaultCategories();
@@ -185,6 +181,7 @@ export {
     toMinorUnitsBigInt,
     fromMinorUnits,
     minorToDecimalString,
+    minorUnitsToSafeNumber,
 
     // Schema Governance & Migrations
     MigrationRunner,

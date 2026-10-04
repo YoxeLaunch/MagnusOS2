@@ -20,6 +20,7 @@ import { DailyTransaction, User } from '../models/index.js';
 import { initDb } from '../models/index.js';
 import { saveSnapshot, getSnapshot, isStale } from '../services/snapshotService.js';
 import { Op } from 'sequelize';
+import { minorToDecimalString, toMinorUnitsBigInt } from '../models/account.js';
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 let genAI = null;
@@ -63,37 +64,45 @@ const getPeriodRange = (period) => {
 // Utility: Compute metrics from transactions
 // ========================================
 const computeMetrics = (transactions) => {
-    let totalIncome = 0;
-    let totalExpenses = 0;
+    let totalIncomeMinor = 0n;
+    let totalExpensesMinor = 0n;
     const categoryMap = {};
 
     for (const tx of transactions) {
-        const amount = parseFloat(tx.amount) || 0;
+        const amountMinor = tx.amountMinor == null
+            ? toMinorUnitsBigInt(tx.amount ?? 0)
+            : BigInt(String(tx.amountMinor));
         const desc = tx.description || 'Sin categoría';
 
-        if (amount > 0) {
-            totalIncome += amount;
+        const absoluteMinor = amountMinor < 0n ? -amountMinor : amountMinor;
+        const isIncome = tx.type === 'income' || tx.type === 'ingreso';
+        if (isIncome) {
+            totalIncomeMinor += absoluteMinor;
         } else {
-            totalExpenses += Math.abs(amount);
+            totalExpensesMinor += absoluteMinor;
             const cat = desc.split(' ')[0] || 'Otros'; // Simple categorization
-            categoryMap[cat] = (categoryMap[cat] || 0) + Math.abs(amount);
+            categoryMap[cat] = (categoryMap[cat] || 0n) + absoluteMinor;
         }
     }
 
-    const balance = totalIncome - totalExpenses;
-    const savingsRate = totalIncome > 0 ? ((balance / totalIncome) * 100).toFixed(1) : 0;
+    const balanceMinor = totalIncomeMinor - totalExpensesMinor;
+    const savingsRateTenths = totalIncomeMinor > 0n ? balanceMinor * 1000n / totalIncomeMinor : 0n;
+    if (savingsRateTenths < BigInt(Number.MIN_SAFE_INTEGER) || savingsRateTenths > BigInt(Number.MAX_SAFE_INTEGER)) {
+        throw new RangeError('Monthly savings rate exceeds JavaScript safe integer range');
+    }
+    const savingsRate = Number(savingsRateTenths) / 10;
 
     // Top 5 categories by expense
     const topCategories = Object.entries(categoryMap)
-        .sort(([, a], [, b]) => b - a)
+        .sort(([, a], [, b]) => (a === b ? 0 : a > b ? -1 : 1))
         .slice(0, 5)
-        .map(([name, amount]) => ({ name, amount: amount.toFixed(2) }));
+        .map(([name, amount]) => ({ name, amount: minorToDecimalString(amount) }));
 
     return {
-        totalIncome: totalIncome.toFixed(2),
-        totalExpenses: totalExpenses.toFixed(2),
-        balance: balance.toFixed(2),
-        savingsRate: parseFloat(savingsRate),
+        totalIncome: minorToDecimalString(totalIncomeMinor),
+        totalExpenses: minorToDecimalString(totalExpensesMinor),
+        balance: minorToDecimalString(balanceMinor),
+        savingsRate,
         topCategories,
         txCount: transactions.length
     };

@@ -13,6 +13,7 @@ import {
     aggregateMonthly,
     aggregateDailyFlows
 } from '../services/econometricsService.js';
+import { minorUnitsToSafeNumber, toMinorUnitsBigInt } from '../models/account.js';
 
 // ========================================
 // Configuration
@@ -74,7 +75,8 @@ const computeMetrics = (transactions) => {
     const categoryMap = {};
 
     for (const tx of transactions) {
-        const amount = parseFloat(tx.amount) || 0;
+        const exactMinor = tx.amountMinor == null ? toMinorUnitsBigInt(tx.amount ?? 0) : BigInt(String(tx.amountMinor));
+        const amount = Math.abs(minorUnitsToSafeNumber(exactMinor, 'AI transaction amount'));
         const isExpense = (tx.type === 'expense') || (tx.type === 'gasto');
         const isIncome = (tx.type === 'income') || (tx.type === 'ingreso');
         const cat = tx.category || tx.description?.split(' ')[0] || 'Otros';
@@ -150,7 +152,8 @@ const buildEconometricContext = async (userId) => {
                 attributes: ['currentBalanceMinor'],
                 raw: true
             });
-            currentBalance = accounts.reduce((sum, a) => sum + (Number(a.currentBalanceMinor) || 0) / 100, 0);
+            const totalMinor = accounts.reduce((sum, account) => sum + BigInt(String(account.currentBalanceMinor ?? 0)), 0n);
+            currentBalance = minorUnitsToSafeNumber(totalMinor, 'AI econometrics account balance');
         } catch { /* fallback */ }
         const forecast = forecastLiquidity(dailyFlows, currentBalance);
 
@@ -606,4 +609,3 @@ export const deleteSnapshot = async (req, res) => {
         res.status(500).json({ error: 'Error al eliminar snapshot.' });
     }
 };
-
