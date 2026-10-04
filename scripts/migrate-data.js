@@ -240,7 +240,8 @@ const migrateDailyTransactions = async (sourceDb, targetDb, accountMap, category
         const categoryId = categoryMap[categoryKey];
 
         const hash = generateHash(tx.date, tx.amount, tx.concept);
-        const amount = tx.type === 'expense' ? -Math.abs(tx.amount) : Math.abs(tx.amount);
+        const isOutflow = tx.type === 'expense' || tx.type === 'investment';
+        const amount = isOutflow ? -Math.abs(tx.amount) : Math.abs(tx.amount);
 
         if (!dryRun) {
             try {
