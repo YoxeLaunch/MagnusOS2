@@ -478,9 +478,7 @@ export const getSavingsRate = async (req, res) => {
                 endDate: monthEnd
             });
 
-            if (comparison.classification === 'EXACT_MATCH') {
-                useLedger = true;
-            } else if (comparison.legacy.transactionCount === 0 && comparison.ledger.transactionCount > 0) {
+            if (comparison.ledger.transactionCount > 0 || comparison.classification === 'EXACT_MATCH') {
                 useLedger = true;
             } else {
                 useLedger = false;

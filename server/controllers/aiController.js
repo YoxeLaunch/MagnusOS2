@@ -1,6 +1,7 @@
-import { DailyTransaction, FinancialAnomaly, Account } from '../models/index.js';
+import { FinancialAnomaly, Account } from '../models/index.js';
 import { getEffectiveUserId } from '../middleware/auth.js';
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import { LedgerAnalyticsService } from '../services/ledgerAnalyticsService.js';
 import {
     getSnapshot,
     saveSnapshot,
@@ -131,30 +132,15 @@ const computeMetrics = (transactions) => {
  */
 const buildEconometricContext = async (userId) => {
     try {
-        const transactions = await DailyTransaction.findAll({
-            where: { userId },
-            order: [['date', 'ASC']],
-            raw: true
-        });
+        const dataset = await LedgerAnalyticsService.getEconometricsDataset({ userId });
+        const { monthlyData, dailyFlows, currentBalance, totalTransactions } = dataset;
 
-        if (transactions.length < 10) return '';
+        if (totalTransactions < 10) return '';
 
         // MPC
-        const monthlyData = aggregateMonthly(transactions);
         const mpc = calculateMPC(monthlyData);
 
         // Forecast summary
-        const dailyFlows = aggregateDailyFlows(transactions);
-        let currentBalance = 0;
-        try {
-            const accounts = await Account.findAll({
-                where: { userId, isArchived: false },
-                attributes: ['currentBalanceMinor'],
-                raw: true
-            });
-            const totalMinor = accounts.reduce((sum, account) => sum + BigInt(String(account.currentBalanceMinor ?? 0)), 0n);
-            currentBalance = minorUnitsToSafeNumber(totalMinor, 'AI econometrics account balance');
-        } catch { /* fallback */ }
         const forecast = forecastLiquidity(dailyFlows, currentBalance);
 
         // Pending anomalies
@@ -198,10 +184,9 @@ const buildEconometricContext = async (userId) => {
 const buildChatContext = async (userId, message, history = []) => {
     let recentTx = [];
     try {
-        recentTx = await DailyTransaction.findAll({
-            where: { userId },
-            limit: 3,
-            order: [['date', 'DESC']]
+        recentTx = await LedgerAnalyticsService.getNormalizedTimeline({
+            userId,
+            limit: 3
         });
     } catch (e) {
         console.error('[AI] DB error in chat context:', e.message);
@@ -245,10 +230,9 @@ const buildQuickContext = async (userId, message, period) => {
         // No snapshot, use last 10 transactions
         let recentTx = [];
         try {
-            recentTx = await DailyTransaction.findAll({
-                where: { userId },
-                limit: 10,
-                order: [['date', 'DESC']]
+            recentTx = await LedgerAnalyticsService.getNormalizedTimeline({
+                userId,
+                limit: 10
             });
         } catch (e) {
             console.error('[AI] DB error in quick context:', e.message);
@@ -278,10 +262,9 @@ const buildDeepContext = async (userId, message, period) => {
 
     let recentTx = [];
     try {
-        recentTx = await DailyTransaction.findAll({
-            where: { userId },
-            limit: 300,
-            order: [['date', 'DESC']]
+        recentTx = await LedgerAnalyticsService.getNormalizedTimeline({
+            userId,
+            limit: 300
         });
     } catch (e) {
         console.error('[AI] DB error in deep context:', e.message);

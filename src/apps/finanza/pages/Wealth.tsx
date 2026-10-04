@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { useData } from '../context/DataContext';
 import { getPortfolioSnapshot, formatCurrency } from '../utils/calculations';
 import { cashFlowApi, NetWorthResponse, CashFlowResponse } from '../api/finanzaApi';
+import { minorToSafeNumber, parseDecimalToSafeNumber } from '../utils/moneySafety';
 import { Building2, TrendingUp, PiggyBank, DollarSign, Wallet, ArrowUpRight, ArrowDownRight, RefreshCw, X } from 'lucide-react';
 import { MarketIntel } from '../components/MarketIntel';
 
@@ -52,15 +53,24 @@ export const Wealth: React.FC = () => {
 
     const { liquidAssets, investedAssets, materialAssets, netWorth, cashFlow, savingsRate } = (() => {
         const snap = getPortfolioSnapshot(data, dailyTransactions, currencies);
-        const finalNetWorth = ledgerNetWorth ? ledgerNetWorth.netWorth : snap.netWorth;
-        const finalCashFlow = ledgerCashFlow ? Number(ledgerCashFlow.netCashFlow) : (snap.dailyNet || 0);
-        const finalIncome = ledgerCashFlow ? Number(ledgerCashFlow.totalIncome) : 0;
+        const finalNetWorth = ledgerNetWorth
+            ? (ledgerNetWorth.netWorthMinor ? minorToSafeNumber(ledgerNetWorth.netWorthMinor, 'netWorth') : parseDecimalToSafeNumber(ledgerNetWorth.netWorth, 'netWorth'))
+            : snap.netWorth;
+        const finalCashFlow = ledgerCashFlow
+            ? (ledgerCashFlow.netCashFlowMinor ? minorToSafeNumber(ledgerCashFlow.netCashFlowMinor, 'netCashFlow') : parseDecimalToSafeNumber(ledgerCashFlow.netCashFlow, 'netCashFlow'))
+            : (snap.dailyNet || 0);
+        const finalIncome = ledgerCashFlow
+            ? (ledgerCashFlow.totalIncomeMinor ? minorToSafeNumber(ledgerCashFlow.totalIncomeMinor, 'totalIncome') : parseDecimalToSafeNumber(ledgerCashFlow.totalIncome, 'totalIncome'))
+            : 0;
         const finalSavingsRate = finalIncome > 0 ? (finalCashFlow / finalIncome) * 100 : 0;
         const ledgerInvested = ledgerNetWorth?.accounts
             .filter(account => account.type === 'investment')
-            .reduce((sum, account) => sum + Math.max(0, Number(account.balance)), 0);
+            .reduce((sum, account) => sum + Math.max(0, account.balanceMinor ? minorToSafeNumber(account.balanceMinor, 'account.balance') : parseDecimalToSafeNumber(account.balance, 'account.balance')), 0);
         const finalInvested = ledgerNetWorth ? (ledgerInvested || 0) : snap.investedAssets;
-        const finalLiquid = ledgerNetWorth ? Number(ledgerNetWorth.assets) - finalInvested : snap.liquidAssets;
+        const ledgerAssets = ledgerNetWorth
+            ? (ledgerNetWorth.assetsMinor ? minorToSafeNumber(ledgerNetWorth.assetsMinor, 'assets') : parseDecimalToSafeNumber(ledgerNetWorth.assets, 'assets'))
+            : snap.liquidAssets;
+        const finalLiquid = ledgerNetWorth ? Math.max(0, ledgerAssets - finalInvested) : snap.liquidAssets;
 
         return {
             liquidAssets: Math.max(0, finalLiquid),

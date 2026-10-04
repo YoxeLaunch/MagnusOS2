@@ -16,8 +16,9 @@
 import 'dotenv/config';
 import cron from 'node-cron';
 import { GoogleGenerativeAI } from '@google/generative-ai';
-import { DailyTransaction, User } from '../models/index.js';
+import { User } from '../models/index.js';
 import { initDb } from '../models/index.js';
+import { LedgerAnalyticsService } from '../services/ledgerAnalyticsService.js';
 import { saveSnapshot, getSnapshot, isStale } from '../services/snapshotService.js';
 import { Op } from 'sequelize';
 import { minorToDecimalString, toMinorUnitsBigInt } from '../models/account.js';
@@ -124,19 +125,15 @@ const runAnalysisForUser = async (userId, period) => {
         }
     }
 
-    // STEP 2: Query transactions for the period scoped to userId
+    // STEP 2: Query transactions for the period scoped to userId from the double-entry ledger
     let transactions = [];
     try {
-        transactions = await DailyTransaction.findAll({
-            where: {
-                userId,
-                date: {
-                    [Op.between]: [startDate, endDate]
-                }
-            },
-            order: [['date', 'ASC']]
+        transactions = await LedgerAnalyticsService.getNormalizedTimeline({
+            userId,
+            startDate,
+            endDate
         });
-        console.log(`[Job] User '${userId}': fetched ${transactions.length} transactions from DB.`);
+        console.log(`[Job] User '${userId}': fetched ${transactions.length} ledger transactions for period ${periodKey}.`);
     } catch (err) {
         console.error(`[Job] DB query error for user '${userId}':`, err.message);
         throw err;

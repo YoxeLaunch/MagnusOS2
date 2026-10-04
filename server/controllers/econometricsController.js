@@ -9,57 +9,31 @@
  *   POST /api/econometrics/detect-anomalies — Run anomaly detection scan
  */
 
-import { DailyTransaction, FinancialAnomaly, Account } from '../models/index.js';
+import { FinancialAnomaly } from '../models/index.js';
 import { getEffectiveUserId } from '../middleware/auth.js';
 import {
     calculateMPC,
     forecastLiquidity,
-    detectAnomalies,
-    aggregateMonthly,
-    aggregateDailyFlows,
-    aggregateExpensesByCategory
+    detectAnomalies
 } from '../services/econometricsService.js';
-import { minorUnitsToSafeNumber } from '../models/account.js';
-
-const sumAccountBalancesForAnalytics = accounts => {
-    const totalMinor = accounts.reduce((sum, account) => sum + BigInt(String(account.currentBalanceMinor ?? 0)), 0n);
-    return minorUnitsToSafeNumber(totalMinor, 'Econometrics account balance');
-};
+import { LedgerAnalyticsService } from '../services/ledgerAnalyticsService.js';
 
 // ========================================
 // GET /api/econometrics/dashboard
-// Returns MPC, forecast summary, and pending anomaly count.
+// Returns MPC, forecast summary, and pending anomaly count derived from ledger.
 // ========================================
 export const getDashboard = async (req, res) => {
     try {
         const effectiveUserId = getEffectiveUserId(req, req.query.userId);
 
-        // Fetch all daily transactions for this user
-        const transactions = await DailyTransaction.findAll({
-            where: { userId: effectiveUserId },
-            order: [['date', 'ASC']],
-            raw: true
-        });
+        // Fetch datasets derived directly from the double-entry ledger
+        const dataset = await LedgerAnalyticsService.getEconometricsDataset({ userId: effectiveUserId });
+        const { monthlyData, dailyFlows, currentBalance } = dataset;
 
         // 1. Calculate MPC
-        const monthlyData = aggregateMonthly(transactions);
         const mpc = calculateMPC(monthlyData);
 
         // 2. Forecast summary
-        const dailyFlows = aggregateDailyFlows(transactions);
-        // Get current balance from accounts (sum of all active accounts)
-        let currentBalance = 0;
-        try {
-            const accounts = await Account.findAll({
-                where: { userId: effectiveUserId, isArchived: false },
-                attributes: ['currentBalanceMinor'],
-                raw: true
-            });
-            currentBalance = sumAccountBalancesForAnalytics(accounts);
-        } catch (err) {
-            console.warn('[Econometrics] Account fetch fallback:', err.message);
-        }
-
         const forecastResult = forecastLiquidity(dailyFlows, currentBalance);
 
         // 3. Pending anomaly count
@@ -94,25 +68,8 @@ export const getForecast = async (req, res) => {
     try {
         const effectiveUserId = getEffectiveUserId(req, req.query.userId);
 
-        const transactions = await DailyTransaction.findAll({
-            where: { userId: effectiveUserId },
-            order: [['date', 'ASC']],
-            raw: true
-        });
-
-        const dailyFlows = aggregateDailyFlows(transactions);
-
-        let currentBalance = 0;
-        try {
-            const accounts = await Account.findAll({
-                where: { userId: effectiveUserId, isArchived: false },
-                attributes: ['currentBalanceMinor'],
-                raw: true
-            });
-            currentBalance = sumAccountBalancesForAnalytics(accounts);
-        } catch (err) {
-            console.warn('[Econometrics] Account fetch fallback:', err.message);
-        }
+        const dataset = await LedgerAnalyticsService.getEconometricsDataset({ userId: effectiveUserId });
+        const { dailyFlows, currentBalance } = dataset;
 
         const result = forecastLiquidity(dailyFlows, currentBalance);
 
@@ -193,15 +150,10 @@ export const runDetection = async (req, res) => {
     try {
         const effectiveUserId = getEffectiveUserId(req, req.body.userId);
 
-        // Fetch expense transactions
-        const transactions = await DailyTransaction.findAll({
-            where: { userId: effectiveUserId },
-            order: [['date', 'ASC']],
-            raw: true
-        });
+        const dataset = await LedgerAnalyticsService.getEconometricsDataset({ userId: effectiveUserId });
+        const { categoryExpenses } = dataset;
 
-        const expenseData = aggregateExpensesByCategory(transactions);
-        const { anomalies, categorySummaries } = detectAnomalies(expenseData);
+        const { anomalies, categorySummaries } = detectAnomalies(categoryExpenses);
 
         // Persist new anomalies (avoid duplicates for same user+date+category)
         let saved = 0;
