@@ -17,22 +17,43 @@ const SYSTEM_DB_PATH = path.join(DATA_DIR, 'magnus_system.db');
 // ========================================
 // Priority: DATABASE_URL (PostgreSQL) > SQLite fallback
 
+const assertSafeDatabaseUrl = (url, isTest = false) => {
+    if (!url) return true;
+    try {
+        const parsed = new URL(url);
+        const dbName = parsed.pathname.replace(/^\//, '');
+        const user = parsed.username;
+        const port = parsed.port || '5432';
+        const host = parsed.hostname;
+
+        if (isTest) {
+            // In test mode: strictly require test database, test user, and test endpoint
+            if (dbName !== 'magnus_test') {
+                throw new Error(`[TEST GUARDRAIL] Aborting: Test database must strictly be 'magnus_test' (found '${dbName}')`);
+            }
+            if (user === 'magnus' || user === 'magnus_app') {
+                throw new Error(`[TEST GUARDRAIL] Aborting: Test database cannot use production user '${user}'`);
+            }
+            if (host === 'postgres' || (host === 'localhost' && port === '5432') || (host === '127.0.0.1' && port === '5432')) {
+                throw new Error(`[TEST GUARDRAIL] Aborting: Test database cannot use production PostgreSQL endpoint (${host}:${port})`);
+            }
+        }
+        return true;
+    } catch (err) {
+        if (err.message.includes('[TEST GUARDRAIL]')) throw err;
+        throw new Error(`[TEST GUARDRAIL] Invalid database URL: ${err.message}`);
+    }
+};
+
 const createSequelizeInstance = (dbPath, name) => {
     // TEST GUARDRAIL: Strict protection against running tests on production DB
     if (process.env.NODE_ENV === 'test') {
         if (process.env.DATABASE_URL_TEST) {
-            const testUrl = process.env.DATABASE_URL_TEST;
-            const isSafe = testUrl.toLowerCase().includes('test') && !testUrl.includes('magnus_app') && !testUrl.includes('@postgres:5432/magnus');
-            if (!isSafe) {
-                console.error('\n======================================================');
-                console.error('[FATAL GUARDRAIL] Insecure DATABASE_URL_TEST detected!');
-                console.error('DATABASE_URL_TEST cannot target production database or production user.');
-                console.error('======================================================\n');
-                throw new Error('[TEST GUARDRAIL] Aborting: Tests cannot run against production database.');
-            }
-        } else if (process.env.DATABASE_URL && !process.env.DATABASE_URL.toLowerCase().includes('test')) {
+            assertSafeDatabaseUrl(process.env.DATABASE_URL_TEST, true);
+        } else if (process.env.DATABASE_URL) {
             // Production DATABASE_URL present in env but no test URL: do NOT connect to postgres in tests
             // Fall through to SQLite :memory: for safety
+            assertSafeDatabaseUrl(process.env.DATABASE_URL, true);
         }
     }
 
@@ -43,6 +64,9 @@ const createSequelizeInstance = (dbPath, name) => {
         : process.env.DATABASE_URL;
 
     if (dbUrl) {
+        if (process.env.NODE_ENV === 'test') {
+            assertSafeDatabaseUrl(dbUrl, true);
+        }
         console.log(`>>> [${name}] Using PostgreSQL: ${dbUrl.replace(/:[^:@]+@/, ':****@')}`);
         return new Sequelize(dbUrl, {
             dialect: 'postgres',
@@ -100,11 +124,15 @@ export const JSON_DB_PATHS = {
 // ========================================
 // Database Info (for debugging)
 // ========================================
-export const getDatabaseInfo = () => ({
-    type: process.env.DATABASE_URL ? 'postgresql' : 'sqlite',
-    isProduction: process.env.NODE_ENV === 'production',
-    dataDir: DATA_DIR
-});
+export const getDatabaseInfo = () => {
+    const isTest = process.env.NODE_ENV === 'test';
+    const activeUrl = isTest ? process.env.DATABASE_URL_TEST : process.env.DATABASE_URL;
+    return {
+        type: activeUrl ? 'postgresql' : 'sqlite',
+        isProduction: process.env.NODE_ENV === 'production',
+        dataDir: DATA_DIR
+    };
+};
 
 console.log('>>> [DB CONFIG] DATA_DIR:', DATA_DIR);
 console.log('>>> [DB CONFIG] Database Type:', getDatabaseInfo().type);

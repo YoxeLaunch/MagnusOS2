@@ -238,6 +238,123 @@ describe('PostgreSQL Real Integration Tests — MagnusOS2 Ledger & Database Hard
             assert.equal(rows[0].count, '3');
             assert.equal(rows[0].sum, '0');
         });
+
+        it('RECHAZA cabecera de transacción con 0 líneas en el COMMIT (BLOCKER-01)', async () => {
+            const txId = uuidv4();
+
+            await assert.rejects(async () => {
+                const t = await sequelize.transaction();
+                try {
+                    await sequelize.query(`
+                        INSERT INTO ledger_transactions (id, user_id, date, status, type, created_at, updated_at)
+                        VALUES ('${txId}', 'test_user', '2026-10-04', 'cleared', 'expense', NOW(), NOW());
+                    `, { transaction: t });
+
+                    // Commit without adding any lines
+                    await t.commit();
+                } catch (err) {
+                    await t.rollback().catch(() => {});
+                    throw err;
+                }
+            }, (err) => {
+                assert.match(err.message, /must have at least 2 lines \(found 0\)/);
+                return true;
+            });
+        });
+
+        it('RECHAZA reparentado de líneas que deje la cabecera original con 0 líneas (BLOCKER-01)', async () => {
+            const txA = uuidv4();
+            const txB = uuidv4();
+            const accId = uuidv4();
+
+            await sequelize.query(`
+                INSERT INTO accounts (id, user_id, name, type, currency, opening_balance_minor, current_balance_minor, is_archived, sort_order, created_at, updated_at)
+                VALUES ('${accId}', 'test_user', 'Cuenta Reparent', 'checking', 'DOP', 0, 0, false, 0, NOW(), NOW());
+            `);
+
+            // Setup Tx A with 2 balanced lines
+            const tInit = await sequelize.transaction();
+            await sequelize.query(`
+                INSERT INTO ledger_transactions (id, user_id, date, status, type, created_at, updated_at)
+                VALUES ('${txA}', 'test_user', '2026-10-04', 'cleared', 'income', NOW(), NOW());
+            `, { transaction: tInit });
+            await sequelize.query(`
+                INSERT INTO transaction_lines (id, transaction_id, account_id, amount_minor, currency, created_at, updated_at)
+                VALUES ('${uuidv4()}', '${txA}', '${accId}', 50000, 'DOP', NOW(), NOW());
+            `, { transaction: tInit });
+            await sequelize.query(`
+                INSERT INTO transaction_lines (id, transaction_id, amount_minor, currency, created_at, updated_at)
+                VALUES ('${uuidv4()}', '${txA}', -50000, 'DOP', NOW(), NOW());
+            `, { transaction: tInit });
+            await tInit.commit();
+
+            // Now attempt to move both lines from Tx A to Tx B, leaving Tx A with 0 lines
+            await assert.rejects(async () => {
+                const t = await sequelize.transaction();
+                try {
+                    await sequelize.query(`
+                        INSERT INTO ledger_transactions (id, user_id, date, status, type, created_at, updated_at)
+                        VALUES ('${txB}', 'test_user', '2026-10-04', 'cleared', 'income', NOW(), NOW());
+                    `, { transaction: t });
+
+                    // Reparent lines from A to B
+                    await sequelize.query(`
+                        UPDATE transaction_lines
+                        SET transaction_id = '${txB}'
+                        WHERE transaction_id = '${txA}';
+                    `, { transaction: t });
+
+                    await t.commit();
+                } catch (err) {
+                    await t.rollback().catch(() => {});
+                    throw err;
+                }
+            }, (err) => {
+                assert.match(err.message, /must have at least 2 lines/);
+                return true;
+            });
+        });
+
+        it('RECHAZA transacción con líneas de cuentas pertenecientes a otro usuario (HIGH-04)', async () => {
+            const txId = uuidv4();
+            const accUserB = uuidv4();
+
+            // Account belongs to user_b
+            await sequelize.query(`
+                INSERT INTO accounts (id, user_id, name, type, currency, opening_balance_minor, current_balance_minor, is_archived, sort_order, created_at, updated_at)
+                VALUES ('${accUserB}', 'user_b', 'Cuenta de B', 'checking', 'DOP', 0, 0, false, 0, NOW(), NOW());
+            `);
+
+            await assert.rejects(async () => {
+                const t = await sequelize.transaction();
+                try {
+                    // Transaction belongs to user_a
+                    await sequelize.query(`
+                        INSERT INTO ledger_transactions (id, user_id, date, status, type, created_at, updated_at)
+                        VALUES ('${txId}', 'user_a', '2026-10-04', 'cleared', 'income', NOW(), NOW());
+                    `, { transaction: t });
+
+                    // Line referencing account of user_b
+                    await sequelize.query(`
+                        INSERT INTO transaction_lines (id, transaction_id, account_id, amount_minor, currency, created_at, updated_at)
+                        VALUES ('${uuidv4()}', '${txId}', '${accUserB}', 10000, 'DOP', NOW(), NOW());
+                    `, { transaction: t });
+
+                    await sequelize.query(`
+                        INSERT INTO transaction_lines (id, transaction_id, amount_minor, currency, created_at, updated_at)
+                        VALUES ('${uuidv4()}', '${txId}', -10000, 'DOP', NOW(), NOW());
+                    `, { transaction: t });
+
+                    await t.commit();
+                } catch (err) {
+                    await t.rollback().catch(() => {});
+                    throw err;
+                }
+            }, (err) => {
+                assert.match(err.message, /belonging to accounts of a different user/);
+                return true;
+            });
+        });
     });
 
     describe('4. Transaction Rollback & Atomicity', () => {
@@ -307,6 +424,39 @@ describe('PostgreSQL Real Integration Tests — MagnusOS2 Ledger & Database Hard
 
             const [lineRows] = await sequelize.query(`SELECT amount_minor FROM transaction_lines WHERE transaction_id = '${txId}' AND account_id = '${accId}';`);
             assert.equal(lineRows[0].amount_minor, largeAmount);
+        });
+
+        it('maneja montos BIGINT superiores a Number.MAX_SAFE_INTEGER (> 2^53 - 1 cents) manteniendo precisión exacta (HIGH-03)', async () => {
+            const accId = uuidv4();
+            const txId = uuidv4();
+            // 9,007,199,254,740,993 cents (> Number.MAX_SAFE_INTEGER = 9,007,199,254,740,991)
+            const hugeAmount = '9007199254740993';
+
+            await sequelize.query(`
+                INSERT INTO accounts (id, user_id, name, type, currency, opening_balance_minor, current_balance_minor, is_archived, sort_order, created_at, updated_at)
+                VALUES ('${accId}', 'test_user', 'Super Tesorería', 'checking', 'DOP', 0, ${hugeAmount}, false, 0, NOW(), NOW());
+            `);
+
+            const t = await sequelize.transaction();
+            await sequelize.query(`
+                INSERT INTO ledger_transactions (id, user_id, date, status, type, created_at, updated_at)
+                VALUES ('${txId}', 'test_user', '2026-10-04', 'cleared', 'income', NOW(), NOW());
+            `, { transaction: t });
+
+            await sequelize.query(`
+                INSERT INTO transaction_lines (id, transaction_id, account_id, amount_minor, currency, created_at, updated_at)
+                VALUES ('${uuidv4()}', '${txId}', '${accId}', ${hugeAmount}, 'DOP', NOW(), NOW());
+            `, { transaction: t });
+
+            await sequelize.query(`
+                INSERT INTO transaction_lines (id, transaction_id, amount_minor, currency, created_at, updated_at)
+                VALUES ('${uuidv4()}', '${txId}', -${hugeAmount}, 'DOP', NOW(), NOW());
+            `, { transaction: t });
+
+            await t.commit();
+
+            const [lineRows] = await sequelize.query(`SELECT amount_minor FROM transaction_lines WHERE transaction_id = '${txId}' AND account_id = '${accId}';`);
+            assert.equal(lineRows[0].amount_minor, hugeAmount);
         });
     });
 

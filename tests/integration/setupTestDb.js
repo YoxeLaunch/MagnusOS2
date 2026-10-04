@@ -58,18 +58,18 @@ export async function initializeTestPostgres() {
             if (tables.length === 0) {
                 // 1. Force sync all Sequelize models onto test PostgreSQL
                 await sequelize.sync({ force: true });
+            }
 
-                // 2. Apply migration 001: Constraint trigger for double entry
-                const migration001Path = path.join(ROOT_DIR, 'server', 'migrations', '001_ledger_balance_constraint_trigger.sql');
-                const sql001 = fs.readFileSync(migration001Path, 'utf8');
-                await sequelize.query(sql001);
+            // 2. Always apply migration 001: Constraint trigger for double entry & ownership
+            const migration001Path = path.join(ROOT_DIR, 'server', 'migrations', '001_ledger_balance_constraint_trigger.sql');
+            const sql001 = fs.readFileSync(migration001Path, 'utf8');
+            await sequelize.query(sql001);
 
-                // 3. Apply migration 003: Monthly snapshots user isolation
-                const migration003Path = path.join(ROOT_DIR, 'server', 'migrations', '003_monthly_snapshots_user_id.sql');
-                if (fs.existsSync(migration003Path)) {
-                    const sql003 = fs.readFileSync(migration003Path, 'utf8');
-                    await sequelize.query(sql003).catch(() => {});
-                }
+            // 3. Always apply migration 003: Monthly snapshots user isolation
+            const migration003Path = path.join(ROOT_DIR, 'server', 'migrations', '003_monthly_snapshots_user_id.sql');
+            if (fs.existsSync(migration003Path)) {
+                const sql003 = fs.readFileSync(migration003Path, 'utf8');
+                await sequelize.query(sql003).catch(() => {});
             }
         } finally {
             await sequelize.query('SELECT pg_advisory_unlock(987654321);').catch(() => {});
