@@ -30,8 +30,9 @@ export class LedgerReadService {
 
     /**
      * Get account balances (cached vs derived from lines)
+     * Supports asOfDate for historical balance snapshots.
      */
-    static async getBalances({ userId, accountIds, currency, isArchived = false }) {
+    static async getBalances({ userId, accountIds, currency, isArchived = false, asOfDate }) {
         if (!userId) throw new Error('[LedgerReadService] userId is required');
 
         const where = { userId };
@@ -57,14 +58,30 @@ export class LedgerReadService {
         const ids = accounts.map(a => a.id);
 
         // Calculate derived balance from transaction_lines for each account
+        const lineWhere = {
+            accountId: { [Op.in]: ids }
+        };
+
+        const lineInclude = [];
+        if (asOfDate) {
+            lineInclude.push({
+                model: LedgerTransaction,
+                as: 'transaction',
+                required: true,
+                where: {
+                    date: { [Op.lte]: asOfDate }
+                },
+                attributes: []
+            });
+        }
+
         const lineSums = await TransactionLine.findAll({
             attributes: [
                 'accountId',
                 [sequelize.fn('COALESCE', sequelize.fn('SUM', sequelize.col('amount_minor')), 0), 'total_minor']
             ],
-            where: {
-                accountId: { [Op.in]: ids }
-            },
+            where: lineWhere,
+            include: lineInclude,
             group: ['accountId'],
             raw: true
         });
@@ -83,7 +100,8 @@ export class LedgerReadService {
             const linesMinor = lineSumMap.get(acc.id) || 0n;
             const derivedMinor = openingMinor + linesMinor;
 
-            const isReconciled = cachedMinor === derivedMinor;
+            // Only check reconciliation against cached balance if asOfDate is not an historical snapshot
+            const isReconciled = asOfDate ? true : cachedMinor === derivedMinor;
             if (!isReconciled) isAllReconciled = false;
 
             totalBalanceMinorBigInt += derivedMinor;
@@ -99,8 +117,8 @@ export class LedgerReadService {
                 openingBalanceMinor: openingMinor.toString(),
                 currentBalanceMinor: cachedMinor.toString(),
                 derivedBalanceMinor: derivedMinor.toString(),
-                currentBalance: fromMinorUnits(Number(cachedMinor)),
-                derivedBalance: fromMinorUnits(Number(derivedMinor)),
+                currentBalance: fromMinorUnits(cachedMinor),
+                derivedBalance: fromMinorUnits(derivedMinor),
                 isReconciled,
                 discrepancyMinor: (cachedMinor - derivedMinor).toString()
             };
@@ -109,7 +127,7 @@ export class LedgerReadService {
         return {
             accounts: resultAccounts,
             totalBalanceMinor: totalBalanceMinorBigInt.toString(),
-            totalBalance: fromMinorUnits(Number(totalBalanceMinorBigInt)),
+            totalBalance: fromMinorUnits(totalBalanceMinorBigInt),
             isAllReconciled,
             count: resultAccounts.length
         };
@@ -118,14 +136,16 @@ export class LedgerReadService {
     /**
      * Get Cash Flow summary for a given period
      */
-    static async getCashFlow({ userId, startDate, endDate, currency = 'DOP', accountIds }) {
+    static async getCashFlow({ userId, startDate, endDate, currency = 'DOP', accountIds, endDateExclusive = false }) {
         if (!userId) throw new Error('[LedgerReadService] userId is required');
 
         const whereTx = { userId };
         if (startDate || endDate) {
             whereTx.date = {};
             if (startDate) whereTx.date[Op.gte] = startDate;
-            if (endDate) whereTx.date[Op.lte] = endDate;
+            if (endDate) {
+                whereTx.date[endDateExclusive ? Op.lt : Op.lte] = endDate;
+            }
         }
 
         const includeLine = {
@@ -139,7 +159,8 @@ export class LedgerReadService {
                 {
                     model: Account,
                     as: 'account',
-                    attributes: ['id', 'name', 'type', 'currency']
+                    attributes: ['id', 'name', 'type', 'currency', 'userId'],
+                    where: { userId } // Enforce ownership: reject lines linked to another user's account
                 },
                 {
                     model: Category,
@@ -166,6 +187,7 @@ export class LedgerReadService {
         let totalIncomeMinor = 0n;
         let totalExpenseMinor = 0n;
         let totalInvestedMinor = 0n;
+        let countedTxCount = 0;
         const dailyMap = new Map();
 
         for (const tx of transactions) {
@@ -179,6 +201,7 @@ export class LedgerReadService {
                 dailyMap.set(dateStr, { date: dateStr, incomeMinor: 0n, expenseMinor: 0n, investedMinor: 0n });
             }
             const dayEntry = dailyMap.get(dateStr);
+            let hasFlowImpact = false;
 
             for (const line of tx.lines) {
                 const amountMinor = BigInt(line.amountMinor);
@@ -186,17 +209,25 @@ export class LedgerReadService {
                 if (tx.type === 'income' && amountMinor > 0n) {
                     totalIncomeMinor += amountMinor;
                     dayEntry.incomeMinor += amountMinor;
+                    hasFlowImpact = true;
                 } else if (tx.type === 'expense' && amountMinor < 0n) {
                     const positiveExpense = -amountMinor;
                     totalExpenseMinor += positiveExpense;
                     dayEntry.expenseMinor += positiveExpense;
+                    hasFlowImpact = true;
                 } else if (tx.type === 'investment') {
-                    // For investments, positive amount represents capital committed
-                    if (amountMinor > 0n) {
-                        totalInvestedMinor += amountMinor;
-                        dayEntry.investedMinor += amountMinor;
+                    // For investments, negative amount on account represents capital cash outflow
+                    if (amountMinor < 0n) {
+                        const positiveInvested = -amountMinor;
+                        totalInvestedMinor += positiveInvested;
+                        dayEntry.investedMinor += positiveInvested;
+                        hasFlowImpact = true;
                     }
                 }
+            }
+
+            if (hasFlowImpact) {
+                countedTxCount++;
             }
         }
 
@@ -208,10 +239,10 @@ export class LedgerReadService {
             expenseMinor: d.expenseMinor.toString(),
             investedMinor: d.investedMinor.toString(),
             netMinor: (d.incomeMinor - d.expenseMinor - d.investedMinor).toString(),
-            income: fromMinorUnits(Number(d.incomeMinor)),
-            expense: fromMinorUnits(Number(d.expenseMinor)),
-            invested: fromMinorUnits(Number(d.investedMinor)),
-            net: fromMinorUnits(Number(d.incomeMinor - d.expenseMinor - d.investedMinor))
+            income: fromMinorUnits(d.incomeMinor),
+            expense: fromMinorUnits(d.expenseMinor),
+            invested: fromMinorUnits(d.investedMinor),
+            net: fromMinorUnits(d.incomeMinor - d.expenseMinor - d.investedMinor)
         }));
 
         return {
@@ -221,26 +252,29 @@ export class LedgerReadService {
             totalExpenseMinor: totalExpenseMinor.toString(),
             totalInvestedMinor: totalInvestedMinor.toString(),
             netCashFlowMinor: netCashFlowMinor.toString(),
-            totalIncome: fromMinorUnits(Number(totalIncomeMinor)),
-            totalExpense: fromMinorUnits(Number(totalExpenseMinor)),
-            totalInvested: fromMinorUnits(Number(totalInvestedMinor)),
-            netCashFlow: fromMinorUnits(Number(netCashFlowMinor)),
-            transactionCount: transactions.length,
+            totalIncome: fromMinorUnits(totalIncomeMinor),
+            totalExpense: fromMinorUnits(totalExpenseMinor),
+            totalInvested: fromMinorUnits(totalInvestedMinor),
+            netCashFlow: fromMinorUnits(netCashFlowMinor),
+            transactionCount: countedTxCount,
             timeline
         };
     }
 
     /**
      * Get Income items and category aggregation
+     * Properly applies categoryIds filters and handles split transactions.
      */
-    static async getIncome({ userId, startDate, endDate, currency = 'DOP', accountIds, categoryIds }) {
+    static async getIncome({ userId, startDate, endDate, currency = 'DOP', accountIds, categoryIds, endDateExclusive = false }) {
         if (!userId) throw new Error('[LedgerReadService] userId is required');
 
         const whereTx = { userId, type: 'income' };
         if (startDate || endDate) {
             whereTx.date = {};
             if (startDate) whereTx.date[Op.gte] = startDate;
-            if (endDate) whereTx.date[Op.lte] = endDate;
+            if (endDate) {
+                whereTx.date[endDateExclusive ? Op.lt : Op.lte] = endDate;
+            }
         }
 
         const transactions = await LedgerTransaction.findAll({
@@ -250,7 +284,7 @@ export class LedgerReadService {
                     model: TransactionLine,
                     as: 'lines',
                     include: [
-                        { model: Account, as: 'account', attributes: ['id', 'name', 'type', 'currency'] },
+                        { model: Account, as: 'account', attributes: ['id', 'name', 'type', 'currency', 'userId'], where: { userId }, required: false },
                         { model: Category, as: 'category', attributes: ['id', 'name', 'group', 'type', 'icon', 'color'] }
                     ]
                 },
@@ -264,45 +298,51 @@ export class LedgerReadService {
         const items = [];
 
         for (const tx of transactions) {
-            // Find the asset account line receiving the money (amount > 0)
-            const accountLine = tx.lines.find(l => l.accountId !== null && BigInt(l.amountMinor) > 0n);
-            // Find the category line (counterparty)
-            const categoryLine = tx.lines.find(l => l.categoryId !== null);
+            // Find account lines
+            const accountLines = tx.lines.filter(l => l.accountId !== null);
+            if (accountIds && accountIds.length > 0) {
+                const hasMatchingAccount = accountLines.some(l => accountIds.includes(l.accountId));
+                if (!hasMatchingAccount) continue;
+            }
 
-            if (accountLine) {
-                if (accountIds && accountIds.length > 0 && !accountIds.includes(accountLine.accountId)) {
+            // Find category lines (income categories have credit: amountMinor < 0)
+            const catLines = tx.lines.filter(l => l.categoryId !== null);
+
+            for (const catLine of catLines) {
+                if (categoryIds && categoryIds.length > 0 && !categoryIds.includes(catLine.categoryId)) {
                     continue;
                 }
-                if (currency && accountLine.currency !== currency) {
-                    continue;
-                }
 
-                const amountMinor = BigInt(accountLine.amountMinor);
-                totalMinor += amountMinor;
+                const rawAmount = BigInt(catLine.amountMinor);
+                const lineAmountMinor = rawAmount < 0n ? -rawAmount : rawAmount;
+                totalMinor += lineAmountMinor;
 
-                const catName = categoryLine?.category?.name || 'Otros Ingresos';
-                const catId = categoryLine?.categoryId || 'uncategorized';
+                const catName = catLine.category?.name || 'Otros Ingresos';
+                const catId = catLine.categoryId || 'uncategorized';
 
                 if (!categoryMap.has(catId)) {
                     categoryMap.set(catId, {
                         categoryId: catId,
                         categoryName: catName,
-                        group: categoryLine?.category?.group || 'Ingresos',
+                        group: catLine.category?.group || 'Ingresos',
                         totalMinor: 0n
                     });
                 }
-                categoryMap.get(catId).totalMinor += amountMinor;
+                categoryMap.get(catId).totalMinor += lineAmountMinor;
+
+                const accName = accountLines.map(a => a.account?.name).filter(Boolean).join(', ') || 'Cuenta';
 
                 items.push({
                     transactionId: tx.id,
+                    lineId: catLine.id,
                     date: tx.date,
                     payeeName: tx.payeeName || tx.payee?.name || 'Ingreso',
                     categoryName: catName,
-                    accountName: accountLine.account?.name || 'Cuenta',
-                    amountMinor: amountMinor.toString(),
-                    amount: fromMinorUnits(Number(amountMinor)),
-                    currency: accountLine.currency,
-                    memo: tx.memo
+                    accountName: accName,
+                    amountMinor: lineAmountMinor.toString(),
+                    amount: fromMinorUnits(lineAmountMinor),
+                    currency: catLine.currency || currency,
+                    memo: catLine.memo || tx.memo
                 });
             }
         }
@@ -310,12 +350,12 @@ export class LedgerReadService {
         const categories = Array.from(categoryMap.values()).map(c => ({
             ...c,
             totalMinor: c.totalMinor.toString(),
-            total: fromMinorUnits(Number(c.totalMinor))
+            total: fromMinorUnits(c.totalMinor)
         }));
 
         return {
             totalIncomeMinor: totalMinor.toString(),
-            totalIncome: fromMinorUnits(Number(totalMinor)),
+            totalIncome: fromMinorUnits(totalMinor),
             currency,
             categories,
             items
@@ -324,15 +364,18 @@ export class LedgerReadService {
 
     /**
      * Get Expense items and category aggregation
+     * Properly applies categoryIds filters and handles split transactions.
      */
-    static async getExpenses({ userId, startDate, endDate, currency = 'DOP', accountIds, categoryIds }) {
+    static async getExpenses({ userId, startDate, endDate, currency = 'DOP', accountIds, categoryIds, endDateExclusive = false }) {
         if (!userId) throw new Error('[LedgerReadService] userId is required');
 
         const whereTx = { userId, type: 'expense' };
         if (startDate || endDate) {
             whereTx.date = {};
             if (startDate) whereTx.date[Op.gte] = startDate;
-            if (endDate) whereTx.date[Op.lte] = endDate;
+            if (endDate) {
+                whereTx.date[endDateExclusive ? Op.lt : Op.lte] = endDate;
+            }
         }
 
         const transactions = await LedgerTransaction.findAll({
@@ -342,7 +385,7 @@ export class LedgerReadService {
                     model: TransactionLine,
                     as: 'lines',
                     include: [
-                        { model: Account, as: 'account', attributes: ['id', 'name', 'type', 'currency'] },
+                        { model: Account, as: 'account', attributes: ['id', 'name', 'type', 'currency', 'userId'], where: { userId }, required: false },
                         { model: Category, as: 'category', attributes: ['id', 'name', 'group', 'type', 'icon', 'color'] }
                     ]
                 },
@@ -356,44 +399,51 @@ export class LedgerReadService {
         const items = [];
 
         for (const tx of transactions) {
-            // Find the asset account line paying money (amount < 0)
-            const accountLine = tx.lines.find(l => l.accountId !== null && BigInt(l.amountMinor) < 0n);
-            const categoryLine = tx.lines.find(l => l.categoryId !== null);
+            // Find account lines
+            const accountLines = tx.lines.filter(l => l.accountId !== null);
+            if (accountIds && accountIds.length > 0) {
+                const hasMatchingAccount = accountLines.some(l => accountIds.includes(l.accountId));
+                if (!hasMatchingAccount) continue;
+            }
 
-            if (accountLine) {
-                if (accountIds && accountIds.length > 0 && !accountIds.includes(accountLine.accountId)) {
+            // Find category lines (expense categories have debit: amountMinor > 0)
+            const catLines = tx.lines.filter(l => l.categoryId !== null);
+
+            for (const catLine of catLines) {
+                if (categoryIds && categoryIds.length > 0 && !categoryIds.includes(catLine.categoryId)) {
                     continue;
                 }
-                if (currency && accountLine.currency !== currency) {
-                    continue;
-                }
 
-                const amountMinor = -BigInt(accountLine.amountMinor); // Convert to positive expense
-                totalMinor += amountMinor;
+                const rawAmount = BigInt(catLine.amountMinor);
+                const lineAmountMinor = rawAmount > 0n ? rawAmount : -rawAmount;
+                totalMinor += lineAmountMinor;
 
-                const catName = categoryLine?.category?.name || 'Otros Gastos';
-                const catId = categoryLine?.categoryId || 'uncategorized';
+                const catName = catLine.category?.name || 'Otros Gastos';
+                const catId = catLine.categoryId || 'uncategorized';
 
                 if (!categoryMap.has(catId)) {
                     categoryMap.set(catId, {
                         categoryId: catId,
                         categoryName: catName,
-                        group: categoryLine?.category?.group || 'Gastos',
+                        group: catLine.category?.group || 'Gastos',
                         totalMinor: 0n
                     });
                 }
-                categoryMap.get(catId).totalMinor += amountMinor;
+                categoryMap.get(catId).totalMinor += lineAmountMinor;
+
+                const accName = accountLines.map(a => a.account?.name).filter(Boolean).join(', ') || 'Cuenta';
 
                 items.push({
                     transactionId: tx.id,
+                    lineId: catLine.id,
                     date: tx.date,
                     payeeName: tx.payeeName || tx.payee?.name || 'Gasto',
                     categoryName: catName,
-                    accountName: accountLine.account?.name || 'Cuenta',
-                    amountMinor: amountMinor.toString(),
-                    amount: fromMinorUnits(Number(amountMinor)),
-                    currency: accountLine.currency,
-                    memo: tx.memo
+                    accountName: accName,
+                    amountMinor: lineAmountMinor.toString(),
+                    amount: fromMinorUnits(lineAmountMinor),
+                    currency: catLine.currency || currency,
+                    memo: catLine.memo || tx.memo
                 });
             }
         }
@@ -401,12 +451,12 @@ export class LedgerReadService {
         const categories = Array.from(categoryMap.values()).map(c => ({
             ...c,
             totalMinor: c.totalMinor.toString(),
-            total: fromMinorUnits(Number(c.totalMinor))
+            total: fromMinorUnits(c.totalMinor)
         }));
 
         return {
             totalExpenseMinor: totalMinor.toString(),
-            totalExpense: fromMinorUnits(Number(totalMinor)),
+            totalExpense: fromMinorUnits(totalMinor),
             currency,
             categories,
             items
@@ -419,7 +469,7 @@ export class LedgerReadService {
     static async getNetWorth({ userId, asOfDate, currency = 'DOP' }) {
         if (!userId) throw new Error('[LedgerReadService] userId is required');
 
-        const balances = await this.getBalances({ userId, currency, isArchived: false });
+        const balances = await this.getBalances({ userId, currency, isArchived: false, asOfDate });
 
         let assetsMinor = 0n;
         let liabilitiesMinor = 0n;
@@ -447,9 +497,9 @@ export class LedgerReadService {
             assetsMinor: assetsMinor.toString(),
             liabilitiesMinor: liabilitiesMinor.toString(),
             netWorthMinor: netWorthMinor.toString(),
-            assets: fromMinorUnits(Number(assetsMinor)),
-            liabilities: fromMinorUnits(Number(liabilitiesMinor)),
-            netWorth: fromMinorUnits(Number(netWorthMinor)),
+            assets: fromMinorUnits(assetsMinor),
+            liabilities: fromMinorUnits(liabilitiesMinor),
+            netWorth: fromMinorUnits(netWorthMinor),
             accountsCount: balances.count
         };
     }
@@ -457,7 +507,7 @@ export class LedgerReadService {
     /**
      * Get Category Totals for period
      */
-    static async getCategoryTotals({ userId, startDate, endDate, type, currency = 'DOP', accountIds }) {
+    static async getCategoryTotals({ userId, startDate, endDate, type, currency = 'DOP', accountIds, endDateExclusive = false }) {
         if (!userId) throw new Error('[LedgerReadService] userId is required');
 
         const whereTx = { userId };
@@ -465,7 +515,9 @@ export class LedgerReadService {
         if (startDate || endDate) {
             whereTx.date = {};
             if (startDate) whereTx.date[Op.gte] = startDate;
-            if (endDate) whereTx.date[Op.lte] = endDate;
+            if (endDate) {
+                whereTx.date[endDateExclusive ? Op.lt : Op.lte] = endDate;
+            }
         }
 
         const transactions = await LedgerTransaction.findAll({
@@ -520,9 +572,9 @@ export class LedgerReadService {
             .map(c => ({
                 ...c,
                 totalMinor: c.totalMinor.toString(),
-                total: fromMinorUnits(Number(c.totalMinor))
+                total: fromMinorUnits(c.totalMinor)
             }))
-            .sort((a, b) => b.total - a.total);
+            .sort((a, b) => (b.total > a.total ? 1 : -1));
     }
 
     /**
@@ -544,6 +596,7 @@ export class LedgerReadService {
                 period: monthStr,
                 incomeMinor: 0n,
                 expenseMinor: 0n,
+                investedMinor: 0n,
                 transactionCount: 0
             });
         }
@@ -554,21 +607,23 @@ export class LedgerReadService {
                 const entry = monthMap.get(monthStr);
                 entry.incomeMinor += BigInt(day.incomeMinor);
                 entry.expenseMinor += BigInt(day.expenseMinor);
+                entry.investedMinor += BigInt(day.investedMinor);
                 entry.transactionCount += 1;
             }
         }
 
         const periods = Array.from(monthMap.values()).map(m => {
-            const netMinor = m.incomeMinor - m.expenseMinor;
-            const income = fromMinorUnits(Number(m.incomeMinor));
-            const expense = fromMinorUnits(Number(m.expenseMinor));
-            const net = fromMinorUnits(Number(netMinor));
+            const netMinor = m.incomeMinor - m.expenseMinor - m.investedMinor;
+            const income = fromMinorUnits(m.incomeMinor);
+            const expense = fromMinorUnits(m.expenseMinor);
+            const net = fromMinorUnits(netMinor);
             const savingsRate = income > 0 ? Math.round((net / income) * 100) : 0;
 
             return {
                 period: m.period,
                 incomeMinor: m.incomeMinor.toString(),
                 expenseMinor: m.expenseMinor.toString(),
+                investedMinor: m.investedMinor.toString(),
                 netMinor: netMinor.toString(),
                 income,
                 expense,
@@ -611,39 +666,51 @@ export class LedgerReadService {
             raw: true
         });
 
-        let legacyIncome = 0;
-        let legacyExpense = 0;
-        let legacyInvested = 0;
+        let legacyIncomeMinor = 0n;
+        let legacyExpenseMinor = 0n;
+        let legacyInvestedMinor = 0n;
 
         for (const tx of legacyTransactions) {
-            const amt = Number(tx.amount) || 0;
+            const amtMinor = BigInt(toMinorUnits(tx.amount || 0));
             if (tx.type === 'income') {
-                legacyIncome += amt;
+                legacyIncomeMinor += amtMinor;
             } else if (tx.type === 'expense') {
-                legacyExpense += amt;
+                legacyExpenseMinor += amtMinor;
             } else if (tx.type === 'investment') {
-                legacyInvested += amt;
+                legacyInvestedMinor += amtMinor;
             }
         }
 
-        const legacyNet = legacyIncome - legacyExpense - legacyInvested;
+        const legacyNetMinor = legacyIncomeMinor - legacyExpenseMinor - legacyInvestedMinor;
 
-        const incomeDiff = Number((legacyIncome - ledgerCashFlow.totalIncome).toFixed(2));
-        const expenseDiff = Number((legacyExpense - ledgerCashFlow.totalExpense).toFixed(2));
-        const investedDiff = Number((legacyInvested - ledgerCashFlow.totalInvested).toFixed(2));
-        const netDiff = Number((legacyNet - ledgerCashFlow.netCashFlow).toFixed(2));
+        const ledgerIncomeMinor = BigInt(ledgerCashFlow.totalIncomeMinor);
+        const ledgerExpenseMinor = BigInt(ledgerCashFlow.totalExpenseMinor);
+        const ledgerInvestedMinor = BigInt(ledgerCashFlow.totalInvestedMinor);
+        const ledgerNetMinor = BigInt(ledgerCashFlow.netCashFlowMinor);
+
+        const incomeDiffMinor = legacyIncomeMinor - ledgerIncomeMinor;
+        const expenseDiffMinor = legacyExpenseMinor - ledgerExpenseMinor;
+        const investedDiffMinor = legacyInvestedMinor - ledgerInvestedMinor;
+        const netDiffMinor = legacyNetMinor - ledgerNetMinor;
         const countDiff = legacyTransactions.length - ledgerCashFlow.transactionCount;
 
-        const isIdentical = incomeDiff === 0 && expenseDiff === 0 && investedDiff === 0 && netDiff === 0 && countDiff === 0;
+        const isIdentical = incomeDiffMinor === 0n &&
+                            expenseDiffMinor === 0n &&
+                            investedDiffMinor === 0n &&
+                            netDiffMinor === 0n &&
+                            countDiff === 0;
 
         let classification = 'EXACT_MATCH';
         let explanation = 'Resultados contables idénticos.';
 
         if (!isIdentical) {
-            if (countDiff !== 0) {
+            if (countDiff > 0) {
                 classification = 'MIGRATION_GAP';
                 explanation = `Existen ${countDiff} transacciones registradas en DailyTransactions que aún no se han sincronizado a ledger_transactions (brecha de migración temporal).`;
-            } else if (Math.abs(incomeDiff) <= 1.0 && Math.abs(expenseDiff) <= 1.0 && countDiff === 0) {
+            } else if (countDiff < 0) {
+                classification = 'LEDGER_EXCESS';
+                explanation = `Existen ${Math.abs(countDiff)} transacciones en ledger_transactions que no provienen del modelo DailyTransactions.`;
+            } else if (Math.abs(Number(netDiffMinor)) <= 100) {
                 classification = 'ROUNDING';
                 explanation = 'Divergencia centesimal menor debida al redondeo/truncamiento de coma flotante legacy al migrar a centavos BIGINT.';
             } else {
@@ -657,13 +724,21 @@ export class LedgerReadService {
             period: { startDate: startDate || 'ALL', endDate: endDate || 'ALL' },
             currency,
             legacy: {
-                income: Number(legacyIncome.toFixed(2)),
-                expense: Number(legacyExpense.toFixed(2)),
-                invested: Number(legacyInvested.toFixed(2)),
-                net: Number(legacyNet.toFixed(2)),
+                incomeMinor: legacyIncomeMinor.toString(),
+                expenseMinor: legacyExpenseMinor.toString(),
+                investedMinor: legacyInvestedMinor.toString(),
+                netMinor: legacyNetMinor.toString(),
+                income: fromMinorUnits(legacyIncomeMinor),
+                expense: fromMinorUnits(legacyExpenseMinor),
+                invested: fromMinorUnits(legacyInvestedMinor),
+                net: fromMinorUnits(legacyNetMinor),
                 transactionCount: legacyTransactions.length
             },
             ledger: {
+                incomeMinor: ledgerIncomeMinor.toString(),
+                expenseMinor: ledgerExpenseMinor.toString(),
+                investedMinor: ledgerInvestedMinor.toString(),
+                netMinor: ledgerNetMinor.toString(),
                 income: ledgerCashFlow.totalIncome,
                 expense: ledgerCashFlow.totalExpense,
                 invested: ledgerCashFlow.totalInvested,
@@ -671,10 +746,14 @@ export class LedgerReadService {
                 transactionCount: ledgerCashFlow.transactionCount
             },
             difference: {
-                incomeDiff,
-                expenseDiff,
-                investedDiff,
-                netDiff,
+                incomeDiffMinor: incomeDiffMinor.toString(),
+                expenseDiffMinor: expenseDiffMinor.toString(),
+                investedDiffMinor: investedDiffMinor.toString(),
+                netDiffMinor: netDiffMinor.toString(),
+                incomeDiff: fromMinorUnits(incomeDiffMinor),
+                expenseDiff: fromMinorUnits(expenseDiffMinor),
+                investedDiff: fromMinorUnits(investedDiffMinor),
+                netDiff: fromMinorUnits(netDiffMinor),
                 countDiff
             },
             isIdentical,

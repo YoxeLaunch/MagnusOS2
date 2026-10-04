@@ -368,53 +368,67 @@ export const getSavingsRate = async (req, res) => {
         const { month, source } = req.query;
 
         const targetMonth = month || new Date().toISOString().slice(0, 7); // YYYY-MM
+        const [year, monthNum] = targetMonth.split('-').map(Number);
+        const lastDay = new Date(year, monthNum, 0).getDate();
         const monthStart = `${targetMonth}-01`;
-        const monthEndDate = new Date(monthStart);
-        monthEndDate.setMonth(monthEndDate.getMonth() + 1);
-        const monthEnd = monthEndDate.toISOString().slice(0, 10);
+        const monthEnd = `${targetMonth}-${String(lastDay).padStart(2, '0')}`;
 
         // Aportes a metas de ahorro del usuario
         const goalContributions = await SavingsContribution.findAll({
             include: [{ model: SavingsGoal, as: 'goal', where: { userId: effectiveUserId }, attributes: [] }],
-            where: { date: { [Op.gte]: monthStart, [Op.lt]: monthEnd } }
+            where: { date: { [Op.gte]: monthStart, [Op.lte]: monthEnd } }
         });
         const totalGoalContributions = goalContributions.reduce((sum, c) => sum + fromMinorUnits(c.amountMinor), 0);
 
-        // Controlled Strangler Switch (Phase II):
-        // By default use LedgerReadService unless source=legacy is explicitly requested
-        if (source !== 'legacy') {
+        // Controlled Strangler Switch:
+        let useLedger = source === 'ledger';
+
+        if (!useLedger && source !== 'legacy') {
+            const comparison = await LedgerReadService.compareLegacyVsLedger({
+                userId: effectiveUserId,
+                startDate: monthStart,
+                endDate: monthEnd
+            });
+
+            if (comparison.classification === 'EXACT_MATCH') {
+                useLedger = true;
+            } else if (comparison.legacy.transactionCount === 0 && comparison.ledger.transactionCount > 0) {
+                useLedger = true;
+            } else {
+                useLedger = false;
+            }
+        }
+
+        if (useLedger) {
             const ledgerCashFlow = await LedgerReadService.getCashFlow({
                 userId: effectiveUserId,
                 startDate: monthStart,
                 endDate: monthEnd
             });
 
-            // Use ledger if transactions exist for that period or if ledger source was explicitly chosen
-            if (ledgerCashFlow.transactionCount > 0 || source === 'ledger') {
-                const totalIncome = ledgerCashFlow.totalIncome;
-                const totalExpense = ledgerCashFlow.totalExpense;
-                const totalInvested = ledgerCashFlow.totalInvested;
-                const totalSaved = ledgerCashFlow.netCashFlow;
-                const savingsRate = totalIncome > 0 ? (totalSaved / totalIncome) * 100 : 0;
+            const totalIncome = ledgerCashFlow.totalIncome;
+            const totalExpense = ledgerCashFlow.totalExpense;
+            const totalInvested = ledgerCashFlow.totalInvested;
+            const totalSaved = ledgerCashFlow.netCashFlow;
+            const savingsRate = totalIncome > 0 ? (totalSaved / totalIncome) * 100 : 0;
 
-                return res.json({
-                    source: 'ledger',
-                    month: targetMonth,
-                    totalIncome,
-                    totalExpense,
-                    totalInvested,
-                    totalSaved,
-                    savingsRate: Math.round(savingsRate * 10) / 10,
-                    totalGoalContributions
-                });
-            }
+            return res.json({
+                source: 'ledger',
+                month: targetMonth,
+                totalIncome,
+                totalExpense,
+                totalInvested,
+                totalSaved,
+                savingsRate: Math.round(savingsRate * 10) / 10,
+                totalGoalContributions
+            });
         }
 
         // Diagnostic or Unmigrated Fallback Mode: DailyTransaction
         const transactions = await DailyTransaction.findAll({
             where: {
                 userId: effectiveUserId,
-                date: { [Op.gte]: monthStart, [Op.lt]: monthEnd }
+                date: { [Op.gte]: monthStart, [Op.lte]: monthEnd }
             }
         });
 

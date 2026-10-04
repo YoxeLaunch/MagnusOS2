@@ -144,7 +144,7 @@ export const createTransaction = async (req, res) => {
                 await t.rollback();
                 return res.status(404).json({ error: `Cuenta no encontrada: ${accountId}` });
             }
-            if (!isAdmin && acc.userId !== effectiveUserId) {
+            if (acc.userId !== effectiveUserId) {
                 await t.rollback();
                 return res.status(403).json({ error: `Acceso denegado a la cuenta ${acc.name}` });
             }
@@ -404,48 +404,38 @@ export const reconcileBalances = async (req, res) => {
     try {
         const effectiveUserId = getEffectiveUserId(req, req.query.userId);
 
-        const accounts = await Account.findAll({
-            where: { userId: effectiveUserId }
-        });
+        const balances = await LedgerReadService.getBalances({ userId: effectiveUserId });
 
-        const report = [];
+        const report = balances.accounts.map(acc => {
+            const opening = BigInt(acc.openingBalanceMinor);
+            const cachedMinor = BigInt(acc.currentBalanceMinor);
+            const derivedMinor = BigInt(acc.derivedBalanceMinor);
+            const linesDelta = derivedMinor - opening;
+            const diffMinor = cachedMinor - derivedMinor;
 
-        for (const account of accounts) {
-            // Calculate sum of transaction lines for this account
-            const linesSumResult = await TransactionLine.sum('amount_minor', {
-                where: { accountId: account.id }
-            });
-            const linesDelta = linesSumResult || 0;
-            const opening = account.openingBalanceMinor || 0;
-            const calculatedMinor = opening + linesDelta;
-            const cachedMinor = account.currentBalanceMinor || 0;
-            const diffMinor = cachedMinor - calculatedMinor;
-
-            report.push({
-                accountId: account.id,
-                accountName: account.name,
-                currency: account.currency,
+            return {
+                accountId: acc.id,
+                accountName: acc.name,
+                currency: acc.currency,
                 openingBalance: fromMinorUnits(opening),
                 linesDelta: fromMinorUnits(linesDelta),
-                calculatedBalance: fromMinorUnits(calculatedMinor),
+                calculatedBalance: fromMinorUnits(derivedMinor),
                 cachedBalance: fromMinorUnits(cachedMinor),
                 difference: fromMinorUnits(diffMinor),
-                isBalanced: diffMinor === 0
-            });
-        }
-
-        const allBalanced = report.every(r => r.isBalanced);
+                isBalanced: acc.isReconciled
+            };
+        });
 
         res.json({
             userId: effectiveUserId,
-            status: allBalanced ? 'BALANCED' : 'DIVERGENCE_DETECTED',
-            allBalanced,
+            status: balances.isAllReconciled ? 'BALANCED' : 'DIVERGENCE_DETECTED',
+            allBalanced: balances.isAllReconciled,
             accounts: report,
             timestamp: new Date().toISOString()
         });
-    } catch (error) {
-        console.error('[Ledger] Reconciliation error:', error);
-        res.status(500).json({ error: error.message });
+    } catch (err) {
+        console.error('[Ledger] Reconciliation error:', err);
+        res.status(500).json({ error: err.message });
     }
 };
 

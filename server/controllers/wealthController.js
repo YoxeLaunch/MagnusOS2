@@ -1,6 +1,25 @@
 import { WealthSnapshot } from '../models/index.js';
 import { getEffectiveUserId } from '../middleware/auth.js';
+import { LedgerReadService } from '../services/ledgerReadService.js';
 import { Op } from 'sequelize';
+
+export const getNetWorth = async (req, res) => {
+    try {
+        const userId = getEffectiveUserId(req, req.query.userId);
+        const { asOfDate, currency = 'DOP' } = req.query;
+
+        const netWorthData = await LedgerReadService.getNetWorth({
+            userId,
+            asOfDate,
+            currency
+        });
+
+        res.json(netWorthData);
+    } catch (error) {
+        console.error('[WealthController] Error calculating net worth:', error);
+        res.status(500).json({ error: 'Failed to calculate net worth from ledger' });
+    }
+};
 
 export const getWealthHistory = async (req, res) => {
     try {

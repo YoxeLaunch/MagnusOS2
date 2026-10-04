@@ -65,10 +65,12 @@ router.post('/finanza/import', importBodyParser, importController.importTransact
 router.post('/finanza/import/categorize', importBodyParser, importController.categorizeImports);
 
 // ========================================
-// WEALTH (New - Phase 1)
+// WEALTH (New - Phase 1 & 2)
 // ========================================
 router.get('/wealth/history', wealthController.getWealthHistory);
 router.post('/wealth/snapshot', wealthController.createWealthSnapshot);
+router.get('/wealth/net-worth', wealthController.getNetWorth);
+router.get('/finanza/wealth/net-worth', wealthController.getNetWorth);
 
 // ========================================
 // LEGACY ENDPOINTS (to be deprecated)

@@ -82,11 +82,35 @@ export const Account = sequelize.define('Account', {
 /**
  * Helper: Convert amount to minor units (centavos)
  */
-export const toMinorUnits = (amount) => Math.round(amount * 100);
+export const toMinorUnits = (amount) => {
+    if (typeof amount === 'bigint') return amount;
+    return Math.round(Number(amount) * 100);
+};
+
+/**
+ * Helper: Convert minor units to exact decimal string (no floating-point rounding errors)
+ */
+export const minorToDecimalString = (minor) => {
+    if (minor === null || minor === undefined) return '0.00';
+    const big = typeof minor === 'bigint' ? minor : BigInt(String(minor).split('.')[0]);
+    const sign = big < 0n ? '-' : '';
+    const abs = big < 0n ? -big : big;
+    const integerPart = abs / 100n;
+    const fractionalPart = (abs % 100n).toString().padStart(2, '0');
+    return `${sign}${integerPart}.${fractionalPart}`;
+};
 
 /**
  * Helper: Convert minor units to display amount
+ * Returns exact decimal string if exceeding Number.MAX_SAFE_INTEGER to prevent precision loss.
  */
-export const fromMinorUnits = (minor) => minor / 100;
+export const fromMinorUnits = (minor) => {
+    if (minor === null || minor === undefined) return 0;
+    const big = typeof minor === 'bigint' ? minor : BigInt(String(minor).split('.')[0]);
+    if (big >= BigInt(Number.MIN_SAFE_INTEGER) && big <= BigInt(Number.MAX_SAFE_INTEGER)) {
+        return Number(big) / 100;
+    }
+    return minorToDecimalString(big);
+};
 
 export default Account;
