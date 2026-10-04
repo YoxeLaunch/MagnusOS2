@@ -1,6 +1,7 @@
 import { LedgerTransaction, TransactionLine, Account, Category, Payee, toMinorUnits, sequelize } from '../models/index.js';
 import crypto from 'crypto';
 import { Op } from 'sequelize';
+import { getEffectiveUserId } from '../middleware/auth.js';
 
 // ========================================
 // CSV IMPORT CONTROLLER
@@ -132,15 +133,18 @@ const parseCSV = (content, delimiter = ',') => {
 export const previewImport = async (req, res) => {
     try {
         const { content, accountId, delimiter = ',' } = req.body;
+        const effectiveUserId = getEffectiveUserId(req);
 
         if (!content || !accountId) {
             return res.status(400).json({ error: 'content and accountId are required' });
         }
 
-        // Verify account exists
-        const account = await Account.findByPk(accountId);
+        // Verify account exists and belongs to effective user
+        const account = await Account.findOne({
+            where: { id: accountId, userId: effectiveUserId }
+        });
         if (!account) {
-            return res.status(404).json({ error: 'Account not found' });
+            return res.status(404).json({ error: 'Account not found or unauthorized' });
         }
 
         // Parse CSV
@@ -198,34 +202,58 @@ export const importTransactions = async (req, res) => {
         const {
             content,
             accountId,
-            userId,
             delimiter = ',',
             columnMapping,  // Optional override of detected columns
             invertAmounts = false,  // For credit card statements where debits are positive
             skipDuplicates = true
         } = req.body;
 
-        if (!content || !accountId || !userId) {
+        const effectiveUserId = getEffectiveUserId(req);
+
+        if (!content || !accountId) {
             await t.rollback();
-            return res.status(400).json({ error: 'content, accountId, and userId are required' });
+            return res.status(400).json({ error: 'content and accountId are required' });
         }
 
-        // Verify account
-        const account = await Account.findByPk(accountId, { transaction: t });
+        // Verify account belongs to effective user and lock for update
+        const account = await Account.findOne({
+            where: { id: accountId, userId: effectiveUserId },
+            transaction: t,
+            lock: t.LOCK.UPDATE
+        });
         if (!account) {
             await t.rollback();
-            return res.status(404).json({ error: 'Account not found' });
+            return res.status(404).json({ error: 'Account not found or unauthorized' });
         }
 
         // Parse CSV
         const { headers, rows } = parseCSV(content, delimiter);
         const columns = columnMapping || detectColumns(headers);
 
+        // Get default fallback categories for income and expense
+        const defaultExpenseCat = await Category.findOne({
+            where: { userId: effectiveUserId, type: 'expense' },
+            order: [
+                [sequelize.literal("CASE WHEN name ILIKE '%otro%' OR name ILIKE '%varios%' OR name ILIKE '%uncategorized%' THEN 0 ELSE 1 END"), 'ASC'],
+                ['createdAt', 'ASC']
+            ],
+            transaction: t
+        });
+
+        const defaultIncomeCat = await Category.findOne({
+            where: { userId: effectiveUserId, type: 'income' },
+            order: [
+                [sequelize.literal("CASE WHEN name ILIKE '%otro%' OR name ILIKE '%varios%' OR name ILIKE '%uncategorized%' THEN 0 ELSE 1 END"), 'ASC'],
+                ['createdAt', 'ASC']
+            ],
+            transaction: t
+        });
+
         // Get existing hashes for deduplication
         const existingHashes = new Set();
         if (skipDuplicates) {
             const existing = await LedgerTransaction.findAll({
-                where: { userId },
+                where: { userId: effectiveUserId },
                 attributes: ['reference'],
                 raw: true,
                 transaction: t
@@ -269,7 +297,6 @@ export const importTransactions = async (req, res) => {
                 }
 
                 const description = columns.description !== undefined ? row[headers[columns.description]] : '';
-                const reference = columns.reference !== undefined ? row[headers[columns.reference]] : '';
 
                 // Generate hash for deduplication
                 const hash = generateTransactionHash(date, amount, description, accountId);
@@ -279,42 +306,68 @@ export const importTransactions = async (req, res) => {
                     continue;
                 }
 
-                // Determine transaction type
+                // Determine transaction type and minor units
                 const type = amount > 0 ? 'income' : 'expense';
+                const minorAmt = toMinorUnits(Math.abs(amount));
 
                 // Create transaction
                 const txn = await LedgerTransaction.create({
-                    userId,
+                    userId: effectiveUserId,
                     date,
-                    payeeName: description.substring(0, 255),
+                    payeeName: description.substring(0, 255) || 'Importación',
                     memo: description.length > 255 ? description : null,
-                    status: 'pending',
+                    status: 'completed',
                     type,
                     reference: `import:${hash}`
                 }, { transaction: t });
 
-                // Create transaction line
-                await TransactionLine.create({
-                    transactionId: txn.id,
-                    accountId,
-                    amountMinor: toMinorUnits(amount),
-                    currency: account.currency
-                }, { transaction: t });
+                if (type === 'expense') {
+                    // Line 1: Asset account decreased
+                    await TransactionLine.create({
+                        transactionId: txn.id,
+                        accountId: account.id,
+                        amountMinor: -minorAmt,
+                        currency: account.currency
+                    }, { transaction: t });
 
-                // Create balancing line to "Income" or "Expense" category (placeholder)
-                // In a real double-entry system, this would go to an expense/income account
-                await TransactionLine.create({
-                    transactionId: txn.id,
-                    accountId, // Same account for now (will be categorized later)
-                    amountMinor: toMinorUnits(-amount), // Opposite sign
-                    currency: account.currency,
-                    memo: 'Pending categorization'
-                }, { transaction: t });
+                    // Line 2: Expense category (balancing counterpart)
+                    await TransactionLine.create({
+                        transactionId: txn.id,
+                        accountId: null,
+                        categoryId: defaultExpenseCat?.id || null,
+                        amountMinor: minorAmt,
+                        currency: account.currency,
+                        memo: 'Importación pendiente de categorizar'
+                    }, { transaction: t });
 
-                // Update account balance
-                await account.update({
-                    currentBalanceMinor: account.currentBalanceMinor + toMinorUnits(amount)
-                }, { transaction: t });
+                    // Update account balance
+                    await account.update({
+                        currentBalanceMinor: account.currentBalanceMinor - minorAmt
+                    }, { transaction: t });
+                } else {
+                    // Line 1: Asset account increased
+                    await TransactionLine.create({
+                        transactionId: txn.id,
+                        accountId: account.id,
+                        amountMinor: minorAmt,
+                        currency: account.currency
+                    }, { transaction: t });
+
+                    // Line 2: Income category (balancing counterpart)
+                    await TransactionLine.create({
+                        transactionId: txn.id,
+                        accountId: null,
+                        categoryId: defaultIncomeCat?.id || null,
+                        amountMinor: -minorAmt,
+                        currency: account.currency,
+                        memo: 'Importación pendiente de categorizar'
+                    }, { transaction: t });
+
+                    // Update account balance
+                    await account.update({
+                        currentBalanceMinor: account.currentBalanceMinor + minorAmt
+                    }, { transaction: t });
+                }
 
                 existingHashes.add(hash);
                 results.imported++;
@@ -378,10 +431,11 @@ export const getImportTemplates = async (req, res) => {
 // Apply categorization rules to uncategorized imports
 // ========================================
 export const categorizeImports = async (req, res) => {
-    const { userId, rules } = req.body;
+    const { rules } = req.body;
+    const effectiveUserId = getEffectiveUserId(req);
 
-    if (!userId || !Array.isArray(rules)) {
-        return res.status(400).json({ error: 'userId and rules array are required' });
+    if (!Array.isArray(rules)) {
+        return res.status(400).json({ error: 'rules array is required' });
     }
 
     // Rules format: [{ pattern: "netflix", categoryId: "uuid" }, ...]
@@ -392,7 +446,7 @@ export const categorizeImports = async (req, res) => {
             include: [{
                 model: LedgerTransaction,
                 as: 'transaction',
-                where: { userId },
+                where: { userId: effectiveUserId },
                 attributes: ['id', 'payeeName', 'memo']
             }]
         });

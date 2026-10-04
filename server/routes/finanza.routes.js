@@ -32,6 +32,7 @@ router.post('/finanza/accounts/reorder', accountsController.reorderAccounts);
 // ========================================
 // LEDGER (New - P1)
 // ========================================
+router.get('/finanza/ledger/reconciliation', ledgerController.reconcileBalances);
 router.get('/finanza/ledger', ledgerController.getLedgerTransactions);
 router.post('/finanza/ledger/transactions', ledgerController.createTransaction);
 router.patch('/finanza/ledger/transactions/:id', ledgerController.updateTransaction);
