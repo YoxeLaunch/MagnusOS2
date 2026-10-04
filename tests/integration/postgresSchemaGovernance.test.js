@@ -217,7 +217,8 @@ describe('PostgreSQL Schema Governance & Migration Runner (Phase II-C)', () => {
                 ("userId", date, amount, description, type, "createdAt", "updatedAt")
                 VALUES (NULL, '2026-10-04', 123.45, 'legacy', 'expense', NOW(), NOW())`);
             const result = await runner.up();
-            assert.equal(result.appliedCount, 4, 'Debe aplicar 005, 006, 007 y 008');
+            const expectedRemaining = runner.getMigrationFiles().length - 5; // excluding 000-004
+            assert.equal(result.appliedCount, expectedRemaining, `Debe aplicar las migraciones posteriores a 004 (${expectedRemaining})`);
             const [[reconciled]] = await upgradeDb.query(`SELECT amount_minor,
                 amount_minor = ROUND((amount * 100)::numeric)::bigint AS exact
                 FROM "DailyTransactions" WHERE description='legacy'`);
@@ -251,11 +252,13 @@ describe('PostgreSQL Schema Governance & Migration Runner (Phase II-C)', () => {
         const firstDb = new Sequelize(databaseUrl(dbName), { logging: false, pool: { max: 2, min: 0 } });
         const secondDb = new Sequelize(databaseUrl(dbName), { logging: false, pool: { max: 2, min: 0 } });
         try {
+            const runner1 = new MigrationRunner(firstDb);
+            const totalFiles = runner1.getMigrationFiles().length;
             const [first, second] = await Promise.all([
-                new MigrationRunner(firstDb).up(),
+                runner1.up(),
                 new MigrationRunner(secondDb).up()
             ]);
-            assert.equal(first.appliedCount + second.appliedCount, 9, 'Solo un runner aplica cada migración');
+            assert.equal(first.appliedCount + second.appliedCount, totalFiles, 'Solo un runner aplica cada migración');
             const [duplicates] = await firstDb.query(`SELECT name, COUNT(*)::integer AS count
                 FROM schema_migrations GROUP BY name HAVING COUNT(*) > 1`);
             assert.equal(duplicates.length, 0);

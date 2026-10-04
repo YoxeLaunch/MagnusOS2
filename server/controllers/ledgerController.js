@@ -111,38 +111,13 @@ export const createTransaction = async (req, res) => {
             });
         }
 
-        // Validate lines sum to 0 in minor units using exact BigInt parser
-        let totalMinor = 0n;
-        for (const line of lines) {
-            if (line.amount === undefined && line.amountMinor === undefined) {
-                await t.rollback();
-                return res.status(400).json({ error: 'Cada línea debe tener un importe numérico válido' });
-            }
-            try {
-                totalMinor += line.amountMinor !== undefined
-                    ? BigInt(String(line.amountMinor))
-                    : toMinorUnitsBigInt(line.amount);
-            } catch {
-                await t.rollback();
-                return res.status(400).json({ error: 'Cada línea debe tener un importe numérico válido' });
-            }
-        }
-
-        if (totalMinor !== 0n) {
-            await t.rollback();
-            return res.status(400).json({
-                error: `Transaction lines must sum to 0. Current sum: ${fromMinorUnits(totalMinor)}`,
-                sum: fromMinorUnits(totalMinor)
-            });
-        }
-
         // Verify account ownership and lock account rows for atomic balance update
         const accountIds = [...new Set(lines.map(l => l.accountId).filter(Boolean))];
-        const accounts = await Account.findAll({
+        const accounts = accountIds.length > 0 ? await Account.findAll({
             where: { id: accountIds },
             transaction: t,
             lock: t.LOCK.UPDATE
-        });
+        }) : [];
 
         const accountMap = new Map(accounts.map(a => [a.id, a]));
 
@@ -158,15 +133,121 @@ export const createTransaction = async (req, res) => {
             }
         }
 
-        // Resolve and validate transaction type
-        const resolvedType = type || inferTransactionType(lines);
+        // Validate each line amount, currency, and account currency consistency
+        const parsedLines = [];
+        const PG_BIGINT_MIN = -9223372036854775808n;
+        const PG_BIGINT_MAX = 9223372036854775807n;
+        const currencies = new Set();
+        const currencySums = new Map();
 
-        // Strict validation: an internal transfer MUST only involve accounts of the same user
+        for (let i = 0; i < lines.length; i++) {
+            const line = lines[i];
+            if (line.amount === undefined && line.amountMinor === undefined) {
+                await t.rollback();
+                return res.status(400).json({ error: `Línea ${i + 1}: debe tener un importe numérico válido` });
+            }
+
+            let amountMinorBigInt;
+            try {
+                amountMinorBigInt = line.amountMinor !== undefined
+                    ? BigInt(String(line.amountMinor))
+                    : toMinorUnitsBigInt(line.amount);
+            } catch {
+                await t.rollback();
+                return res.status(400).json({ error: `Línea ${i + 1}: importe numérico inválido o NaN` });
+            }
+
+            if (amountMinorBigInt === 0n) {
+                await t.rollback();
+                return res.status(400).json({ error: `Línea ${i + 1}: el importe contable no puede ser cero` });
+            }
+
+            if (amountMinorBigInt < PG_BIGINT_MIN || amountMinorBigInt > PG_BIGINT_MAX) {
+                await t.rollback();
+                return res.status(400).json({ error: `Línea ${i + 1}: desbordamiento numérico BIGINT` });
+            }
+
+            // Determine line currency
+            let lineCurrency = line.currency;
+            if (line.accountId) {
+                const acc = accountMap.get(line.accountId);
+                if (lineCurrency && lineCurrency !== acc.currency) {
+                    await t.rollback();
+                    return res.status(400).json({
+                        error: `Línea ${i + 1}: la moneda declarada (${lineCurrency}) no coincide con la moneda de la cuenta (${acc.currency})`
+                    });
+                }
+                lineCurrency = acc.currency;
+            } else {
+                lineCurrency = lineCurrency || 'DOP';
+            }
+
+            currencies.add(lineCurrency);
+            const currentCurrSum = currencySums.get(lineCurrency) || 0n;
+            currencySums.set(lineCurrency, currentCurrSum + amountMinorBigInt);
+
+            parsedLines.push({
+                ...line,
+                amountMinor: amountMinorBigInt.toString(),
+                amountMinorBigInt,
+                currency: lineCurrency
+            });
+        }
+
+        // Multicurrency invariant: An ordinary transaction cannot mix currencies
+        if (currencies.size > 1) {
+            await t.rollback();
+            return res.status(400).json({
+                error: `Transacciones multimoneda no permitidas en asientos ordinarios (${currencies.size} monedas detectadas). Cada transacción debe usar una sola moneda.`
+            });
+        }
+
+        // Strict per-currency zero sum check
+        for (const [curr, sum] of currencySums.entries()) {
+            if (sum !== 0n) {
+                await t.rollback();
+                return res.status(400).json({
+                    error: `Las líneas de la transacción no cuadran a 0 para la moneda ${curr}. Suma: ${fromMinorUnits(sum)}`,
+                    currency: curr,
+                    sum: fromMinorUnits(sum)
+                });
+            }
+        }
+
+        // Resolve and validate transaction type
+        const resolvedType = type || inferTransactionType(parsedLines);
+
+        // Strict validation for transfers: exactly 2 opposite lines between distinct accounts of the same user and currency
         if (resolvedType === 'transfer') {
-            const hasNonAccount = lines.some(l => !l.accountId);
+            if (parsedLines.length !== 2) {
+                await t.rollback();
+                return res.status(400).json({ error: 'Transferencias internas deben constar exactamente de dos líneas contables' });
+            }
+            const hasNonAccount = parsedLines.some(l => !l.accountId);
             if (hasNonAccount) {
                 await t.rollback();
                 return res.status(400).json({ error: 'Transferencias internas deben ser exclusivamente entre cuentas de balance' });
+            }
+            if (parsedLines[0].accountId === parsedLines[1].accountId) {
+                await t.rollback();
+                return res.status(400).json({ error: 'Transferencias internas requieren cuentas origen y destino distintas' });
+            }
+            const acc1 = accountMap.get(parsedLines[0].accountId);
+            const acc2 = accountMap.get(parsedLines[1].accountId);
+            if (acc1.currency !== acc2.currency) {
+                await t.rollback();
+                return res.status(400).json({
+                    error: `Transferencias directas requieren la misma moneda (${acc1.currency} vs ${acc2.currency})`
+                });
+            }
+            if ((parsedLines[0].amountMinorBigInt + parsedLines[1].amountMinorBigInt) !== 0n) {
+                await t.rollback();
+                return res.status(400).json({ error: 'Líneas de transferencia deben ser opuestas y exactas' });
+            }
+            if ((parsedLines[0].amountMinorBigInt > 0n && parsedLines[1].amountMinorBigInt > 0n) ||
+                (parsedLines[0].amountMinorBigInt < 0n && parsedLines[1].amountMinorBigInt < 0n)) {
+                await t.rollback();
+                return res.status(400).json({ error: 'Transferencia debe tener un débito y un crédito' });
             }
         }
 
@@ -186,7 +267,7 @@ export const createTransaction = async (req, res) => {
         }
 
         // Validate Category tenant isolation if categoryId provided
-        const categoryIds = [...new Set(lines.map(l => l.categoryId).filter(Boolean))];
+        const categoryIds = [...new Set(parsedLines.map(l => l.categoryId).filter(Boolean))];
         if (categoryIds.length > 0) {
             const validCategories = await Category.findAll({
                 where: {
@@ -213,17 +294,15 @@ export const createTransaction = async (req, res) => {
             reference
         }, { transaction: t });
 
-        // Create lines with string BIGINT amounts
+        // Create lines with validated string BIGINT amounts and currencies
         await Promise.all(
-            lines.map(line =>
+            parsedLines.map(line =>
                 TransactionLine.create({
                     transactionId: transaction.id,
                     accountId: line.accountId,
                     categoryId: line.categoryId,
-                    amountMinor: line.amountMinor !== undefined
-                        ? BigInt(String(line.amountMinor)).toString()
-                        : toMinorUnitsBigInt(line.amount).toString(),
-                    currency: line.currency || accountMap.get(line.accountId)?.currency || 'DOP',
+                    amountMinor: line.amountMinor,
+                    currency: line.currency,
                     fxRate: line.fxRate,
                     memo: line.memo
                 }, { transaction: t })
@@ -231,7 +310,7 @@ export const createTransaction = async (req, res) => {
         );
 
         // Update account balances atomically with BigInt arithmetic
-        await updateAccountBalances(lines, accountMap, t);
+        await updateAccountBalances(parsedLines, accountMap, t);
 
         await t.commit();
 
