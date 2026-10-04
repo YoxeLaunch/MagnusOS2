@@ -26,6 +26,7 @@
     "db:baseline": "node scripts/migrate.js baseline 000_base_schema.sql --confirm-baseline",
     "db:drift": "node scripts/schema-drift.js",
     "db:reconcile": "node scripts/reconcile-ledger.js",
+    "db:cutover:daily": "node scripts/cutover-daily-transactions.js",
     "db:restore:drill": "node scripts/restore-drill.js"
   },
   "dependencies": {

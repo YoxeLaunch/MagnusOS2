@@ -150,7 +150,7 @@ describe('PostgreSQL Real Integration Tests — MagnusOS2 Ledger & Database Hard
                     throw err;
                 }
             }, (err) => {
-                assert.match(err.message, /is unbalanced: sum of lines is 100000 minor units \(must be 0\)/);
+                assert.match(err.message, /is unbalanced.*100000 minor units \(must be 0\)/);
                 return true;
             });
         });

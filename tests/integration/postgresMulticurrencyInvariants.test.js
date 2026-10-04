@@ -1,4 +1,4 @@
-import { describe, it, before, beforeEach } from 'node:test';
+import { describe, it, before, beforeEach, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { initializeTestPostgres, TEST_DB_URL, sequelize } from './setupTestDb.js';
 import {
@@ -423,5 +423,11 @@ describe('PostgreSQL Multicurrency Invariants & Isolation (Phase II Remediation)
         await createTransaction(reqOverflow, resOverflow);
         assert.equal(resOverflow.statusCode, 400);
         assert.match(resOverflow.body.error, /desbordamiento/i);
+    });
+
+    after(async () => {
+        try {
+            await db.close();
+        } catch (_) {}
     });
 });
