@@ -16,7 +16,7 @@
 import 'dotenv/config';
 import cron from 'node-cron';
 import { GoogleGenerativeAI } from '@google/generative-ai';
-import { DailyTransaction } from '../models/index.js';
+import { DailyTransaction, User } from '../models/index.js';
 import { initDb } from '../models/index.js';
 import { saveSnapshot, getSnapshot, isStale } from '../services/snapshotService.js';
 import { Op } from 'sequelize';
@@ -33,6 +33,7 @@ if (GEMINI_API_KEY) {
 const args = process.argv.slice(2);
 const isForced = args.includes('--force');
 const periodArg = args.find(a => a.startsWith('--period='))?.split('=')[1];
+const userArg = args.find(a => a.startsWith('--user='))?.split('=')[1];
 
 // ========================================
 // Utility: Get date range for a period (YYYY-MM)
@@ -99,52 +100,51 @@ const computeMetrics = (transactions) => {
 };
 
 // ========================================
-// Core: Run the monthly analysis for a period
+// Core: Run monthly analysis for a single user
 // ========================================
-const runAnalysisForPeriod = async (period) => {
+const runAnalysisForUser = async (userId, period) => {
     const { startDate, endDate, periodKey } = getPeriodRange(period);
-    console.log(`[Job] ▶ Starting monthly analysis for: ${periodKey} (${startDate} → ${endDate})`);
+    console.log(`[Job] ▶ Starting monthly analysis for user '${userId}', period: ${periodKey} (${startDate} → ${endDate})`);
 
     // STEP 1: Check if snapshot already exists and is fresh
     if (!isForced) {
-        const existing = await getSnapshot(periodKey);
+        const existing = await getSnapshot(userId, periodKey);
         if (existing && !isStale(existing)) {
-            console.log(`[Job] ⏭ Snapshot already exists and is fresh for ${periodKey}. Skipping.`);
+            console.log(`[Job] ⏭ Snapshot already exists and is fresh for user '${userId}' at ${periodKey}. Skipping.`);
             return existing;
         }
     }
 
-    // STEP 2: Query all transactions for the period
+    // STEP 2: Query transactions for the period scoped to userId
     let transactions = [];
     try {
         transactions = await DailyTransaction.findAll({
             where: {
+                userId,
                 date: {
                     [Op.between]: [startDate, endDate]
                 }
             },
             order: [['date', 'ASC']]
         });
-        console.log(`[Job] Fetched ${transactions.length} transactions from DB.`);
+        console.log(`[Job] User '${userId}': fetched ${transactions.length} transactions from DB.`);
     } catch (err) {
-        console.error('[Job] DB query error:', err.message);
+        console.error(`[Job] DB query error for user '${userId}':`, err.message);
         throw err;
     }
 
     if (transactions.length === 0) {
-        console.log(`[Job] No transactions found for ${periodKey}. Saving empty snapshot.`);
-        await saveSnapshot(periodKey, { txCount: 0 }, {
+        console.log(`[Job] User '${userId}': no transactions found for ${periodKey}. Saving empty snapshot.`);
+        return await saveSnapshot(userId, periodKey, { txCount: 0 }, {
             narrative: 'No se registraron transacciones en este período.',
             alerts: [],
             recommendations: [],
             tokensUsed: 0
         });
-        return;
     }
 
     // STEP 3: Compute metrics in Node.js (no token cost)
     const metrics = computeMetrics(transactions);
-    console.log(`[Job] Metrics computed:`, metrics);
 
     // STEP 4: Call Gemini ONCE with compressed summary
     let geminiResponse = {
@@ -155,7 +155,7 @@ const runAnalysisForPeriod = async (period) => {
     };
 
     if (genAI) {
-        const prompt = `Eres un analista financiero. Analiza este resumen mensual de MagnusOS y genera:
+        const prompt = `Eres un analista financiero. Analiza este resumen mensual de MagnusOS para el usuario ${userId} y genera:
 
 PERÍODO: ${periodKey}
 MÉTRICAS:
@@ -186,7 +186,6 @@ Responde en formato JSON con exactamente esta estructura (sin markdown):
             const responseText = result.response.text();
             const tokensUsed = result.response.usageMetadata?.totalTokenCount || 0;
 
-            // Parse JSON from Gemini response
             try {
                 const cleaned = responseText.replace(/```json\n?|\n?```/g, '').trim();
                 const parsed = JSON.parse(cleaned);
@@ -196,36 +195,55 @@ Responde en formato JSON con exactamente esta estructura (sin markdown):
                     recommendations: parsed.recommendations || [],
                     tokensUsed
                 };
-                console.log(`[Job] ✅ Gemini analysis complete. Tokens used: ${tokensUsed}`);
             } catch (parseErr) {
-                console.error('[Job] Failed to parse Gemini JSON. Saving raw text as narrative.');
                 geminiResponse.narrative = responseText.substring(0, 1000);
                 geminiResponse.tokensUsed = tokensUsed;
             }
         } catch (geminiErr) {
-            console.error('[Job] Gemini API error:', geminiErr.message);
+            console.error(`[Job] Gemini API error for user '${userId}':`, geminiErr.message);
             geminiResponse.narrative = `Error al generar análisis narrativo: ${geminiErr.message}`;
         }
-    } else {
-        console.warn('[Job] GEMINI_API_KEY not set. Saving metrics-only snapshot.');
     }
 
     // STEP 5: Save snapshot to PostgreSQL
-    const savedSnapshot = await saveSnapshot(periodKey, metrics, geminiResponse);
-    console.log(`[Job] ✅ Snapshot saved for ${periodKey} | tokens_used: ${geminiResponse.tokensUsed}`);
+    const savedSnapshot = await saveSnapshot(userId, periodKey, metrics, geminiResponse);
+    console.log(`[Job] ✅ Snapshot saved for user '${userId}', period ${periodKey}`);
     return savedSnapshot;
+};
+
+// ========================================
+// Run for all active users
+// ========================================
+const runAnalysisForAllUsers = async (period) => {
+    try {
+        const users = await User.findAll({ attributes: ['username'] });
+        console.log(`[Job] Running monthly analysis for ${users.length} users...`);
+        for (const u of users) {
+            try {
+                await runAnalysisForUser(u.username, period);
+            } catch (userErr) {
+                console.error(`[Job] Error analyzing user '${u.username}':`, userErr.message);
+            }
+        }
+    } catch (err) {
+        console.error('[Job] Failed to query users for monthly analysis:', err.message);
+    }
 };
 
 // ========================================
 // Manual trigger
 // ========================================
 if (isForced) {
-    console.log(`[Job] 🔧 MANUAL TRIGGER — Period: ${periodArg || 'last month'}`);
+    console.log(`[Job] 🔧 MANUAL TRIGGER — User: ${userArg || 'all'}, Period: ${periodArg || 'last month'}`);
 
     const bootstrap = async () => {
         try {
             await initDb();
-            await runAnalysisForPeriod(periodArg);
+            if (userArg) {
+                await runAnalysisForUser(userArg, periodArg);
+            } else {
+                await runAnalysisForAllUsers(periodArg);
+            }
             console.log('[Job] ✅ Manual run complete. Exiting.');
             process.exit(0);
         } catch (err) {
@@ -243,11 +261,11 @@ if (isForced) {
     cron.schedule('0 3 1 * *', async () => {
         console.log(`[Job] 🕐 Cron triggered at ${new Date().toISOString()}`);
         try {
-            await runAnalysisForPeriod(null); // null = last month
+            await runAnalysisForAllUsers(null); // null = last month
         } catch (err) {
             console.error('[Job] ❌ Cron job failed:', err.message);
         }
     });
 }
 
-export { runAnalysisForPeriod };
+export { runAnalysisForUser, runAnalysisForAllUsers };
