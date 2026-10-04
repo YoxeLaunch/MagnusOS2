@@ -2,7 +2,7 @@
 FROM python:3.11-slim-bookworm
 
 # Install system dependencies for financial analysis and tools
-RUN apt-get update && apt-get install -y \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     git \
     jq \
@@ -18,11 +18,16 @@ RUN pip install --no-cache-dir \
     statsmodels \
     scipy
 
-# Set workspace
-WORKDIR /sandbox
+# Security: Create non-root user
+RUN useradd -m -u 1000 -s /bin/bash sandboxuser && \
+    mkdir -p /sandbox /app && \
+    chown -R sandboxuser:sandboxuser /sandbox /app
 
-# Create a simple bridge script to execute code
-COPY server/scripts/sandbox-bridge.py /app/bridge.py
+# Copy bridge script
+COPY --chown=sandboxuser:sandboxuser server/scripts/sandbox-bridge.py /app/bridge.py
+
+USER sandboxuser
+WORKDIR /sandbox
 
 EXPOSE 5000
 
