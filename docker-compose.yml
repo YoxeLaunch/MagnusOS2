@@ -25,6 +25,33 @@ services:
       retries: 5
 
   # ========================================
+  # PostgreSQL Isolated Test Database (Phase II)
+  # ========================================
+  postgres_test:
+    image: postgres:16-alpine
+    container_name: magnus_postgres_test
+    profiles: ["test"]
+    environment:
+      POSTGRES_DB: magnus_test
+      POSTGRES_USER: magnus_test_user
+      POSTGRES_PASSWORD: magnus_test_secret_pass
+    ports:
+      - "127.0.0.1:5433:5432"
+    tmpfs:
+      - /var/lib/postgresql/data
+    command: >
+      postgres -c fsync=off -c synchronous_commit=off -c full_page_writes=off
+    restart: "no"
+    mem_limit: 512m
+    pids_limit: 100
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U magnus_test_user -d magnus_test" ]
+      interval: 2s
+      timeout: 2s
+      retries: 10
+
+
+  # ========================================
   # Magnus-OS2 (All-in-One: Node 20)
   # ========================================
   magnus:
