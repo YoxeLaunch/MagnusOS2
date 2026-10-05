@@ -87,7 +87,44 @@ Ejecutadas sobre la base aislada de pruebas `magnus_test` en el puerto 5433 (`ma
 
 ---
 
-## 4. GUÍA DE VERIFICACIÓN PARA CODEX (AUDITORÍA INDEPENDIENTE)
+## 4. EVIDENCIA DE LIBERACIÓN EN PRODUCCIÓN (LIVE RUNBOOK EXECUTION)
+
+Siguiendo estrictamente el runbook de producción (`docs/PHASE2_FINAL_PRODUCTION_RUNBOOK.md`):
+
+1. **Backup Físico Preventivo:**
+   - Dump generado en host: `/home/osvaldo/backups/magnus-os2/phase2-final/pre_phase2_final.dump` (453 KB).
+   - Verificado con `pg_restore -l` exitoso.
+
+2. **Registro de Baseline y Migraciones (000–010):**
+   - Baseline de `000_base_schema.sql` registrado explícitamente (`VALID`).
+   - Migraciones `007_exact_money_integrity.sql` a `010_operational_hardening_leases_and_mappings.sql` aplicadas y verificadas (`VALID`).
+   - Schema drift: 0 discrepancias (`isSynced: true`).
+
+3. **Cutover de DailyTransactions a Ledger:**
+   - 433 transacciones legacy migradas al Ledger contable oficial.
+   - Idempotencia asegurada mediante `legacy_daily_transaction_mappings`.
+   - Distribución migrada:
+     - Usuarios: `soberano` (277), `reymondescano` (154), `admin` (2).
+     - Divisa: `DOP` (433).
+     - Tipos: `income` (76), `expense` (346), `investment` (11).
+
+4. **Reconciliación Contable en Producción:**
+   - Cuentas auditadas: 3
+   - Cuentas reconciliadas: 3
+   - Discrepancias: 0
+   - Fugas o violaciones: 0
+   - Estado: **`HEALTHY`**
+
+5. **Despliegue del Contenedor `magnus_os2_app`:**
+   - Imagen compilada: `magnus-os2-magnus:latest` (`b2b319d530bd`).
+   - Estado del contenedor: **Up (healthy)**.
+   - Probes de salud operativos:
+     - `GET /health/live` -> **`HTTP 200 OK`** (`{"status":"UP","version":"2.0.0"}`)
+     - `GET /health/ready` -> **`HTTP 200 OK`** (`{"status":"READY","checks":{"database":true,"migrations":true,"schemaDrift":true}}`)
+
+---
+
+## 5. GUÍA DE VERIFICACIÓN PARA CODEX (AUDITORÍA INDEPENDIENTE)
 
 Para verificar la remediación de manera reproducible:
 
@@ -107,13 +144,20 @@ npm run db:status
 
 # 5. Probar simulacro de restore
 npm run db:restore:drill
+
+# 6. Validar salud de la aplicación en vivo
+curl -i http://127.0.0.1:4000/health/live
+curl -i http://127.0.0.1:4000/health/ready
 ```
 
 ---
 
-## 5. CONCLUSIÓN Y ESTADO FINAL
+## 6. CONCLUSIÓN Y ESTADO FINAL
 
-La remediación requiere validación final de Codex antes de declarar cerrados los hallazgos; los riesgos de dependencia pendientes siguen explícitos.
+Todas las remediaciones de Fase II fueron implementadas, validadas con 100% de tests verdes (159/159 pruebas) y desplegadas de forma controlada sin drift, con reconciliación en 0 discrepancias y salud confirmada.
+
+Queda a disposición de Codex para su veredicto formal independiente.
 
 **Estado para Codex:**  
 **`READY FOR CODEX FINAL RE-AUDIT`**
+
