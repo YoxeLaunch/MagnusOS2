@@ -115,7 +115,7 @@ const SummaryPreview: React.FC<{ draft: Partial<Transaction>; currencies: any; a
 
 export const CashFlow: React.FC = () => {
     const { t } = useTranslation(['cashflow', 'common']);
-    const [activeTab, setActiveTab] = useState<'income' | 'expense' | 'ledger'>('ledger');
+    const [activeTab, setActiveTab] = useState<'income' | 'expense' | 'ledger'>('income');
     const [showPrintModal, setShowPrintModal] = useState(false);
 
     const handlePrint = (options: PrintOptions) => {
@@ -146,19 +146,6 @@ export const CashFlow: React.FC = () => {
                 {/* Tab Switcher */}
                 <div className="flex bg-gray-100 dark:bg-gray-800 p-1 rounded-xl self-start md:self-auto" role="tablist" aria-label="Selector de flujo financiero">
                     <button
-                        onClick={() => setActiveTab('ledger')}
-                        role="tab"
-                        aria-selected={activeTab === 'ledger'}
-                        aria-controls="panel-ledger"
-                        id="tab-ledger"
-                        className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all ${activeTab === 'ledger'
-                            ? 'bg-card text-primary shadow-sm'
-                            : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
-                            }`}
-                    >
-                        <ShieldCheck size={16} aria-hidden="true" /> Flujo Real (Ledger)
-                    </button>
-                    <button
                         onClick={() => setActiveTab('income')}
                         role="tab"
                         aria-selected={activeTab === 'income'}
@@ -183,6 +170,19 @@ export const CashFlow: React.FC = () => {
                             }`}
                     >
                         <ArrowDownCircle size={16} aria-hidden="true" /> Plan Gastos
+                    </button>
+                    <button
+                        onClick={() => setActiveTab('ledger')}
+                        role="tab"
+                        aria-selected={activeTab === 'ledger'}
+                        aria-controls="panel-ledger"
+                        id="tab-ledger"
+                        className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all ${activeTab === 'ledger'
+                            ? 'bg-card text-primary shadow-sm'
+                            : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
+                            }`}
+                    >
+                        <ShieldCheck size={16} aria-hidden="true" /> Flujo Real (Ledger)
                     </button>
                 </div>
             </header>
@@ -251,26 +251,29 @@ const LedgerCashFlowView: React.FC = () => {
                     </span>
                 </div>
                 <div className="flex items-center gap-3">
-                    <div className="flex items-center gap-2 text-xs text-gray-500">
-                        <span>Desde:</span>
-                        <input
-                            type="date"
+                    <div className="flex items-center gap-2">
+                        <DatePicker
+                            size="sm"
+                            align="right"
+                            placeholder="Desde"
                             value={startDate}
-                            onChange={(e) => setStartDate(e.target.value)}
-                            className="bg-background border border-border rounded-lg px-2 py-1 text-xs text-text focus:outline-none focus:ring-1 focus:ring-primary"
+                            onChange={setStartDate}
+                            className="w-36"
                         />
-                        <span>Hasta:</span>
-                        <input
-                            type="date"
+                        <span className="text-xs text-gray-400 dark:text-gray-500 font-bold">-</span>
+                        <DatePicker
+                            size="sm"
+                            align="right"
+                            placeholder="Hasta"
                             value={endDate}
-                            onChange={(e) => setEndDate(e.target.value)}
-                            className="bg-background border border-border rounded-lg px-2 py-1 text-xs text-text focus:outline-none focus:ring-1 focus:ring-primary"
+                            onChange={setEndDate}
+                            className="w-36"
                         />
                     </div>
                     {(startDate || endDate) && (
                         <button
                             onClick={() => { setStartDate(''); setEndDate(''); }}
-                            className="text-xs text-gray-500 hover:text-text px-2 py-1 rounded hover:bg-gray-100 dark:hover:bg-gray-800"
+                            className="text-xs text-gray-500 hover:text-text px-2 py-1 rounded hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
                         >
                             Limpiar
                         </button>

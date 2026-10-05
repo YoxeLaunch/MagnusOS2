@@ -5,7 +5,6 @@ import { getPortfolioSnapshot, formatCurrency } from '../utils/calculations';
 import { cashFlowApi, NetWorthResponse, CashFlowResponse } from '../api/finanzaApi';
 import { minorToSafeNumber, parseDecimalToSafeNumber } from '../utils/moneySafety';
 import { Building2, TrendingUp, PiggyBank, DollarSign, Wallet, ArrowUpRight, ArrowDownRight, RefreshCw, X } from 'lucide-react';
-import { MarketIntel } from '../components/MarketIntel';
 
 export const Wealth: React.FC = () => {
     const { data, dailyTransactions, currencies } = useData();
@@ -221,9 +220,6 @@ export const Wealth: React.FC = () => {
                     </div>
                 </div>
             </div>
-
-            {/* SECCIÓN MERCADO // INDICADORES CLAVE */}
-            <MarketIntel variant="summary" />
 
             {/* Currency Edit Modal */}
             {isEditingRates && (

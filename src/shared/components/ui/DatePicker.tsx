@@ -6,9 +6,20 @@ interface DatePickerProps {
     onChange: (date: string) => void;
     label?: string;
     className?: string;
+    placeholder?: string;
+    align?: 'left' | 'right';
+    size?: 'sm' | 'md';
 }
 
-export const DatePicker: React.FC<DatePickerProps> = ({ value, onChange, label, className = '' }) => {
+export const DatePicker: React.FC<DatePickerProps> = ({
+    value,
+    onChange,
+    label,
+    className = '',
+    placeholder,
+    align = 'left',
+    size = 'md'
+}) => {
     const [isOpen, setIsOpen] = useState(false);
     const [currentMonth, setCurrentMonth] = useState(new Date());
     const containerRef = useRef<HTMLDivElement>(null);
@@ -63,7 +74,7 @@ export const DatePicker: React.FC<DatePickerProps> = ({ value, onChange, label, 
     const MONTHS_SHORT = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
 
     const formatDateDisplay = (dateStr: string) => {
-        if (!dateStr) return 'Seleccionar fecha';
+        if (!dateStr) return placeholder || 'Seleccionar fecha';
 
         // Handle YYYY-MM-DD manually to prevent timezone offset
         if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
@@ -129,16 +140,20 @@ export const DatePicker: React.FC<DatePickerProps> = ({ value, onChange, label, 
 
             <div
                 onClick={() => setIsOpen(!isOpen)}
-                className="w-full flex items-center gap-2 bg-slate-900/50 p-3 rounded border border-slate-700 cursor-pointer hover:border-theme-gold/50 transition-colors"
+                className={`w-full flex items-center gap-2 bg-slate-900/50 rounded border border-slate-700 cursor-pointer hover:border-theme-gold/50 transition-colors ${
+                    size === 'sm' ? 'px-2.5 py-1.5 text-xs' : 'p-3 text-sm'
+                }`}
             >
-                <CalendarIcon size={16} className="text-slate-400" />
-                <span className={`text-sm font-medium ${value ? 'text-white' : 'text-slate-500'}`}>
+                <CalendarIcon size={size === 'sm' ? 14 : 16} className="text-slate-400 shrink-0" />
+                <span className={`font-medium truncate ${value ? 'text-white' : 'text-slate-500'}`}>
                     {formatDateDisplay(value)}
                 </span>
             </div>
 
             {isOpen && (
-                <div className="absolute top-full left-0 mt-2 z-50 bg-white dark:bg-slate-800 rounded-xl shadow-2xl border border-slate-200 dark:border-white/10 w-64 p-4 animate-in fade-in zoom-in-95 duration-200">
+                <div className={`absolute top-full mt-2 z-50 bg-white dark:bg-slate-800 rounded-xl shadow-2xl border border-slate-200 dark:border-white/10 w-64 p-4 animate-in fade-in zoom-in-95 duration-200 ${
+                    align === 'right' ? 'right-0 left-auto' : 'left-0'
+                }`}>
                     {/* Header */}
                     <div className="flex justify-between items-center mb-4">
                         <button onClick={() => changeMonth(-1)} className="p-1 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg text-slate-500">
