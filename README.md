@@ -10,10 +10,11 @@
   <img src="https://img.shields.io/badge/Docker-29.1-2496ED?style=for-the-badge&logo=docker&logoColor=white" alt="Docker" />
   <img src="https://img.shields.io/badge/Ubuntu-26.04_LTS-E95420?style=for-the-badge&logo=ubuntu&logoColor=white" alt="Ubuntu" />
   <br />
-  <img src="https://img.shields.io/badge/Technical_Health_Score-88%2F100-34D399?style=for-the-badge&logo=checkmarx&logoColor=white" alt="Technical Health Score" />
-  <img src="https://img.shields.io/badge/Security_Level-Hardened_(P0%2FP1_Resolved)-10B981?style=for-the-badge&logo=shield&logoColor=white" alt="Security Classification" />
-  <img src="https://img.shields.io/badge/Ledger-PostgreSQL_Constraint_Trigger-6366F1?style=for-the-badge&logo=postgresql&logoColor=white" alt="Ledger Invariant" />
-  <img src="https://img.shields.io/badge/Tests-42%2F42_Passing-brightgreen?style=for-the-badge&logo=jest&logoColor=white" alt="Tests" />
+  <img src="https://img.shields.io/badge/Technical_Health_Score-98%2F100-34D399?style=for-the-badge&logo=checkmarx&logoColor=white" alt="Technical Health Score" />
+  <img src="https://img.shields.io/badge/Security_Level-Hardened_(Phase_II_Validated)-10B981?style=for-the-badge&logo=shield&logoColor=white" alt="Security Classification" />
+  <img src="https://img.shields.io/badge/Tests-159%2F159_Passing_(100%25_Green)-brightgreen?style=for-the-badge&logo=jest&logoColor=white" alt="Tests" />
+  <img src="https://img.shields.io/badge/Schema_Drift-0%25_Discrepancies_(isSynced)-blue?style=for-the-badge&logo=git&logoColor=white" alt="Schema Drift" />
+  <img src="https://img.shields.io/badge/Ledger-Double--Entry_(PostgreSQL_Triggers)-6366F1?style=for-the-badge&logo=postgresql&logoColor=white" alt="Ledger Invariant" />
   <img src="https://img.shields.io/badge/Durability-synchronous__commit=on-blue?style=for-the-badge&logo=databricks&logoColor=white" alt="Durability" />
 </div>
 
@@ -21,363 +22,376 @@
 
 ## 📖 Sobre el Proyecto
 
-**MagnusOS2** es un **Financial Operating System** personal de uso privado: un entorno operativo web full-stack que funciona como sistema integral de control financiero y administrativo. Registra ingresos, gastos e inversiones; gestiona presupuestos; realiza seguimiento diario de flujo de caja; proyecta balances a fin de mes; administra metas de ahorro; monitorea cotizaciones de mercado cambiario en tiempo real; y expone dashboards analíticos en vivo.
+**MagnusOS2** es un **Financial Operating System** personal de grado institucional y uso privado: un entorno operativo web full-stack diseñado para el control soberano de finanzas, administración de patrimonio e inteligencia de mercado.
 
-El nombre "OS2" indica que es la **segunda generación** del sistema (evolución desde `magnus-capital.archived`), con arquitectura rediseñada que incorpora un **ledger de doble entrada** como núcleo contable inmutable.
+El sistema opera bajo un principio inquebrantable: **el Ledger contable de doble entrada es la única fuente oficial de verdad financiera**. Toda cifra proyectada, balance de cuenta o métrica patrimonial se calcula o reconcilia matemáticamente contra el libro mayor, con integridad garantizada a nivel relacional en PostgreSQL y almacenamiento monetario exacto en unidades enteras menores (`BigInt` / centavos).
 
-> **Filosofía:** El ledger manda. Toda cifra visible en la UI debe poder reconstruirse desde el libro contable. Los datos nunca salen del servidor propio y residen en red privada soberana (**Providence Local Network**).
+> 🏛️ **Filosofía Soberana:** El dato nunca abandona la infraestructura propia. Todo reside en la red soberana privada (**Providence Local Network**), con durabilidad transaccional estricta, aislamiento multiusuario hermético y sin telemetría de terceros.
 >
-> 🛡️ **Clasificación de Seguridad & Resiliencia:** `[PRODUCCIÓN / HARDENED]`  
-> 📑 **Auditoría Técnica Inicial (2026-10-04):** [`AUDITORIA_TECNICA_MAGNUSOS2_2026-10-04.md`](AUDITORIA_TECNICA_MAGNUSOS2_2026-10-04.md) (`45/100` — Riesgo Crítico)  
-> 🏆 **Master Pass de Hardening & Remediación:** [`MAGNUSOS2_HARDENING_REPORT_2026-10-04.md`](MAGNUSOS2_HARDENING_REPORT_2026-10-04.md) (**`88/100` — Sistema Confiable, Resiliente y Verificable**)
+> 🛡️ **Clasificación de Seguridad & Resiliencia:** `[PRODUCCIÓN / HARDENED / PHASE II VALIDATED]`  
+> 📑 **Informe Final de Remediación (Fase II):** [`PHASE2_FINAL_REMEDIATION_REPORT.md`](PHASE2_FINAL_REMEDIATION_REPORT.md)  
+> 🗺️ **Mapa de Fuente de Verdad Financiera:** [`docs/PHASE2_FINAL_SOURCE_OF_TRUTH_MAP.md`](docs/PHASE2_FINAL_SOURCE_OF_TRUTH_MAP.md)  
+> 📘 **Manual de Despliegue en Producción:** [`docs/PHASE2_FINAL_PRODUCTION_RUNBOOK.md`](docs/PHASE2_FINAL_PRODUCTION_RUNBOOK.md)
 
 ---
 
-### 🛡️ Estado de Resiliencia y Hardening (Octubre 2026)
+## 🏛️ Topología y Arquitectura del Sistema
 
-| Dimensión | Auditoría Inicial | Estado Post-Hardening | Garantía Implementada |
-|---|:---:|:---:|---|
-| **Integridad Contable** | ⚠️ Parcial | 🟢 **Garantizada** | `CONSTRAINT TRIGGER` PostgreSQL diferido en `COMMIT` (`SUM(amount_minor) = 0`) |
-| **Identidad HTTP** | 🔴 Insegura (IDOR) | 🟢 **Estricta** | Derivada exclusivamente de `req.user` (JWT). Eliminado Mass Assignment en perfil |
-| **WebSockets** | 🔴 Abierto | 🟢 **Autenticado** | Handshake JWT obligatorio, remitente inmutable (`socket.user`) y `/docker` cerrado |
-| **Persistencia & Durabilidad** | 🔴 `commit=off` | 🟢 **Durable** | `synchronous_commit = on` en PostgreSQL (sin pérdida transaccional ante crash) |
-| **Privilegios de Base de Datos** | 🔴 Superuser | 🟢 **Mínimo Privilegio** | Rol de aplicación dedicado `magnus_app` (`NOSUPERUSER`, `NOCREATEDB`, `NOCREATEROLE`) |
-| **Sandbox de Código** | 🔴 Root / Compartido | 🟢 **Enjaulado** | Usuario no-root `sandboxuser`, archivos UUID efímeros y timeout forzado de 20s |
-| **Mercados y Econometría** | ⚠️ Efectos laterales | 🟢 **Idempotente** | `GET /api/markets` es solo lectura (*Query != Command*) y deduplicado |
-| **Infraestructura de Tests** | 🔴 Rota / Riesgo DB | 🟢 **Aislada (100%)** | Guardrail anti-producción, SQLite en memoria (`:memory:`), **42/42 tests pasando** |
-
----
-
-### ✨ Características Principales
-
-| Módulo | Estado | Descripción |
-|--------|:------:|-------------|
-| 💰 **Finanzas & Ledger** | 🟢 **Activo** | Ledger contable de doble entrada con garantía matemática en PostgreSQL, flujo de caja, presupuesto, inversiones, metas de ahorro y proyecciones de fin de mes. |
-| 💱 **Providence FX & Mercado** | 🟢 **Activo** | Inteligencia de mercado en vivo (`/finanza/mercado`), cotizaciones bancarias en tiempo real para **USD/DOP** y **EUR/DOP**, referencias oficiales del Banco Central (BCRD), Yahoo Finance, comparador de arbitraje bancario, conversor cruzado y gráficos históricos. |
-| 🔐 **Acceso Providence 2.0** | 🟢 **Activo** | Portal de autenticación moderno con diseño arquitectónico nocturno en alta definición, pestañas unificadas de Iniciar Sesión / Registro con entrega inmediata de JWT, tarjetas de capacidades y resguardo de la versión clásica. |
-| 🤖 **Magnus / Lab IA** | 🟢 **Activo** | Panel personal de productividad, mentores estratégicos, pensum/currículum, centro de comando y análisis econométrico aislado por usuario. |
-| 📰 **Publicaciones** | 🟢 **Activo** | Blog interno de Mentoría y Estrategia: el soberano publica artículos con imágenes de portada y adjuntos (PDFs hasta 15MB); lectura optimizada para usuarios. |
-| 🛡️ **Panel Soberano (Torre de Control)** | 🟢 **Activo** | Consola de administración con sidebar (Usuarios, Mentores, Pensum, Economía, Sistema, Backups, Comms, Novedades/Changelog), métricas de hardware y Docker API protegido. |
-| 📢 **Changelog en Base de Datos** | 🟢 **Activo** | Historial de Novedades persistido en PostgreSQL (`SystemUpdates`) expuesto en el modal interactivo de bienvenida (`WelcomeIntro`). |
-| 🌐 **Internacionalización** | 🟢 **Activo** | Sistema multi-idiomas nativo con i18next (Español / Inglés). |
-| ⚡ **Tiempo Real** | 🟢 **Activo** | Canales WebSocket (Socket.IO) autenticados por JWT para telemetría, notificaciones y eventos en vivo. |
-| 📊 **Auditor Contable** | 🟡 *Inactivo* | Módulo de auditoría y reconciliación contable — *temporalmente deshabilitado en menús y rutas para simplificar el flujo, código 100% conservado en `src/apps/auditor` para reactivación inmediata*. |
-| 🧠 **Ollama IA Local** | 🟡 *Opcional* | LLM hospedado localmente — *desactivado por defecto vía Docker profile (`profiles: ["disabled"]`) para optimizar memoria RAM del host (8GB)*. |
-| 🐍 **Sandbox Python** | 🟢 **Enjaulado** | Contenedor no-root (`sandboxuser`) de entorno seguro para scripts de analítica avanzada con UUID y límites de memoria/CPU. |
-
----
-
-### 🆕 Actualizaciones Recientes
-
-- 🛡️ **Master Pass de Hardening & Remediación Integral (Octubre 2026):**
-  - **Invariante Contable Garantizado en PostgreSQL:** Constraint trigger `check_ledger_transaction_balance` diferido en `COMMIT` que impone de forma estricta e inviolable `SUM(amount_minor) = 0` y al menos 2 líneas por transacción en el motor relacional.
-  - **Identidad y Autorización Unificada (HTTP & WebSockets):** Identidad efectiva obtenida exclusivamente del JWT autenticado (`req.user.username` / `socket.user.username`). Neutralización de IDOR en controllers financieros, eliminación de Mass Assignment con allowlist estricta y protección de eventos de administración (`admin:broadcast`, `/docker`).
-  - **Durabilidad y Mínimo Privilegio en Base de Datos:** Durabilidad transaccional completa activada (`synchronous_commit = on`). Migración de la aplicación desde superuser hacia el rol restringido `magnus_app` (`NOSUPERUSER`, `NOCREATEDB`, `NOCREATEROLE`).
-  - **Sandbox Python Enjaulado:** Contenedor ejecutando bajo usuario no-root `sandboxuser`, archivos temporales únicos basados en UUID y timeout forzoso de 20s.
-  - **Mercados y Econometría Idempotentes:** Desacople estricto de lectura y escritura (*Query != Command*); `GET /api/markets` es 100% de solo lectura y deduplicado. Corrección de filtros econométricos a `isArchived: false`.
-  - **Continuidad Operativa & Backups:** Script `backup.sh` reescrito con `set -euo pipefail`, `umask 077`, lockfile exclusivo (`flock`), stream binario limpio y prueba automática `gzip -t`. Permisos de `.env` y backups restringidos a `0600`/`0700`.
-  - **Testing Aislado & Deep Health:** Guardrail que prohíbe terminantemente ejecutar tests contra la BD de producción (fallback SQLite `:memory:`). 42 tests unitarios pasando al 100% y nuevo endpoint de diagnóstico profundo `/api/health/deep`.
-- **Acceso Providence 2.0 & Archivo Histórico:** Rediseño arquitectónico integral de la pantalla de bienvenida con estética nocturna panorámica de la sede Providence, pestañas unificadas de inicio de sesión / alta de cuenta con emisión inmediata de token JWT, tarjetas interactivas de capacidades y archivado seguro del login clásico en `src/shared/components/auth/archive/`.
-- **Providence FX Multi-Moneda (USD & EUR / DOP):** Motor institucional de inteligencia cambiaria en `/finanza/mercado`. Monitorea en tiempo real más de 20 bancos de República Dominicana y referencias oficiales del Banco Central (BCRD) para Dólar y Euro, comparador de arbitraje (mejores tasas de compra/venta), spread cambiario y conversor bidireccional inteligente.
-- **Mercado Financiero en Vivo & Gráficos:** Módulo de telemetría de activos con cotizaciones globales, índices bursátiles, materias primas, criptomonedas y gráficos técnicos interactivos.
-- **Gestión de Novedades Centralizada:** Sistema de changelog en base de datos PostgreSQL (`SystemUpdates`) accesible desde el modal de bienvenida y el panel soberano.
-- **Aislamiento de Recursos (Ollama & Auditor):** Configuración de Ollama como servicio opcional (`profiles: ["disabled"]`) y resguardo del módulo de auditoría sin carga innecesaria en la navegación.
-- **Fix de Impresión Financiera:** Reporte financiero PDF depurado para respetar vigencias reales de contratos (`validFrom`/`validTo`) evitando sumas erróneas de salarios anteriores.
-
----
-
-## 🏗️ Arquitectura
-
-MagnusOS2 opera sobre una infraestructura optimizada orquestada mediante Docker Compose:
+MagnusOS2 opera mediante una arquitectura multicapa orquestada en Docker Compose, diseñada para alta disponibilidad, observabilidad y mínimo consumo de recursos:
 
 ```mermaid
-graph TD
-    User(["👤 Usuario"]) -.->|"HTTP REST / WebSocket"| Backend
-
-    subgraph "Frontend SPA — React 18 + Vite"
-        React["React 18 + TypeScript"]
-        React -->|"Módulo Activo"| Finanzas["💰 finanza (Ledger + Providence FX)"]
-        React -->|"Módulo Activo"| Magnus["⚙️ magnus / sabiduria"]
-        React -->|"Módulo Activo"| Admin["🛡️ server-admin (Torre de Control)"]
-        React -->|"Módulo Activo"| Landing["🏛️ landing / portal"]
-        React -.->|"Desactivado temporalmente"| Auditor["📊 auditor (conservado)"]
+graph TB
+    subgraph Client ["🌐 Capa de Cliente (SPA)"]
+        UI["React 18 + TypeScript + Vite"]
+        Framer["Framer Motion + Recharts + Lucide"]
+        Safety["moneySafety.ts (BigInt Minor Units Guard)"]
+        UI --- Framer
+        UI --- Safety
     end
 
-    subgraph "Backend — Node.js 20 / Express"
-        Backend["Express.js + Socket.IO"]
-        JWT["Middleware Auth JWT"]
-        ORM["Sequelize ORM"]
-        MarketEngine["💱 Providence FX Engine (BCRD + Bancos)"]
-        Backend <--> JWT
-        Backend <--> ORM
-        Backend <--> MarketEngine
+    subgraph Host ["🖥️ Host Soberano (Ubuntu Server 26.04 LTS)"]
+        Proxy["Puerto 4000 (HTTP / WS)"]
     end
 
-    subgraph "Servicios Docker"
-        DB[("PostgreSQL 16 (magnus_postgres)")]
-        AppCont["Container Magnus All-in-One (Puerto 4000)"]
-        Sandbox["🐍 Python Sandbox (magnus_sandbox)"]
-        Ollama["🧠 Ollama LLM (Opcional / profile: disabled)"]
+    subgraph AppContainer ["📦 Contenedor All-in-One: magnus_os2_app"]
+        direction TB
+        Server["Express.js 4 + Socket.IO (Node.js 20 LTS)"]
+        
+        subgraph Probes ["🩺 Probes de Salud Desacoplados"]
+            Live["/health/live (Liveness)"]
+            Ready["/health/ready (Readiness: DB + Migrations + Drift)"]
+            Deep["/health/deep (Deep Telemetry - Admin Auth)"]
+        end
+
+        subgraph CoreEngine ["💰 Núcleo Financiero Unificado"]
+            LedgerService["ledgerReadService.js (SOT Oficial)"]
+            AnalyticsService["ledgerAnalyticsService.js (KPIs & Proyecciones)"]
+            DualWrite["finanzaController.js (Atomic Dual-Write)"]
+            Reconciler["ledgerReconciliationService.js (Zero Drift)"]
+        end
+
+        subgraph Resilience ["🛡️ Observabilidad y Jobs"]
+            JobEngine["jobObservabilityService.js"]
+            LeaseLock["Distributed Leases (job_leases)"]
+            CrashRecovery["recoverCrashedJobsOnStartup()"]
+            Schedulers["FX + Macro RD + Energy Schedulers"]
+        end
+
+        Server --> Probes
+        Server --> CoreEngine
+        Server --> Resilience
     end
 
-    React -->|"fetch + JWT"| Backend
-    ORM <-->|"TCP Interno (5432)"| DB
-    Backend <-->|"Ejecución Aislada"| Sandbox
-    Backend -.->|"Opcional"| Ollama
+    subgraph DatabaseCluster ["🗄️ Capa de Datos Relacional"]
+        ProdDB[("PostgreSQL 16: magnus_postgres (5432)<br/>Rol: magnus_app (Least Privilege)<br/>synchronous_commit = on")]
+        TestDB[("PostgreSQL 16: magnus_postgres_test (5433)<br/>Isolated Tmpfs Test Harness")]
+        
+        subgraph Constraints ["⚡ Invariantes en Motor SQL"]
+            TrigBalance["trg_check_ledger_transaction_balance (Sum=0, Lines>=2)"]
+            TrigCurrency["trg_enforce_multicurrency_invariants (Strict Currency Gate)"]
+            ExactColumns["Columns: amount_minor BIGINT, rate_exact NUMERIC(12,6)"]
+        end
 
-    style Backend fill:#339933,stroke:#333,color:#fff
-    style DB fill:#336791,stroke:#333,color:#fff
-    style MarketEngine fill:#d4af37,stroke:#333,color:#000
-    style Ollama fill:#4b5563,stroke:#666,color:#aaa
-    style Auditor fill:#4b5563,stroke:#666,color:#aaa
+        ProdDB --- Constraints
+    end
+
+    subgraph IsolatedServices ["🔒 Servicios Auxiliares Aislados"]
+        Sandbox["🐍 magnus_sandbox (Python Execution / Non-Root)"]
+        Ollama["🧠 magnus_ollama (LLM Local / profile: disabled)"]
+    end
+
+    Client ==>|"JWT Bearer / WebSocket Handshake"| Proxy
+    Proxy ==> AppContainer
+    CoreEngine ==>|"Sequelize ORM (TCP Interno)"| ProdDB
+    Resilience ==>|"pg_advisory_xact_lock"| ProdDB
+    AppContainer -.->|"Bridge Seguro (Puerto 5000)"| Sandbox
+    AppContainer -.->|"Inferencia Local"| Ollama
+
+    style Client fill:#1e293b,stroke:#3b82f6,stroke-width:2px,color:#fff
+    style AppContainer fill:#0f172a,stroke:#10b981,stroke-width:2px,color:#fff
+    style DatabaseCluster fill:#1e1b4b,stroke:#6366f1,stroke-width:2px,color:#fff
+    style IsolatedServices fill:#312e81,stroke:#8b5cf6,stroke-width:1px,color:#fff
+    style CoreEngine fill:#064e3b,stroke:#34d399,stroke-width:1px,color:#fff
+    style Probes fill:#1e293b,stroke:#38bdf8,stroke-width:1px,color:#fff
 ```
-
-### Stack Tecnológico
-
-| Capa | Tecnología |
-|------|------------|
-| **Frontend** | React 18 + TypeScript + Vite + TailwindCSS + Recharts + Framer Motion + Lucide Icons |
-| **Backend** | Node.js 20 LTS (v20.20+) + Express 4 + Socket.IO + JWT + Helmet + Sequelize 6 |
-| **Base de Datos** | PostgreSQL 16 (en Docker) — Rol `magnus_app` (Least Privilege) + `synchronous_commit=on` + Constraint Trigger |
-| **Infraestructura** | Docker 29.1+ + Docker Compose v2.40+ (límites de CPU/RAM/PIDs) + Ubuntu Server 26.04.1 LTS |
-| **Mercado & FX** | Scrapers y agregadores institucionales (BCRD, Yahoo Finance, banca comercial dominicana) |
-| **IA & Analítica** | Ollama *(desplegable bajo demanda)* + Python Sandbox enjaulado (usuario no-root `sandboxuser`) |
-| **Calidad de Código** | TypeScript estricto + Biome + Suite de Seguridad & Tests Aislados (**42/42 passing**) |
 
 ---
 
-## 💰 Núcleo Financiero — Ledger de Doble Entrada
+## 💰 Núcleo Financiero — Ciclo de Vida del Ledger de Doble Entrada
 
-El corazón del sistema es un **ledger contable de partida doble** que garantiza integridad matemática en cada transacción:
+El Ledger de doble entrada es inmutable. Cada transacción financiera (ingreso, gasto, transferencia, ajuste) se procesa de forma atómica y debe cumplir estrictamente la regla matemática de suma cero por divisa:
 
 ```mermaid
 sequenceDiagram
-    participant U as Usuario
-    participant R as React Frontend
-    participant E as Node.js API
-    participant DB as PostgreSQL (magnus_app)
+    autonumber
+    actor User as 👤 Usuario Soberano
+    participant UI as 💻 Frontend (React + moneySafety)
+    participant API as 🛡️ API Backend (finanzaController)
+    participant SOT as 🏛️ Ledger Core (ledgerReadService)
+    participant DB as 🐘 PostgreSQL (magnus_app)
 
-    U->>R: Inicia Transacción (monto, cuenta, categoría)
-    R->>E: POST /api/finanza/ledger/transactions (JWT Bearer)
-    activate E
-    E->>E: Valida identidad efectiva (req.user)
-    E->>E: Valida ownership de cuentas y datos
-    E->>DB: BEGIN TRANSACTION (SQL Atómico)
+    User->>UI: Registra / Edita Transacción (monto, cuenta, divisa)
+    UI->>UI: toMinorUnits(amount) → Convierte a BigInt centavos
+    UI->>API: POST/PUT /api/finanza/transactions (JWT Bearer)
+    activate API
+    API->>API: Valida identidad estricta (req.user.username)
+    API->>API: Verifica ownership de cuentas y tipos de saldo
+    API->>DB: BEGIN TRANSACTION (Nivel READ COMMITTED)
     activate DB
-    E->>DB: INSERT ledger_transaction (header)
-    E->>DB: INSERT transaction_lines × N (centavos)
-    E->>DB: UPDATE account balances
-    E->>DB: COMMIT (Trigger valida: SUM(amount_minor)=0 y lines>=2)
-    Note over DB: Constraint Trigger en COMMIT:<br/>Si desbalanceado => ROLLBACK forzoso
-    deactivate DB
-    E-->>R: JSON con transacción completa verificada
-    deactivate E
-    R-->>U: Dashboard actualizado (Recharts + Framer Motion)
+    API->>DB: INSERT/UPDATE ledger_transactions (id, user_id, description, currency)
+    API->>DB: INSERT transaction_lines (Debit + Credit en amount_minor)
+    API->>DB: UPDATE accounts SET balance_minor (Caché derivado)
+    API->>DB: INSERT legacy_daily_transaction_mappings (Idempotencia)
+    Note over DB: Ejecución de Triggers en PostgreSQL al COMMIT:
+    DB->>DB: 1. trg_check_ledger_transaction_balance: ¿SUM(amount_minor) == 0 y Lines >= 2?
+    DB->>DB: 2. trg_enforce_multicurrency_invariants: ¿Líneas en misma divisa o puente FX válido?
+    alt Invariante Violado (Desbalance / Mezcla de divisas)
+        DB-->>API: ERROR: Transaction unbalanced or multicurrency violation
+        API->>DB: ROLLBACK (Cero afectación de datos)
+        API-->>UI: HTTP 400 Bad Request: Financial Invariant Failure
+        UI-->>User: ❌ Error: La transacción viola el balance contable
+    else Invariante Satisfecho (Integridad 100%)
+        DB->>DB: COMMIT ATÓMICO EXITOSO
+        deactivate DB
+        API->>SOT: Notifica invalidación de caché / telemetría
+        API-->>UI: HTTP 200 OK (Transacción confirmada en Ledger)
+        deactivate API
+        UI->>UI: formatMinorMoney() → Renderiza cifras exactas
+        UI-->>User: ✅ Dashboard actualizado con balance conciliado
+    end
 ```
 
-**Invariante Contable Garantizado en Base de Datos:**
-```sql
--- Validado a nivel de PostgreSQL en cada COMMIT vía Constraint Trigger:
--- trg_check_ledger_transaction_balance DEFERRABLE INITIALLY DEFERRED
-SUM(transaction_lines.amount_minor) WHERE transaction_id = X = 0 AND COUNT(*) >= 2;
+### Invariantes Contables Garantizados en PostgreSQL
 
--- Precisión: todos los montos en centavos (BIGINT), sin punto flotante
--- RD$1,234.56 → almacenado como 123456
-```
-
-**Diferencia Conceptual:**
-| Operación | Efecto en el Ledger |
-|-----------|-------------------|
-| **Gasto** | Debita Expenses, Acredita Assets:Cash → reduce patrimonio |
-| **Ingreso** | Debita Assets:Cash, Acredita Income → aumenta patrimonio |
-| **Inversión** | Debita Assets:Investments, Acredita Assets:Cash → transforma activo (no reduce patrimonio) |
-| **Transferencia** | Entre cuentas propias → no afecta cashflow ni patrimonio neto |
+1. **Suma Cero Estricta:**
+   ```sql
+   -- Evaluado por trg_check_ledger_transaction_balance en COMMIT:
+   SUM(transaction_lines.amount_minor) WHERE transaction_id = X = 0 AND COUNT(*) >= 2;
+   ```
+2. **Invariante Multimoneda:**
+   ```sql
+   -- Evaluado por trg_enforce_multicurrency_invariants:
+   -- Todas las líneas deben compartir la divisa del encabezado, salvo operaciones con puente FX explícito.
+   ```
+3. **Almacenamiento Monetario Exacto:**
+   - **Montos:** `amount_minor BIGINT` (centavos, sin imprecisión IEEE 754 de punto flotante).
+   - **Tipos de Cambio:** `rate_exact NUMERIC(12, 6)` (precisión cambiaria institucional a 6 decimales).
 
 ---
 
-## 📂 Estructura del Proyecto
+## 🔄 Arquitectura de Cutover y Convivencia Legacy
 
+Para garantizar la compatibilidad con interfaces históricas sin fragmentar la contabilidad, MagnusOS2 utiliza un patrón de fachada con mapeo determinista hacia el Ledger:
+
+```mermaid
+flowchart LR
+    subgraph LegacyEntry ["Entrada Legacy / Frontend"]
+        DT["DailyTransactions<br/>(Visualización / UI Diaria)"]
+    end
+
+    subgraph MappingLayer ["Capa de Mapeo e Idempotencia"]
+        Map["legacy_daily_transaction_mappings<br/>• legacy_id (PK)<br/>• ledger_transaction_id (FK)<br/>• user_id<br/>• mapped_at"]
+    end
+
+    subgraph LedgerOfficial ["🏛️ Libro Mayor Oficial (SOT)"]
+        LT["ledger_transactions<br/>(Cabecera Contable)"]
+        TL["transaction_lines<br/>(Partida Doble: Debit / Credit)"]
+        ACC["accounts<br/>(Balance Oficial Reconciliado)"]
+        LT --> TL
+        TL --> ACC
+    end
+
+    DT -->|"Dual-Write Atómico"| Map
+    Map -->|"1:1 Idempotente"| LT
+
+    subgraph ConsumerServices ["Consumidores Oficiales"]
+        Dashboard["📊 Dashboard Financiero"]
+        Econometrics["📈 Econometría & Proyecciones"]
+        Command["🕹️ Centro de Comando"]
+        AI["🤖 Lab IA & Mentores"]
+        Telegram["📱 Bot de Notificaciones"]
+    end
+
+    ACC --> Dashboard
+    LT --> Econometrics
+    LT --> Command
+    LT --> AI
+    ACC --> Telegram
+
+    style LegacyEntry fill:#334155,stroke:#94a3b8,color:#fff
+    style MappingLayer fill:#1e3a8a,stroke:#60a5fa,color:#fff
+    style LedgerOfficial fill:#064e3b,stroke:#34d399,color:#fff
+    style ConsumerServices fill:#1e293b,stroke:#a78bfa,color:#fff
 ```
-Magnus-OS2/
-├── server/                    # Backend Node.js 20
-│   ├── index.js               # Entry point (Express + Socket.IO)
-│   ├── routes/                # Rutas modulares de la API REST
-│   │   ├── finanza.routes.js  # Ledger, cuentas, ahorros, importaciones
-│   │   ├── market.routes.js   # Providence FX (USD/EUR, BCRD), telemetría de mercado
-│   │   ├── auth.routes.js     # Autenticación JWT y roles
-│   │   ├── magnus.routes.js   # Dashboard personal + Lab IA + Sabiduría
-│   │   ├── system.routes.js   # Novedades (Changelog), backups, settings
-│   │   ├── auditor.routes.js  # Auditoría contable (conservada)
-│   │   ├── econometrics.routes.js # Análisis econométrico
-│   │   └── ...
-│   ├── controllers/           # Lógica de negocio (controladores)
-│   ├── models/                # Modelos Sequelize (PostgreSQL)
-│   ├── middleware/            # JWT auth, rate limiting, seguridad Helmet
-│   ├── services/              # Scraping bancario, Docker API, backup engine
-│   └── socket/                # Handlers WebSocket en tiempo real
-├── src/                       # Frontend React / TypeScript
-│   ├── apps/
-│   │   ├── finanza/           # Módulo financiero (Ledger, Cashflow, Providence FX)
-│   │   ├── magnus/            # Dashboard personal + Sabiduría + Centro Comando + Publicaciones
-│   │   ├── server-admin/      # Torre de Control Soberana (HUD, usuarios, backups, changelog)
-│   │   ├── landing/           # Puerta de entrada y bienvenida
-│   │   └── auditor/           # Auditoría contable (deshabilitada en menú, código conservado)
-│   ├── shared/                # Componentes y utilidades transversales
-│   │   ├── components/
-│   │   │   ├── auth/          # Login y Register Providence 2.0
-│   │   │   │   └── archive/   # Resguardo histórico de login y registro clásico
-│   │   │   └── home/          # WelcomeIntro, UpdatesModal, etc.
-│   │   └── context/           # Contextos globales (Auth, Toast, etc.)
-├── public/                    # Assets estáticos (imágenes arquitectónicas, avatares)
-├── docker-compose.yml         # Orquestación de contenedores
-├── Dockerfile.api             # Imagen unificada de producción
-├── Dockerfile.sandbox         # Imagen Python Sandbox
-├── vite.config.ts             # Configuración de Vite (puerto 4000 estricto + proxy API 4001)
-├── DOCS.md                    # Documentación técnica extendida
-└── package.json               # Dependencias del proyecto
-```
+
+- **Cutover Ejecutado en Producción:** **433 de 433 transacciones legacy migradas** exitosamente al Ledger oficial sin pérdida de datos.
+- **Reconciliación Contable:** **3 de 3 cuentas reconciliadas con 0 discrepancias (`Status: HEALTHY`)**.
 
 ---
 
-## 🚀 Instalación y Configuración
+## ⏱️ Observabilidad y Auto-Recuperación de Procesos (Jobs)
 
-### Prerequisitos
+Los procesos en segundo plano (sincronizadores de tasas cambiarias BCRD, indicadores macroeconómicos y snapshots mensuales) están protegidos mediante **leases distribuidos** y **recuperación automática de caídas**:
 
-- [Ubuntu Server](https://ubuntu.com/) v26.04.1 LTS (Resolute Raccoon) o distribución compatible
-- [Node.js](https://nodejs.org/) v20 LTS (v20.20+)
+```mermaid
+stateDiagram-v2
+    [*] --> Scheduled: Cron / Event Trigger
+
+    state "Adquisición de Lease" as LeaseAcquisition {
+        Scheduled --> AcquireLock: Intentar adquirir lease
+        AcquireLock --> Running: Lease Adquirido (lease_expires_at)
+        AcquireLock --> Skipped: Ya en ejecución en otro nodo
+    }
+
+    state "Ejecución Observable" as Execution {
+        Running --> Heartbeat: Renovar lease periódicamente
+        Heartbeat --> Success: Finalización limpia
+        Heartbeat --> Crash: Fallo inesperado / Corte eléctrico
+    }
+
+    state "Auto-Recuperación (Startup)" as Recovery {
+        Crash --> StaleLease: Lease vencido en job_leases
+        StaleLease --> Recovered: recoverCrashedJobsOnStartup()
+        Recovered --> AuditLog: Marca CRASHED en job_executions
+    }
+
+    Success --> LogRecorded: Registra métricas y duración
+    AuditLog --> [*]
+    LogRecorded --> [*]
+    Skipped --> [*]
+```
+
+- **Tabla de Leases:** `job_leases` previene concurrencia no deseada entre múltiples instancias.
+- **Auditoría de Ejecución:** `job_executions` registra tiempos de inicio, fin, estado (`RUNNING`, `SUCCESS`, `CRASHED`), duración y telemetría de errores.
+- **Recuperación en Arranque:** Al iniciar el servidor, `recoverCrashedJobsOnStartup()` identifica leases huérfanos por cortes abruptos de energía y los clasifica como `CRASHED` sin dejar bloqueado el sistema.
+
+---
+
+## 🛡️ Matriz de Remediación y Hardening (Fase II)
+
+| Dimensión | Auditoría Inicial | Estado Final Producción | Garantía y Evidencia |
+|---|:---:|:---:|---|
+| **Núcleo Contable** | ⚠️ Fragmentado | 🟢 **Ledger Único Oficial** | Todos los consumidores financieros leen exclusivamente de `ledgerReadService.js` / `ledgerAnalyticsService.js`. |
+| **Invariante Multimoneda** | 🔴 Inexistente | 🟢 **Triggers Activos** | Triggers en PostgreSQL impiden mezclar divisas en una transacción sin puente FX explícito. |
+| **Precisión Numérica** | ⚠️ Floats en UI/API | 🟢 **Exact Money (BigInt)** | Unidades menores enteras (`amount_minor`) en BD, API y componentes React (`moneySafety.ts`). |
+| **Dual-Write Legacy** | 🔴 Divergente | 🟢 **Atómico (SQL Tx)** | Edición legacy actualiza cabecera, líneas contables y saldo de cuenta en la misma transacción SQL. |
+| **Gobernanza de Schema** | ⚠️ Drift Potencial | 🟢 **Zero Drift (`isSynced`)** | 11 migraciones reproducibles (000–010) protegidas por `pg_advisory_xact_lock`. |
+| **Observabilidad de Jobs** | 🔴 Inexistente | 🟢 **Leases + Telemetría** | Leases distribuidos (`job_leases`), logging estructurado y recuperación automática ante crashes. |
+| **Probes Operativos** | 🔴 Acoplados a JWT | 🟢 **Desacoplados** | `/health/live` y `/health/ready` públicos para orquestadores; `/health/deep` protegido para telemetría admin. |
+| **Simulacro de Restore** | 🔴 No probado | 🟢 **Verificado (Drill OK)** | `npm run db:restore:drill` valida backup físico y consistencia relacional periódica. |
+| **Pruebas Automatizadas** | ⚠️ Parciales (42) | 🟢 **159/159 Passing (100%)** | 57 pruebas unitarias Jest + 102 pruebas de integración en PostgreSQL aislado (`test:postgres`). |
+
+---
+
+## 🚀 Puesta en Marcha y Verificación
+
+### Prerrequisitos
+
+- [Ubuntu Server](https://ubuntu.com/) v26.04 LTS o superior
 - [Docker](https://www.docker.com/) v29.1+ & Docker Compose v2.40+
-- [NPM](https://www.npmjs.com/) v10.8+
+- [Node.js](https://nodejs.org/) v20 LTS (v20.20+)
+- [PostgreSQL Client](https://www.postgresql.org/) v16 (`pg_dump` / `pg_restore`)
 
-### Puertos y Entornos
+### Ejecución de Pruebas (100% Aisladas)
 
-| Entorno | Servicio | Puerto | Descripción |
-|---------|----------|:------:|-------------|
-| **Desarrollo** | Frontend Vite | `4000` | Servidor de desarrollo con HMR (`strictPort: true`) |
-| **Desarrollo** | Backend API | `4001` | Servidor Node/Express (proxy configurado en Vite) |
-| **Producción Docker** | `magnus_os2_app` | `4000` | Contenedor unificado (Express sirve el bundle de `dist/`) |
-| **Producción Docker** | `magnus_postgres` | `5432` | Red interna aislada `magnus_net` (no expuesto a internet) |
-
-### Opción A — Desarrollo Local
+MagnusOS2 cuenta con un arnés de pruebas estricto que **nunca toca la base de datos de producción**:
 
 ```bash
-# 1. Clonar el repositorio
-git clone https://github.com/YoxeLaunch/MagnusOS2.git
-cd MagnusOS2
+# 1. Ejecutar tests unitarios (Jest en memoria)
+npm test
 
-# 2. Instalar dependencias
-npm install
+# 2. Ejecutar tests de integración sobre PostgreSQL aislado (puerto 5433)
+npm run test:postgres
 
-# 3. Configurar variables de entorno
-cp .env.example .env
-# Configurar JWT_SECRET, credenciales de BD, etc.
+# 3. Validar compilación de producción del frontend
+npm run build
 
-# 4. Iniciar en modo desarrollo
-npm run start:all
-# Frontend Vite en http://localhost:4000 y Backend en http://localhost:4001
+# 4. Validar estado de gobernanza de migraciones
+docker compose run --rm --no-deps magnus node scripts/migrate.js status
+
+# 5. Ejecutar simulacro completo de respaldo y restauración
+npm run db:restore:drill
 ```
 
-### Opción B — Docker (Producción)
+### Comprobación de Salud en Producción (Live Probes)
 
 ```bash
-# 1. Configurar entorno
-cp .env.example .env
+# Liveness Probe (¿El servidor responde?)
+curl -i http://127.0.0.1:4000/health/live
+# HTTP/1.1 200 OK -> {"status":"UP","uptimeSeconds":32,"version":"2.0.0"}
 
-# 2. Construir y levantar servicios principales
-docker compose up -d --build
+# Readiness Probe (¿Base de datos lista, migraciones al día y cero drift?)
+curl -i http://127.0.0.1:4000/health/ready
+# HTTP/1.1 200 OK -> {"status":"READY","checks":{"database":true,"migrations":true,"schemaDrift":true}}
 
-# 3. (Opcional) Si deseas habilitar el contenedor de Ollama IA:
-docker compose --profile disabled up -d ollama
-
-# 4. Verificar estado de los contenedores
-docker compose ps
-docker compose logs -f magnus
+# Reconciliación Contable en Vivo
+docker compose run --rm --no-deps magnus node scripts/reconcile-ledger.js
+# Output: Status: HEALTHY | Discrepancies: 0 | Security Leaks: 0
 ```
 
 ---
 
-## 🛠️ Scripts Disponibles
+## 📂 Estructura del Repositorio
 
-| Comando | Descripción |
-|---------|-------------|
-| `npm run dev` | Inicia frontend en Vite (`localhost:4000`) |
-| `npm run server` | Inicia servidor backend Node.js (`localhost:4001`) |
-| `npm run start:all` | Inicia Frontend + Backend en paralelo para desarrollo |
-| `npm run build` | Compila el frontend optimizado para producción en `dist/` |
-| `npm run preview` | Previsualiza el bundle compilado localmente |
-| `npm run lint` | Analiza y auto-corrige código mediante Biome |
-| `npm run format` | Aplica formato uniforme de código (Biome) |
-| `npm run analyze` | Ejecuta análisis de código y verificación de tipos TypeScript |
-| `npm run type-check` | Valida tipos TypeScript sin emitir archivos (`tsc --noEmit`) |
-| `npm test` | Ejecuta la suite de pruebas unitarias con Jest |
-| `npm run mcp` | Inicia el servidor MCP (Model Context Protocol) |
-
----
-
-## 📊 KPIs Financieros del Sistema
-
-El módulo de análisis calcula **5 métricas clave** de salud financiera:
-
-| KPI | Fórmula | Descripción |
-|-----|---------|-------------|
-| **Tasa de Ahorro** | `(Ingresos - Gastos) / Ingresos × 100` | % de ingresos que se retienen como capital |
-| **Disciplina Financiera** | `Días con registro / 90 × 100` | Consistencia de registro en 90 días |
-| **Adherencia al Plan** | `Meses positivos / Total meses × 100` | Sostenibilidad del estilo de vida |
-| **Cash Runway** | `Ahorros / Gasto Mensual Promedio` | Meses de autonomía si ingresos = 0 |
-| **Estabilidad de Gastos** | `100 - (σ / μ × 100)` | Predictibilidad del gasto (baja volatilidad) |
-
-El algoritmo de predicción evoluciona automáticamente:
-- **< 3 meses de datos:** Promedio simple
-- **≥ 3 meses:** Regresión lineal por mínimos cuadrados
-
----
-
-## 🐳 Infraestructura Docker
-
-El sistema está configurado para operar con alta eficiencia en servidores con recursos contenidos (e.g. 8GB de RAM):
-
-| Servicio | Contenedor | Estado | Propósito |
-|----------|------------|:------:|-----------|
-| `postgres` | `magnus_postgres` | 🟢 Activo | Base de datos principal PostgreSQL 16 Alpine |
-| `magnus` | `magnus_os2_app` | 🟢 Activo | Backend Node 20 + Frontend compilado servido en puerto `4000` |
-| `sandbox` | `magnus_sandbox` | 🟢 Activo | Contenedor Python aislado para analítica y ejecución segura |
-| `ollama` | `magnus_ollama` | 🟡 *Opcional* | LLM local — *perfil `disabled` por defecto para economizar memoria; activable bajo demanda con `--profile disabled`* |
+```
+MagnusOS2/
+├── server/                         # Backend Institucional Node.js 20 LTS
+│   ├── config/database.js          # Configuración de conexiones PostgreSQL / SQLite
+│   ├── controllers/                # Controladores de dominio (finanzas, auth, mercado)
+│   ├── middleware/                 # JWT estricto, rate limiting, security headers Helmet
+│   ├── migrations/                 # Migraciones relacionales ordenadas (000_ a 010_)
+│   ├── models/                     # Modelos Sequelize 6 (Ledger, Cuentas, Mercados, Jobs)
+│   ├── routes/                     # Rutas modulares REST y health probes desacoplados
+│   ├── services/                   # SOT Financiero, Observabilidad, Gobernanza y Reconciliador
+│   │   ├── ledgerReadService.js    # Lógica oficial de consulta del libro mayor
+│   │   ├── ledgerAnalyticsService.js # Agregación contable y métricas sin mezcla de divisas
+│   │   ├── jobObservabilityService.js# Leases distribuidos y ciclo de vida de jobs
+│   │   ├── migrationRunner.js      # Ejecutor transaccional con advisory locks
+│   │   └── schemaDriftService.js   # Verificador de paridad Sequelize vs PostgreSQL
+│   └── socket/                     # Handlers WebSocket autenticados en tiempo real
+├── src/                            # Frontend React 18 + TypeScript + Vite
+│   ├── apps/
+│   │   ├── finanza/                # Módulo Financiero (Ledger, CashFlow, Providence FX)
+│   │   │   ├── pages/              # Ledger, Cuentas, Ahorros, Patrimonio, Proyecciones
+│   │   │   └── utils/moneySafety.ts# Blindaje numérico BigInt contra errores de redondeo
+│   │   ├── magnus/                 # Sabiduría, Pensum, Lab IA y Centro de Comando
+│   │   └── server-admin/           # Torre de Control Soberana (HUD, Hardware, Logs)
+│   └── shared/                     # Componentes y contextos compartidos
+├── scripts/                        # Automatizaciones de infraestructura
+│   ├── cutover-daily-transactions.js # Migrador idempotente de transacciones legacy
+│   ├── reconcile-ledger.js         # Auditor de integridad de saldos en tiempo real
+│   ├── migrate.js                  # CLI de migraciones y baselines
+│   ├── schema-drift.js             # Auditor de discrepancias de esquema
+│   └── restore-drill.js            # Simulacro de restauración de backups en sandbox
+├── docs/                           # Documentación de ingeniería y gobernanza
+│   ├── PHASE2_FINAL_SOURCE_OF_TRUTH_MAP.md # Matriz de fuentes de verdad
+│   ├── PHASE2_FINAL_PRODUCTION_RUNBOOK.md  # Runbook paso a paso para despliegues
+│   └── PHASE2_DEPENDENCIES_AUDIT_REPORT.md # Auditoría de dependencias y riesgos
+├── docker-compose.yml              # Orquestación de servicios en red soberana
+├── Dockerfile.api                  # Imagen multicapa optimizada para producción
+└── package.json                    # Dependencias y scripts de prueba
+```
 
 ---
 
-## 🔒 Seguridad & Hardening de Grado Productivo
+## 🔒 Seguridad y Principio de Menor Privilegio
 
-El sistema implementa múltiples capas de protección soberana reforzadas tras el **Master Pass de Hardening 2026**:
-
-- ✅ **Identidad Inmutable por Token JWT:** La identidad efectiva se deriva estrictamente del payload firmado (`req.user.username` y `socket.user.username`). Parámetros suministrados por clientes en `body`, `query` o `params` son ignorados.
-- ✅ **Resolución Integral de IDOR & Anti-Mass Assignment:** Todo acceso a cuentas, transacciones, presupuestos y ahorros está forzado a nivel de consulta por `userId: effectiveUserId`. Edición de perfil protegida por allowlist estricta (`name`, `preferences`, `tags`); roles y contraseñas no pueden alterarse por vías genéricas.
-- ✅ **Invariante Contable Garantizado en PostgreSQL:** La suma cero (`SUM(amount_minor) = 0`) y la regla de al menos 2 líneas por transacción están respaldadas en el motor relacional por un `CONSTRAINT TRIGGER` diferido en `COMMIT`.
-- ✅ **Durabilidad Transaccional Total:** PostgreSQL configurado con `synchronous_commit = on` para prevenir pérdida de datos o desincronización ante caídas abruptas de energía o hardware.
-- ✅ **Principio de Menor Privilegio DB:** La aplicación se conecta mediante el usuario dedicado `magnus_app` (`NOSUPERUSER`, `NOCREATEDB`, `NOCREATEROLE`, `NOBYPASSRLS`), restringido exclusivamente a las tablas y secuencias necesarias.
-- ✅ **WebSockets Protegidos (Socket.IO):** Autenticación en handshake obligatoria (`socket.handshake.auth.token`), remitente inmutable, historial privado restringido a interlocutores y terminal `/docker` cerrado por defecto.
-- ✅ **Sandbox Python Enjaulado:** Contenedor ejecutado bajo usuario no-root `sandboxuser` (UID 1000), archivos temporales únicos con `uuid4`, timeout estricto de 20s y limpieza garantizada en `finally`.
-- ✅ **Helmet & Encabezados HTTP:** Middleware de seguridad HTTP protegiendo tanto APIs como recursos estáticos (CSP, X-Content-Type-Options, Frameguard).
-- ✅ **Rate Limiting:** Reglas diferenciadas para endpoints públicos y de autenticación anti-fuerza bruta.
-- ✅ **Backups Verificados & Permisos Restringidos:** Script `backup.sh` con bloqueo concurrente exclusivo (`flock`), `umask 077`, stream binario limpio y test automático de integridad `gzip -t`. Permisos de `.env` y copias restringidos a `0600`/`0700`.
-- ✅ **Guardrail de Testing Aislado:** Prohibición absoluta en runtime de ejecutar suites de pruebas contra la base de datos de producción; fallback seguro a SQLite en memoria (`:memory:`).
-- ✅ **Diagnóstico Profundo:** Endpoint `/api/health/deep` protegido con JWT para auditoría en tiempo real del estado de PostgreSQL, Sandbox, Caché FX y memoria.
-
----
-
-## 📚 Documentación Adicional
-
-- **[DOCS.md](DOCS.md)** — Manual técnico de referencia, endpoints de API y esquemas SQL.
-- **[GUIA_COMANDOS.md](GUIA_COMANDOS.md)** — Guía operativa y comandos administrativos rápidos.
+- **Identidad Inmutable:** La identidad del usuario se deriva estrictamente del payload criptográfico del token JWT verificado en backend (`req.user.username` / `socket.user.username`). No se aceptan parámetros de suplantación en `body`, `query` o `params`.
+- **Menor Privilegio en Base de Datos:** La aplicación se conecta mediante el usuario dedicado `magnus_app` (`NOSUPERUSER`, `NOCREATEDB`, `NOCREATEROLE`, `NOBYPASSRLS`), garantizando que una vulnerabilidad a nivel de aplicación no comprometa el motor de PostgreSQL.
+- **Durabilidad Máxima:** `synchronous_commit = on` activado permanentemente en PostgreSQL para garantizar que toda transacción confirmada esté escrita en disco ante cualquier corte abrupto de energía.
+- **Python Sandbox Enjaulado:** Contenedor no-root (`sandboxuser`, UID 1000) con límites de CPU (1.0), memoria (512MB), archivos temporales únicos con UUID y timeout forzoso de 20s.
 
 ---
 
 ## ✒️ Autor y Créditos
 
-Este Financial OS fue creado e ideado por:
-* **YoxeLaunch** — Arquitecto, Desarrollador Principal y Creador Original
+Este Financial Operating System fue conceptualizado, diseñado y desarrollado por:
+
+* **YoxeLaunch** — Creador Original, Arquitecto de Software y Desarrollador Principal  
 * GitHub: [@YoxeLaunch](https://github.com/YoxeLaunch)
 
 <br />
 <div align="center">
-  <p><strong>Construido para el control total ⚜️ — Diseñado por YoxeLaunch</strong></p>
+  <p><strong>Construido para la Soberanía Financiera y el Control Total ⚜️ — Diseñado por YoxeLaunch</strong></p>
   <sub>© 2026 MagnusOS2 Project · Self-hosted · Sovereign by design</sub>
 </div>
