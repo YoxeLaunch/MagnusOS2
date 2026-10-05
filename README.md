@@ -29,9 +29,10 @@ El sistema opera bajo un principio inquebrantable: **el Ledger contable de doble
 > 🏛️ **Filosofía Soberana:** El dato nunca abandona la infraestructura propia. Todo reside en la red soberana privada (**Providence Local Network**), con durabilidad transaccional estricta, aislamiento multiusuario hermético y sin telemetría de terceros.
 >
 > 🛡️ **Clasificación de Seguridad & Resiliencia:** `[PRODUCCIÓN / HARDENED / PHASE II VALIDATED]`  
-> 📑 **Informe Final de Remediación (Fase II):** [`PHASE2_FINAL_REMEDIATION_REPORT.md`](PHASE2_FINAL_REMEDIATION_REPORT.md)  
+> 📑 **Informe Final de Remediación (Fase II):** [`docs/audit/PHASE2_FINAL_REMEDIATION_REPORT.md`](docs/audit/PHASE2_FINAL_REMEDIATION_REPORT.md)  
 > 🗺️ **Mapa de Fuente de Verdad Financiera:** [`docs/PHASE2_FINAL_SOURCE_OF_TRUTH_MAP.md`](docs/PHASE2_FINAL_SOURCE_OF_TRUTH_MAP.md)  
-> 📘 **Manual de Despliegue en Producción:** [`docs/PHASE2_FINAL_PRODUCTION_RUNBOOK.md`](docs/PHASE2_FINAL_PRODUCTION_RUNBOOK.md)
+> 📘 **Manual de Despliegue en Producción:** [`docs/PHASE2_FINAL_PRODUCTION_RUNBOOK.md`](docs/PHASE2_FINAL_PRODUCTION_RUNBOOK.md)  
+> 📂 **Archivo de Auditorías & Revisiones:** [`docs/audit/`](docs/audit/)
 
 ---
 
