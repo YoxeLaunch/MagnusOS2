@@ -44,12 +44,13 @@ export class LedgerAnalyticsService {
      * @param {string} params.userId
      * @param {string} [params.startDate]
      * @param {string} [params.endDate]
-     * @param {string} [params.currency='DOP']
+     * @param {string} [params.currency] Optional currency filter. Omit only for
+     * consumers which convert each returned transaction with an explicit FX basis.
      * @param {number} [params.limit]
      * @param {number} [params.offset]
      * @returns {Promise<Array>}
      */
-    static async getNormalizedTimeline({ userId, startDate, endDate, currency = 'DOP', limit, offset }) {
+    static async getNormalizedTimeline({ userId, startDate, endDate, currency, limit, offset }) {
         if (!userId) throw new Error('[LedgerAnalyticsService] userId is required');
 
         const whereTx = { userId };
@@ -90,6 +91,14 @@ export class LedgerAnalyticsService {
 
         for (const tx of transactions) {
             const lines = tx.lines || [];
+            const lineCurrencies = new Set(lines.map(line => line.currency).filter(Boolean));
+
+            // A numeric minor-unit value is meaningful only in its own currency.
+            // Do not silently aggregate a USD/EUR ledger event in a DOP dataset.
+            if (currency && !lineCurrencies.has(currency)) continue;
+            if (lineCurrencies.size > 1) {
+                throw new Error(`[LedgerAnalyticsService] Ledger transaction ${tx.id} has multiple currencies; explicit FX bridge handling is required.`);
+            }
             const ownAccountLines = lines.filter(l => l.accountId && (!l.account || l.account.userId === userId));
             const categoryLines = lines.filter(l => l.categoryId);
             const nonAccountLines = lines.filter(l => !l.accountId);
@@ -168,7 +177,7 @@ export class LedgerAnalyticsService {
                 description: memo,
                 type: effectiveType,
                 category: categoryName,
-                currency: primaryAccountLine?.currency || currency,
+                currency: primaryAccountLine?.currency || [...lineCurrencies][0] || currency || null,
                 isInternalTransfer
             });
         }
@@ -246,11 +255,11 @@ export class LedgerAnalyticsService {
      * @param {Object} [params.rates]
      * @returns {Promise<Object>}
      */
-    static async getCommandCenterDataset({ userId, year, cicloId, rates = {} }) {
+    static async getCommandCenterDataset({ userId, year, cicloId, rates = {}, currency = 'DOP' }) {
         if (!userId) throw new Error('[LedgerAnalyticsService] userId is required');
 
-        const timeline = await this.getNormalizedTimeline({ userId });
-        const balances = await LedgerReadService.getBalances({ userId, isArchived: false });
+        const timeline = await this.getNormalizedTimeline({ userId, currency });
+        const balances = await LedgerReadService.getBalances({ userId, currency, isArchived: false });
 
         return {
             timeline,

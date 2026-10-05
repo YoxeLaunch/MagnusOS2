@@ -259,6 +259,7 @@ export const createDailyTransaction = async (req, res) => {
 };
 
 export const updateDailyTransaction = async (req, res) => {
+    const t = await sequelize.transaction();
     try {
         const { id } = req.params;
         const userId = getEffectiveUserId(req);
@@ -271,11 +272,107 @@ export const updateDailyTransaction = async (req, res) => {
         delete data.userId;
         delete data.id;
 
-        const transaction = await DailyTransaction.findOne({ where });
-        if (!transaction) return res.status(404).json({ error: 'Not found' });
-        await transaction.update(data);
-        res.json(transaction);
+        const legacyRow = await DailyTransaction.findOne({ where, transaction: t, lock: t.LOCK.UPDATE });
+        if (!legacyRow) {
+            await t.rollback();
+            return res.status(404).json({ error: 'Not found' });
+        }
+
+        // DailyTransactions is a compatibility projection. Its financial mutation is
+        // valid only when it can atomically mutate the mapped double-entry event.
+        const [[mapping]] = await sequelize.query(
+            `SELECT ledger_transaction_id FROM legacy_daily_transaction_mappings
+             WHERE daily_transaction_id = $1 AND user_id = $2 LIMIT 1;`,
+            { bind: [id, legacyRow.userId], transaction: t }
+        ).catch(() => [[null]]);
+
+        const reference = `migrated:daily:${id}`;
+        const ledgerTx = mapping?.ledger_transaction_id
+            ? await LedgerTransaction.findOne({ where: { id: mapping.ledger_transaction_id, userId: legacyRow.userId }, transaction: t, lock: t.LOCK.UPDATE })
+            : await LedgerTransaction.findOne({ where: { reference, userId: legacyRow.userId }, transaction: t, lock: t.LOCK.UPDATE });
+
+        if (!ledgerTx) {
+            await t.rollback();
+            return res.status(409).json({ error: 'Movimiento legacy sin asiento Ledger mapeado; la edición está bloqueada para evitar divergencia.' });
+        }
+
+        const oldAccountLine = await TransactionLine.findOne({
+            where: { transactionId: ledgerTx.id },
+            include: [{ model: Account, as: 'account', required: true }],
+            transaction: t,
+            lock: t.LOCK.UPDATE
+        });
+        if (!oldAccountLine?.account) {
+            await t.rollback();
+            return res.status(409).json({ error: 'Asiento Ledger sin línea de cuenta válida; la edición está bloqueada.' });
+        }
+
+        let minorBigInt;
+        try {
+            minorBigInt = data.amountMinor !== undefined
+                ? BigInt(String(data.amountMinor))
+                : (data.amount !== undefined ? toMinorUnitsBigInt(data.amount) : BigInt(legacyRow.amountMinor));
+        } catch {
+            await t.rollback();
+            return res.status(400).json({ error: 'Importe numérico inválido' });
+        }
+        if (minorBigInt === 0n) {
+            await t.rollback();
+            return res.status(400).json({ error: 'El importe contable no puede ser cero' });
+        }
+
+        const legacyType = String(data.type ?? legacyRow.type ?? 'expense').toLowerCase();
+        const description = data.description ?? legacyRow.description ?? 'Registro diario';
+        const category = data.category ?? legacyRow.category ?? 'Varios';
+        const date = data.date ?? legacyRow.date;
+        const currency = oldAccountLine.currency;
+        const absMinor = minorBigInt < 0n ? -minorBigInt : minorBigInt;
+        const isPositiveToAccount = legacyType === 'income' || legacyType === 'refund';
+        const accountDelta = isPositiveToAccount ? absMinor : -absMinor;
+        const categoryDelta = -accountDelta;
+
+        const categoryType = legacyType === 'income' ? 'income' : 'expense';
+        const [cat] = await Category.findOrCreate({
+            where: { userId: legacyRow.userId, name: category },
+            defaults: { userId: legacyRow.userId, name: category, type: categoryType },
+            transaction: t
+        });
+
+        // Reverse the old account impact, then replace the two balanced lines.
+        const account = await Account.findByPk(oldAccountLine.accountId, { transaction: t, lock: t.LOCK.UPDATE });
+        if (!account) {
+            await t.rollback();
+            return res.status(409).json({ error: 'Cuenta del asiento Ledger no encontrada; la edición está bloqueada.' });
+        }
+        const cachedBalance = BigInt(account.currentBalanceMinor || 0);
+        await account.update({
+            currentBalanceMinor: (cachedBalance - BigInt(oldAccountLine.amountMinor) + accountDelta).toString()
+        }, { transaction: t });
+
+        await TransactionLine.destroy({ where: { transactionId: ledgerTx.id }, transaction: t });
+        await TransactionLine.bulkCreate([
+            { transactionId: ledgerTx.id, accountId: account.id, amountMinor: accountDelta.toString(), currency, memo: description },
+            { transactionId: ledgerTx.id, categoryId: cat.id, amountMinor: categoryDelta.toString(), currency, memo: category }
+        ], { transaction: t });
+        await ledgerTx.update({
+            date,
+            payeeName: String(description).slice(0, 100),
+            memo: `DailyTransaction #${legacyRow.id}: ${description}`,
+            type: legacyType === 'investment' ? 'investment' : (legacyType === 'income' ? 'income' : 'expense')
+        }, { transaction: t });
+
+        await legacyRow.update({
+            date,
+            amount: fromMinorUnits(minorBigInt),
+            amountMinor: minorBigInt.toString(),
+            description,
+            type: legacyType,
+            category
+        }, { transaction: t });
+        await t.commit();
+        res.json(legacyRow);
     } catch (error) {
+        await t.rollback().catch(() => {});
         res.status(500).json({ error: error.message });
     }
 };

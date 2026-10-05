@@ -46,21 +46,30 @@ Antes de iniciar la ventana de liberación:
 
 ### Paso 1: Respaldo Preventivo Inmediato
 
-Generar un dump completo previo a cualquier cambio en producción:
+Generar un dump completo previo a cualquier cambio en producción **en el host**, fuera del volumen de datos de PostgreSQL:
 
 ```bash
-docker exec -t magnus_postgres pg_dump -U magnus -d magnus -F c -b -v \
-  -f /var/lib/postgresql/data/pre_phase2_final_dump.dump
+install -d -m 700 /home/osvaldo/backups/magnus-os2/phase2-final
+docker exec magnus_postgres pg_dump -U magnus -d magnus -F c -b -v \
+  > /home/osvaldo/backups/magnus-os2/phase2-final/pre_phase2_final.dump
+docker cp /home/osvaldo/backups/magnus-os2/phase2-final/pre_phase2_final.dump magnus_postgres:/tmp/pre_phase2_final.dump
+docker exec magnus_postgres pg_restore -l /tmp/pre_phase2_final.dump >/dev/null
 ```
 
-### Paso 2: Aplicación de Migraciones PostgreSQL (007 a 010)
+### Paso 2: Baseline explícito y aplicación de migraciones (007 a 010)
 
 Ejecutar el runner formal de migraciones (adquiere lock consultivo distribuido `pg_advisory_xact_lock`):
 
+La producción histórica ya contiene el schema anterior y registra 001–006. Por ello, **no** se ejecuta `db:migrate` hasta registrar explícitamente el baseline 000. Primero revisar que el único pendiente anterior sea 000 y que 001–006 tengan checksums válidos:
+
 ```bash
-npm run db:migrate:status
-npm run db:migrate
+docker compose run --rm --no-deps magnus node scripts/migrate.js status
+docker compose run --rm --no-deps magnus node scripts/migrate.js baseline 000_base_schema.sql --confirm-baseline
+docker compose run --rm --no-deps magnus node scripts/migrate.js status
+docker compose run --rm --no-deps magnus node scripts/migrate.js up
 ```
+
+Si el primer `status` no coincide con esa condición, detener la ventana: no registrar un baseline ni aplicar DDL por intuición.
 
 Las siguientes migraciones se aplican de forma transaccional e idempotente:
 - `007_exact_money_integrity.sql`: Integridad numérica en columnas `*_minor` y triggers de sincronización.
@@ -70,29 +79,31 @@ Las siguientes migraciones se aplican de forma transaccional e idempotente:
 
 Verificar que no existan discrepancias ni drift:
 ```bash
-npm run db:drift
+docker compose run --rm --no-deps magnus node scripts/schema-drift.js
 ```
 
 ### Paso 3: Cutover y Backfill de DailyTransactions a Ledger
 
 1. **Ejecución en modo simulación (Dry-Run):**
    ```bash
-   node scripts/cutover-daily-transactions.js --dry-run
+   docker compose run --rm --no-deps magnus node scripts/cutover-daily-transactions.js --dry-run
    ```
    Revisar el inventario de filas a migrar y transacciones omitidas (monto 0).
 
 2. **Ejecución real de Cutover:**
    ```bash
-   npm run db:cutover:daily
+   docker compose run --rm --no-deps \
+     -e CUTOVER_PRODUCTION_CONFIRM=I_UNDERSTAND_THE_FINANCIAL_RISK \
+     magnus node scripts/cutover-daily-transactions.js --allow-production
    ```
-   *Garantía:* Migración con idempotencia 1:1, generación de `legacy_hash` y registro en `legacy_daily_transaction_mappings`.
+   *Garantía:* sin cuenta inequívoca o mapa revisado (`--account-map=/ruta/mapa.json`), el proceso aborta sin crear cuentas ni inventar asignaciones.
 
 ### Paso 4: Reconciliación Contable Inmediata
 
 Verificar que todos los balances derivados coincidan exactamente con la suma contable del Ledger:
 
 ```bash
-npm run db:reconcile
+docker compose run --rm --no-deps magnus node scripts/reconcile-ledger.js
 ```
 *Criterio de aprobación:* `status: "HEALTHY"`, `discrepanciesCount: 0`, `securityViolationsCount: 0`.
 
@@ -141,7 +152,8 @@ Si se detecta cualquier falla o regresión crítica durante la ventana:
    ```bash
    docker exec -t magnus_postgres dropdb -U magnus magnus
    docker exec -t magnus_postgres createdb -U magnus magnus
-   docker exec -t magnus_postgres pg_restore -U magnus -d magnus -v /var/lib/postgresql/data/pre_phase2_final_dump.dump
+   docker cp /home/osvaldo/backups/magnus-os2/phase2-final/pre_phase2_final.dump magnus_postgres:/tmp/pre_phase2_final.dump
+   docker exec -t magnus_postgres pg_restore -U magnus -d magnus -v /tmp/pre_phase2_final.dump
    ```
 3. **Reiniciar con la imagen anterior:**
    ```bash
@@ -149,5 +161,5 @@ Si se detecta cualquier falla o regresión crítica durante la ventana:
    ```
 4. **Verificar integridad contable:**
    ```bash
-   npm run db:reconcile
+   docker compose run --rm --no-deps magnus node scripts/reconcile-ledger.js
    ```

@@ -111,6 +111,19 @@ describe('PostgreSQL DailyTransactions Cutover & Backfill (Phase II Remediation)
             category: 'Varios'
         });
 
+        // Cutover must use a reviewed/unique account; it must never invent one.
+        await Account.findOrCreate({
+            where: { userId: testUser, name: 'Cuenta única cutover' },
+            defaults: {
+                userId: testUser,
+                name: 'Cuenta única cutover',
+                type: 'cash',
+                currency: 'DOP',
+                openingBalanceMinor: 0n,
+                currentBalanceMinor: 0n
+            }
+        });
+
         const report = await runDailyTransactionsCutover({
             sequelize: db,
             dryRun: false,

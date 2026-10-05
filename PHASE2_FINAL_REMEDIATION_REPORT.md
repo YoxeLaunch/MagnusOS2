@@ -37,7 +37,7 @@ El sistema MagnusOS2 cuenta ahora con:
    - Auto-recuperación de jobs huérfanos tras caídas inesperadas (`recoverCrashedJobsOnStartup`) integrada al arranque del servidor.
    - Purga histórica automática (`purgeOldExecutions`).
 7. **Auditoría de dependencias y manuales de operación:**
-   - Clasificación técnica de alcanzabilidad en runtime (`docs/PHASE2_DEPENDENCIES_AUDIT_REPORT.md`).
+   - Actualizaciones compatibles aplicadas y riesgos residuales clasificados explícitamente en `docs/PHASE2_DEPENDENCIES_AUDIT_REPORT.md`.
    - Manual de puesta en producción y rollback (`docs/PHASE2_FINAL_PRODUCTION_RUNBOOK.md`).
 
 ---
@@ -52,7 +52,7 @@ El sistema MagnusOS2 cuenta ahora con:
 | **F-04** | **HIGH** | Health II-D no integrado correctamente | Rutas de salud desacopladas del middleware financiero; liveness/readiness públicos; deep health admin-only. | `server/routes/health.routes.js`, `server/routes/index.js`, `server/index.js`, `server/middleware/auth.js` | `tests/integration/healthProbesRouter.test.js` (7/7 PASS) |
 | **F-05** | **HIGH** | Conversiones monetarias inseguras en frontend | Biblioteca `moneySafety.ts`/`.js` con guardas `Number.isSafeInteger`; refactorización de `Accounts.tsx` y `Wealth.tsx`. | `src/apps/finanza/utils/moneySafety.ts`, `src/apps/finanza/pages/Accounts.tsx`, `Wealth.tsx` | `tests/moneySafety.test.js` (6/6 PASS), `npm run build` (PASS) |
 | **F-06** | **HIGH** | Observabilidad de jobs incompleta | Leases distribuidos en `job_leases`, auto-recuperación de jobs tras caídas inesperadas y purga histórica. | `server/services/jobObservabilityService.js`, `server/index.js` | `tests/integration/phase2dOperationalConsolidation.test.js` (20/20 PASS) |
-| **F-07** | **HIGH** | Dependencias runtime vulnerables | Auditoría rigurosa `--omit=dev`, matriz de alcanzabilidad demostrando cero dependencias directas expuestas. | `docs/PHASE2_DEPENDENCIES_AUDIT_REPORT.md` | `npm audit --omit=dev --json` documentado |
+| **F-07** | **HIGH** | Dependencias runtime vulnerables | Actualizaciones compatibles sin `--force`; riesgos directos y transitivos restantes se documentan como deuda explícita, no como vulnerabilidades eliminadas. | `docs/PHASE2_DEPENDENCIES_AUDIT_REPORT.md` | `npm audit --omit=dev --json` reproducible |
 | **F-08** | **HIGH** | Integración de consumidores financieros | Unificación de métricas en `ledgerAnalyticsService.js` eliminando consultas a tablas de presupuesto legacy. | `server/services/ledgerAnalyticsService.js`, `econometricsController.js`, `centroComandoController.js`, `telegramController.js` | `tests/integration/postgresLedgerAnalytics.test.js` (4/4 PASS) |
 
 ---
@@ -113,7 +113,7 @@ npm run db:restore:drill
 
 ## 5. CONCLUSIÓN Y ESTADO FINAL
 
-Antigravity ha completado la totalidad de las tareas asignadas para cerrar los hallazgos F-01 a F-08 con evidencia verificable y cero regresiones.
+La remediación requiere validación final de Codex antes de declarar cerrados los hallazgos; los riesgos de dependencia pendientes siguen explícitos.
 
 **Estado para Codex:**  
 **`READY FOR CODEX FINAL RE-AUDIT`**

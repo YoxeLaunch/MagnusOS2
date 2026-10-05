@@ -15,9 +15,9 @@
    - `Transactions` **NUNCA** se suma con asientos contables reales del ledger.
    - `Transactions` **NUNCA** se utiliza para calcular patrimonio neto (`Net Worth`), balance real de cuentas, flujo de caja realizado ni progreso real de ahorro.
    - En frontend y API, los planes se presentan inequívocamente como proyecciones/presupuestos, jamás como transacciones ejecutadas.
-3. **Cierre de Escrituras Legacy:**
-   - `DailyTransactions` queda en modo de sólo lectura (`read-only`) para consultas históricas y queda deshabilitada para escrituras contables directas.
-   - Nuevos movimientos reales se canalizan obligatoriamente hacia el Ledger con partida doble balanceada, coherencia de monedas y aislamiento estricto por usuario.
+3. **Compatibilidad Legacy Controlada:**
+   - `DailyTransactions` se preserva como proyección de compatibilidad histórica. Sus mutaciones sólo se permiten si crean, actualizan o eliminan el asiento Ledger mapeado en la misma transacción SQL.
+   - Nuevos movimientos reales se canalizan hacia el Ledger con partida doble balanceada, coherencia de monedas y aislamiento estricto por usuario.
 4. **Clasificaciones Finales Permitidas:**
    - `LEDGER`: Módulos conectados de manera exclusiva a la fuente contable oficial (`ledger_transactions`, `transaction_lines`, `accounts`, `LedgerReadService`).
    - `PLAN ONLY`: Módulos de planificación, simulación, presupuestos y recurrencias futuras (`Transactions`), sin impacto en balances reales.
@@ -50,7 +50,7 @@
 | **imports** | `importController` creando ledger txs | `LedgerTransaction` + `TransactionLine` | Confirmar que CSV/OFX/PDF genera siempre asientos contables balanceados en minor units. | **LEDGER** |
 | **charts** | Estado React derivado de legacy | Estado React derivado de `LedgerReadService` | Visualizaciones consumen strings exactos o números derivados con guardas de seguridad. | **DISPLAY ONLY** |
 | **exports** | JSON/CSV legacy | Datos ledger oficiales normalizados | Exportación de libro diario contable y balances en centavos y formato decimal exacto. | **DISPLAY ONLY** |
-| **POST/PUT/DELETE /api/daily-transactions** | CRUD directo legacy | Adaptado a ledger o bloqueado | Bloqueo de mutaciones directas sobre tabla legacy; adaptación a transacción ledger. | **BLOCKED** |
+| **POST/PUT/DELETE /api/daily-transactions** | Proyección compatibility + Ledger | Mutación atómica de proyección y Ledger | La operación se rechaza si no existe asiento Ledger mapeado; nunca se actualiza sólo legacy. | **LEDGER** |
 
 ---
 
@@ -79,7 +79,7 @@ Para erradicar ambigüedad entre transacciones proyectadas y transacciones reale
    - Las 405 filas posteriores a la migración inicial son mapeadas deterministicamente e importadas al ledger mediante `scripts/cutover-daily-transactions.js`.
    - Se instala tabla `legacy_daily_transaction_mappings` con restricción única `daily_transaction_id` para garantizar idempotencia y trazabilidad 1:1.
 2. **Corte de Escrituras:**
-   - Endpoints `/api/daily-transactions` rechazan mutaciones directas sin asiento contable o las convierten transparentemente en transacciones ledger de doble entrada.
-   - El frontend `DataContext` deja de enviar requests mutantes a `/api/daily-transactions`.
+   - Endpoints `/api/daily-transactions` crean, actualizan o eliminan el asiento Ledger y su proyección legacy de forma atómica; rechazan una edición si no existe mapeo Ledger.
+   - El frontend `DataContext` mantiene compatibilidad temporal con estos endpoints adaptados; no es una fuente financiera independiente.
 3. **Retiro Definitivo:**
    - Una vez estabilizada la producción y auditado el cutover por Codex, la tabla será marcada formalmente para archivado o eliminación en Phase III.

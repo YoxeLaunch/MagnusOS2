@@ -9,11 +9,11 @@
 
 ## 1. Resumen Ejecutivo
 
-La auditoría de dependencias en modo producción (`--omit=dev`) identificó 39 advertencias en dependencias transitivas. Tras el análisis estático de código y rastreo de flujo de ejecución (data flow & call graph analysis), se determinó que:
+Tras actualizar versiones compatibles sin cambios mayores, `npm audit --omit=dev` identifica 31 vulnerabilidades: 2 críticas, 17 altas, 10 moderadas y 2 bajas. No todas poseen la misma exposición, pero ninguna debe presentarse como resuelta sin una actualización o una aceptación explícita de riesgo.
 
-1. **Cero dependencias directas vulnerables:** Ningún paquete de primer nivel en `dependencies` presenta vulnerabilidades directas explotables en código propio.
-2. **Superficie de ataque no alcanzable (Unreachable in Runtime):** El 100% de las dependencias críticas (`tar`, `underscore`, `uuid`) pertenecen a herramientas de compilación (`node-gyp`), scripts de instalación o utilidades auxiliares que no procesan entrada del usuario en runtime.
-3. **Mitigaciones activas en runtime (Defense in Depth):** Para `ws` (usado internamente por `socket.io`), el middleware `socketAuthMiddleware` rechaza conexiones no autenticadas en el handshake HTTP antes de procesar frames de WebSocket, neutralizando vectores DoS no autenticados.
+1. **Dependencias directas afectadas:** se actualizaron sin cambios mayores `body-parser`, `express`, `express-rate-limit`, `figlet` y `multer`. Permanecen avisos directos para `dockerode`, `react-router-dom`, `sequelize` y `sqlite3`; requieren plan de actualización/remoción y pruebas de compatibilidad.
+2. **Riesgos transitivos:** `tar`, `protobufjs`, `ws`, `socket.io`, `hono` y otros siguen presentes. Algunos pueden limitarse a build tooling, pero esta clasificación debe demostrarse por ruta de ejecución y no elimina el hallazgo.
+3. **Mitigaciones activas:** autenticación, límites HTTP y aislamiento reducen superficie, pero no neutralizan vulnerabilidades de parser/protocolo una vez aceptada una conexión.
 
 ---
 
@@ -36,4 +36,4 @@ El comando `npm audit fix --force` propone degradar componentes nucleares de la 
 - Regresión catastrófica en el frontend compilado.
 - Incompatibilidad de tipos en TypeScript.
 
-Por tanto, preservar la integridad arquitectónica y documentar la inalcanzabilidad de las dependencias transitivas es la postura de ingeniería correcta y segura.
+Por tanto, no se empleará `npm audit fix --force`. Las actualizaciones compatibles deben realizarse de forma controlada y los riesgos que no puedan corregirse de inmediato deben mantenerse como deuda explícita de producción.

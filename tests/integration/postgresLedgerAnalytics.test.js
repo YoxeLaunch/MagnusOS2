@@ -195,6 +195,38 @@ describe('PostgreSQL LedgerAnalyticsService & Consumer Unification (Phase II Rem
         assert.equal(summaryB.transactionCount, 0);
     });
 
+    it('5. Currency filter never aggregates USD minor units into a DOP econometrics dataset', async () => {
+        const usdAccount = await Account.create({
+            userId: userA, name: 'USD A', type: 'checking', currency: 'USD',
+            openingBalanceMinor: 0n, currentBalanceMinor: 0n
+        });
+        const usdCategory = await Category.create({ userId: userA, name: 'USD income', type: 'income' });
+        const tx = await db.transaction();
+        try {
+            const [header] = await db.query(`
+                INSERT INTO ledger_transactions (id, user_id, date, type, status, memo, created_at, updated_at)
+                VALUES (gen_random_uuid(), $1, '2026-03-11', 'income', 'cleared', 'USD deposit', NOW(), NOW())
+                RETURNING id;
+            `, { bind: [userA], transaction: tx });
+            await db.query(`
+                INSERT INTO transaction_lines (id, transaction_id, account_id, category_id, amount_minor, currency, created_at, updated_at)
+                VALUES (gen_random_uuid(), $1, $2, NULL, 10000, 'USD', NOW(), NOW()),
+                       (gen_random_uuid(), $1, NULL, $3, -10000, 'USD', NOW(), NOW());
+            `, { bind: [header[0].id, usdAccount.id, usdCategory.id], transaction: tx });
+            await tx.commit();
+        } catch (error) {
+            await tx.rollback().catch(() => {});
+            throw error;
+        }
+
+        const dopTimeline = await LedgerAnalyticsService.getNormalizedTimeline({ userId: userA, currency: 'DOP' });
+        const dataset = await LedgerAnalyticsService.getEconometricsDataset({ userId: userA, currency: 'DOP' });
+
+        assert.equal(dopTimeline.length, 2);
+        assert.equal(dataset.totalTransactions, 2);
+        assert.equal(dataset.monthlyData[0].income, 15000);
+    });
+
     after(async () => {
         try {
             await db.close();

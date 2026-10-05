@@ -12,6 +12,7 @@
  */
 
 import crypto from 'node:crypto';
+import fs from 'node:fs';
 import { Sequelize, DataTypes, Op } from 'sequelize';
 import { sequelize as defaultSeq } from '../server/models/index.js';
 
@@ -22,6 +23,8 @@ function parseArgs() {
         user: null,
         batchSize: 50,
         json: false,
+        allowProduction: false,
+        accountMapPath: null,
         dbUrl: process.env.DATABASE_URL_TEST || process.env.DATABASE_URL
     };
 
@@ -33,6 +36,8 @@ function parseArgs() {
         else if (arg === '--user' && args[i + 1]) options.user = args[++i];
         else if (arg.startsWith('--batch-size=')) options.batchSize = parseInt(arg.split('=')[1], 10);
         else if (arg.startsWith('--db=')) options.dbUrl = arg.split('=')[1];
+        else if (arg.startsWith('--account-map=')) options.accountMapPath = arg.slice('--account-map='.length);
+        else if (arg === '--allow-production') options.allowProduction = true;
     }
     return options;
 }
@@ -51,8 +56,19 @@ export async function runDailyTransactionsCutover(options = {}) {
     if (dialect === 'postgres') {
         const host = targetDb.config.host;
         const port = targetDb.config.port;
-        if ((host === 'postgres' || host === 'localhost' || host === '127.0.0.1') && port === 5432) {
-            throw new Error('[GUARDRAIL] Fatal: Refusing to run cutover script against production PostgreSQL port 5432!');
+        const productionLikeTarget = targetDb.config.database === 'magnus'
+            || (['postgres', 'localhost', '127.0.0.1'].includes(host) && Number(port) === 5432);
+        if (productionLikeTarget && (!opts.allowProduction || process.env.CUTOVER_PRODUCTION_CONFIRM !== 'I_UNDERSTAND_THE_FINANCIAL_RISK')) {
+            throw new Error('[GUARDRAIL] Refusing production-like cutover. Use --allow-production and CUTOVER_PRODUCTION_CONFIRM=I_UNDERSTAND_THE_FINANCIAL_RISK only during an approved maintenance window.');
+        }
+    }
+
+    let accountMap = opts.accountMap || {};
+    if (opts.accountMapPath) {
+        try {
+            accountMap = JSON.parse(fs.readFileSync(opts.accountMapPath, 'utf8'));
+        } catch (error) {
+            throw new Error(`[GUARDRAIL] Cannot load reviewed account map: ${error.message}`);
         }
     }
 
@@ -73,20 +89,15 @@ export async function runDailyTransactionsCutover(options = {}) {
     };
 
     try {
-        // Ensure mappings table exists
+        // Schema is owned exclusively by versioned migrations. A dry-run must be
+        // read-only and a real run must never invent an ungoverned schema variant.
         if (dialect === 'postgres') {
-            await targetDb.query(`
-                CREATE TABLE IF NOT EXISTS public.legacy_daily_transaction_mappings (
-                    id SERIAL PRIMARY KEY,
-                    daily_transaction_id INTEGER NOT NULL UNIQUE,
-                    ledger_transaction_id UUID NOT NULL,
-                    user_id VARCHAR(255) NOT NULL,
-                    legacy_hash VARCHAR(64) NOT NULL,
-                    migrated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                    status VARCHAR(20) NOT NULL DEFAULT 'migrated',
-                    notes TEXT
-                );
-            `);
+            const [[mappingTable]] = await targetDb.query(
+                "SELECT to_regclass('public.legacy_daily_transaction_mappings') AS table_name;"
+            );
+            if (!mappingTable?.table_name) {
+                throw new Error('[GUARDRAIL] Migration 010 is required before cutover; mappings table is missing.');
+            }
         }
 
         // 1. Fetch already mapped daily transaction IDs
@@ -173,11 +184,12 @@ export async function runDailyTransactionsCutover(options = {}) {
                     // Semantics check: zero amounts
                     let amountMinor = 0n;
                     try {
-                        amountMinor = BigInt(row.amount_minor || Math.round(Number(amountRaw) * 100));
+                        if (row.amount_minor === null || row.amount_minor === undefined) {
+                            throw new Error('amount_minor is required');
+                        }
+                        amountMinor = BigInt(String(row.amount_minor));
                     } catch {
-                        report.errors.push({ id: row.id, error: 'Cannot parse amount_minor' });
-                        report.skippedCount++;
-                        continue;
+                        throw new Error(`DailyTransaction #${row.id} has no valid exact amount_minor; resolve reconciliation before cutover.`);
                     }
 
                     if (amountMinor === 0n) {
@@ -198,22 +210,34 @@ export async function runDailyTransactionsCutover(options = {}) {
                     const absMinor = amountMinor < 0n ? -amountMinor : amountMinor;
 
                     if (!opts.dryRun) {
-                        // Ensure user default account exists with matching currency
+                        // Every historical row must have a reviewed account mapping, unless
+                        // there is exactly one eligible account for that user/currency.
+                        const mapKey = `${userId}:${currency}`;
+                        const requestedAccountId = accountMap[mapKey];
                         let [accounts] = await targetDb.query(
                             `SELECT id, currency FROM accounts WHERE user_id = $1 AND currency = $2 AND is_archived = false LIMIT 1;`,
                             { bind: [userId, currency], transaction: t }
                         );
 
                         let accountId;
-                        if (accounts.length > 0) {
-                            accountId = accounts[0].id;
+                        if (requestedAccountId) {
+                            const [mappedAccount] = await targetDb.query(
+                                `SELECT id FROM accounts WHERE id = $1 AND user_id = $2 AND currency = $3 AND is_archived = false;`,
+                                { bind: [requestedAccountId, userId, currency], transaction: t }
+                            );
+                            if (mappedAccount.length !== 1) {
+                                throw new Error(`Reviewed account map ${mapKey} does not identify an active matching account.`);
+                            }
+                            accountId = mappedAccount[0].id;
                         } else {
-                            const [newAcc] = await targetDb.query(`
-                                INSERT INTO accounts (id, user_id, name, type, currency, opening_balance_minor, current_balance_minor, sort_order, created_at, updated_at)
-                                VALUES (gen_random_uuid(), $1, 'Efectivo', 'cash', $2, 0, 0, 0, NOW(), NOW())
-                                RETURNING id;
-                            `, { bind: [userId, currency], transaction: t });
-                            accountId = newAcc[0].id;
+                            const [eligibleAccounts] = await targetDb.query(
+                                `SELECT id FROM accounts WHERE user_id = $1 AND currency = $2 AND is_archived = false ORDER BY id;`,
+                                { bind: [userId, currency], transaction: t }
+                            );
+                            if (eligibleAccounts.length !== 1) {
+                                throw new Error(`DailyTransaction #${row.id} has ${eligibleAccounts.length} eligible ${currency} accounts. Supply reviewed account map key '${mapKey}'.`);
+                            }
+                            accountId = eligibleAccounts[0].id;
                         }
 
                         // Determine category
