@@ -135,7 +135,7 @@ export const SavingsContribution = sequelize.define('SavingsContribution', {
     updatedAt: 'updated_at',
     indexes: [
         { fields: ['goal_id'] },
-        { fields: ['transaction_id'] }
+        { unique: true, fields: ['transaction_id'] }
     ]
 });
 

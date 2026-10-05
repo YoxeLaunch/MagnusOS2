@@ -1,5 +1,23 @@
-import { SavingsGoal, SavingsContribution, Account, DailyTransaction, toMinorUnits, fromMinorUnits, sequelize } from '../models/index.js';
+import { SavingsGoal, SavingsContribution, Account, DailyTransaction, LedgerTransaction, TransactionLine, toMinorUnitsBigInt, fromMinorUnits, sequelize } from '../models/index.js';
+import { getEffectiveUserId } from '../middleware/auth.js';
 import { Op } from 'sequelize';
+import { LedgerReadService } from '../services/ledgerReadService.js';
+
+const savingsRateFromMinor = (savedMinor, incomeMinor) => {
+    if (incomeMinor <= 0n) return 0;
+    const tenths = savedMinor * 1000n / incomeMinor;
+    if (tenths < BigInt(Number.MIN_SAFE_INTEGER) || tenths > BigInt(Number.MAX_SAFE_INTEGER)) {
+        throw new RangeError('Savings rate exceeds JavaScript safe integer range');
+    }
+    return Number(tenths) / 10;
+};
+
+const progressFromMinor = (currentMinor, targetMinor, decimals = 2) => {
+    if (targetMinor <= 0n || currentMinor <= 0n) return 0;
+    if (currentMinor >= targetMinor) return 100;
+    const factor = decimals === 1 ? 1000n : 10000n;
+    return Number(currentMinor * factor / targetMinor) / (decimals === 1 ? 10 : 100);
+};
 
 // ========================================
 // GET /api/finanza/savings-goals
@@ -7,13 +25,10 @@ import { Op } from 'sequelize';
 // ========================================
 export const getSavingsGoals = async (req, res) => {
     try {
-        const { userId, activeOnly } = req.query;
+        const effectiveUserId = getEffectiveUserId(req, req.query.userId);
+        const { activeOnly } = req.query;
 
-        if (!userId) {
-            return res.status(400).json({ error: 'userId is required' });
-        }
-
-        const where = { userId };
+        const where = { userId: effectiveUserId };
         if (activeOnly === 'true') {
             where.isActive = true;
         }
@@ -27,16 +42,20 @@ export const getSavingsGoals = async (req, res) => {
             order: [['created_at', 'DESC']]
         });
 
-        // Format response with calculated fields
+        // Format response with calculated fields, deriving progress from linked account when attached
         const formatted = goals.map(goal => {
             const json = goal.toJSON();
+            const activeMinor = goal.linkedAccount?.currentBalanceMinor != null ? goal.linkedAccount.currentBalanceMinor : json.currentAmountMinor;
             const targetAmount = fromMinorUnits(json.targetAmountMinor);
-            const currentAmount = fromMinorUnits(json.currentAmountMinor);
-            const progress = targetAmount > 0 ? (currentAmount / targetAmount) * 100 : 0;
+            const currentAmount = fromMinorUnits(activeMinor);
+            const targetBig = BigInt(json.targetAmountMinor != null ? String(json.targetAmountMinor) : '0');
+            const currentBig = BigInt(activeMinor != null ? String(activeMinor) : '0');
+            const progress = progressFromMinor(currentBig, targetBig);
+            const isCompleted = targetBig > 0n && currentBig >= targetBig;
 
             // Calculate monthly contribution needed
             let monthlyNeeded = 0;
-            if (json.targetDate && !json.isCompleted) {
+            if (json.targetDate && !isCompleted) {
                 const today = new Date();
                 const target = new Date(json.targetDate);
                 const monthsLeft = Math.max(1, (target.getFullYear() - today.getFullYear()) * 12 + (target.getMonth() - today.getMonth()));
@@ -46,9 +65,11 @@ export const getSavingsGoals = async (req, res) => {
 
             return {
                 ...json,
+                currentAmountMinor: activeMinor ? activeMinor.toString() : '0',
                 targetAmount,
                 currentAmount,
-                progress: Math.min(100, Math.round(progress * 10) / 10),
+                progress,
+                isCompleted,
                 monthlyNeeded: Math.round(monthlyNeeded * 100) / 100,
                 contributions: json.contributions?.map(c => ({
                     ...c,
@@ -70,8 +91,8 @@ export const getSavingsGoals = async (req, res) => {
 // ========================================
 export const createSavingsGoal = async (req, res) => {
     try {
+        const effectiveUserId = getEffectiveUserId(req, req.body.userId);
         const {
-            userId,
             name,
             targetAmount,
             targetDate,
@@ -82,26 +103,40 @@ export const createSavingsGoal = async (req, res) => {
             notes
         } = req.body;
 
-        if (!userId || !name || !targetAmount) {
+        if (!name || targetAmount === undefined) {
             return res.status(400).json({
-                error: 'userId, name, and targetAmount are required'
+                error: 'name and targetAmount are required'
             });
         }
 
-        // Calculate initial amount from linked account if provided
-        let initialAmount = 0;
+        // Calculate initial amount from linked account if provided and strictly verify ownership
+        let initialAmountMinor = 0n;
         if (linkedAccountId) {
             const account = await Account.findByPk(linkedAccountId);
             if (account) {
-                initialAmount = account.currentBalanceMinor;
+                if (account.userId !== effectiveUserId) {
+                    return res.status(403).json({ error: 'La cuenta vinculada no pertenece a este usuario' });
+                }
+                initialAmountMinor = BigInt(account.currentBalanceMinor != null ? String(account.currentBalanceMinor) : '0');
+            } else {
+                return res.status(404).json({ error: 'Cuenta vinculada no encontrada' });
+            }
+
+            const existingLinkedGoal = await SavingsGoal.findOne({
+                where: { linkedAccountId, isActive: true }
+            });
+            if (existingLinkedGoal) {
+                return res.status(409).json({ error: 'Esta cuenta ya está vinculada a otra meta activa' });
             }
         }
 
+        const targetMinor = toMinorUnitsBigInt(targetAmount);
+
         const goal = await SavingsGoal.create({
-            userId,
-            name,
-            targetAmountMinor: toMinorUnits(targetAmount),
-            currentAmountMinor: initialAmount,
+            userId: effectiveUserId,
+            name: name.trim(),
+            targetAmountMinor: targetMinor.toString(),
+            currentAmountMinor: initialAmountMinor.toString(),
             currency,
             targetDate,
             linkedAccountId,
@@ -109,14 +144,16 @@ export const createSavingsGoal = async (req, res) => {
             color,
             notes,
             isActive: true,
-            isCompleted: false
+            isCompleted: targetMinor > 0n && initialAmountMinor >= targetMinor
         });
+
+        const progress = progressFromMinor(initialAmountMinor, targetMinor);
 
         res.status(201).json({
             ...goal.toJSON(),
             targetAmount,
-            currentAmount: fromMinorUnits(initialAmount),
-            progress: 0
+            currentAmount: fromMinorUnits(initialAmountMinor),
+            progress
         });
     } catch (error) {
         console.error('[SavingsGoals] Error creating goal:', error);
@@ -132,26 +169,33 @@ export const updateSavingsGoal = async (req, res) => {
     try {
         const { id } = req.params;
         const updates = req.body;
+        const effectiveUserId = getEffectiveUserId(req);
+        const isAdmin = req.user.role === 'admin' || req.user.username?.toLowerCase() === 'soberano';
 
-        const goal = await SavingsGoal.findByPk(id);
+        const where = { id };
+        if (!isAdmin) where.userId = effectiveUserId;
+
+        const goal = await SavingsGoal.findOne({ where });
         if (!goal) {
             return res.status(404).json({ error: 'Goal not found' });
         }
 
         // Convert amount if provided
         if (updates.targetAmount !== undefined) {
-            updates.targetAmountMinor = toMinorUnits(updates.targetAmount);
+            updates.targetAmountMinor = toMinorUnitsBigInt(updates.targetAmount).toString();
             delete updates.targetAmount;
         }
-        if (updates.currentAmount !== undefined) {
-            updates.currentAmountMinor = toMinorUnits(updates.currentAmount);
-            delete updates.currentAmount;
-        }
+        // Progress is derived from the linked account or validated ledger contributions.
+        delete updates.currentAmount;
+        delete updates.currentAmountMinor;
+        delete updates.linkedAccountId;
+        delete updates.userId;
+        delete updates.id;
 
         await goal.update(updates);
 
         // Check if completed
-        if (goal.currentAmountMinor >= goal.targetAmountMinor && !goal.isCompleted) {
+        if (BigInt(String(goal.currentAmountMinor)) >= BigInt(String(goal.targetAmountMinor)) && !goal.isCompleted) {
             await goal.update({
                 isCompleted: true,
                 completedAt: new Date()
@@ -177,8 +221,13 @@ export const updateSavingsGoal = async (req, res) => {
 export const deleteSavingsGoal = async (req, res) => {
     try {
         const { id } = req.params;
+        const effectiveUserId = getEffectiveUserId(req);
+        const isAdmin = req.user.role === 'admin' || req.user.username?.toLowerCase() === 'soberano';
 
-        const goal = await SavingsGoal.findByPk(id);
+        const where = { id };
+        if (!isAdmin) where.userId = effectiveUserId;
+
+        const goal = await SavingsGoal.findOne({ where });
         if (!goal) {
             return res.status(404).json({ error: 'Goal not found' });
         }
@@ -200,48 +249,96 @@ export const addContribution = async (req, res) => {
 
     try {
         const { id } = req.params;
-        const { amount, date, notes, transactionId } = req.body;
+        const { date, notes, transactionId } = req.body;
+        const effectiveUserId = getEffectiveUserId(req);
+        const isAdmin = req.user.role === 'admin' || req.user.username?.toLowerCase() === 'soberano';
 
-        if (!amount) {
+        if (!transactionId) {
             await t.rollback();
-            return res.status(400).json({ error: 'amount is required' });
+            return res.status(400).json({ error: 'transactionId de una transferencia ledger es obligatorio' });
         }
 
-        const goal = await SavingsGoal.findByPk(id, { transaction: t });
+        const where = { id };
+        if (!isAdmin) where.userId = effectiveUserId;
+
+        const goal = await SavingsGoal.findOne({ where, transaction: t, lock: t.LOCK.UPDATE });
         if (!goal) {
             await t.rollback();
             return res.status(404).json({ error: 'Goal not found' });
         }
 
+        if (!goal.linkedAccountId) {
+            await t.rollback();
+            return res.status(400).json({ error: 'La meta debe estar vinculada a una cuenta de ahorro' });
+        }
+
+        const ledgerTx = await LedgerTransaction.findOne({
+            where: { id: transactionId, userId: goal.userId, type: 'transfer' },
+            include: [{ model: TransactionLine, as: 'lines' }],
+            transaction: t
+        });
+        if (!ledgerTx) {
+            await t.rollback();
+            return res.status(400).json({ error: 'La transferencia no existe o no pertenece al usuario' });
+        }
+
+        const destinationLine = ledgerTx.lines.find(line =>
+            line.accountId === goal.linkedAccountId && BigInt(String(line.amountMinor)) > 0n
+        );
+        const accountLines = ledgerTx.lines.filter(line => line.accountId);
+        if (!destinationLine || accountLines.length < 2 || ledgerTx.lines.some(line => !line.accountId)) {
+            await t.rollback();
+            return res.status(400).json({ error: 'La transacción no es una transferencia interna hacia la cuenta vinculada' });
+        }
+
+        const existingContribution = await SavingsContribution.findOne({
+            where: { transactionId },
+            transaction: t
+        });
+        if (existingContribution) {
+            await t.rollback();
+            return res.status(409).json({ error: 'Esta transferencia ya fue asignada a una contribución' });
+        }
+
+        const contribMinor = BigInt(String(destinationLine.amountMinor));
+
         // Create contribution record
         const contribution = await SavingsContribution.create({
             goalId: id,
             transactionId,
-            amountMinor: toMinorUnits(amount),
+            amountMinor: contribMinor.toString(),
             date: date || new Date().toISOString().split('T')[0],
             notes
         }, { transaction: t });
 
-        // Update goal's current amount
-        const newAmount = goal.currentAmountMinor + toMinorUnits(amount);
-        const isCompleted = newAmount >= goal.targetAmountMinor;
+        // The account balance is the canonical saved amount; do not add the same money to a second cache.
+        const linkedAccount = await Account.findOne({
+            where: { id: goal.linkedAccountId, userId: goal.userId },
+            transaction: t,
+            lock: t.LOCK.UPDATE
+        });
+        const newAmountMinor = BigInt(linkedAccount.currentBalanceMinor != null ? String(linkedAccount.currentBalanceMinor) : '0');
+        const targetAmountMinor = BigInt(goal.targetAmountMinor != null ? String(goal.targetAmountMinor) : '0');
+        const isCompleted = targetAmountMinor > 0n && newAmountMinor >= targetAmountMinor;
 
         await goal.update({
-            currentAmountMinor: newAmount,
+            currentAmountMinor: newAmountMinor.toString(),
             isCompleted,
             completedAt: isCompleted && !goal.isCompleted ? new Date() : goal.completedAt
         }, { transaction: t });
 
         await t.commit();
 
+        const progress = progressFromMinor(newAmountMinor, targetAmountMinor);
+
         res.status(201).json({
             contribution: {
                 ...contribution.toJSON(),
-                amount
+                amount: fromMinorUnits(contribMinor)
             },
             goal: {
-                currentAmount: fromMinorUnits(newAmount),
-                progress: Math.min(100, (newAmount / goal.targetAmountMinor) * 100),
+                currentAmount: fromMinorUnits(newAmountMinor),
+                progress,
                 isCompleted
             }
         });
@@ -259,8 +356,14 @@ export const addContribution = async (req, res) => {
 export const getGoalProgress = async (req, res) => {
     try {
         const { id } = req.params;
+        const effectiveUserId = getEffectiveUserId(req);
+        const isAdmin = req.user.role === 'admin' || req.user.username?.toLowerCase() === 'soberano';
 
-        const goal = await SavingsGoal.findByPk(id, {
+        const where = { id };
+        if (!isAdmin) where.userId = effectiveUserId;
+
+        const goal = await SavingsGoal.findOne({
+            where,
             include: [
                 { model: Account, as: 'linkedAccount' },
                 { model: SavingsContribution, as: 'contributions', order: [['date', 'DESC']] }
@@ -271,17 +374,23 @@ export const getGoalProgress = async (req, res) => {
             return res.status(404).json({ error: 'Goal not found' });
         }
 
-        const targetAmount = fromMinorUnits(goal.targetAmountMinor);
-        const currentAmount = fromMinorUnits(goal.currentAmountMinor);
+        const activeMinor = goal.linkedAccount?.currentBalanceMinor != null
+            ? String(goal.linkedAccount.currentBalanceMinor)
+            : String(goal.currentAmountMinor || '0');
+        const targetMinor = String(goal.targetAmountMinor || '0');
+        const targetAmount = fromMinorUnits(targetMinor);
+        const currentAmount = fromMinorUnits(activeMinor);
         const remaining = Math.max(0, targetAmount - currentAmount);
-        const progress = targetAmount > 0 ? (currentAmount / targetAmount) * 100 : 0;
+        const targetBig = BigInt(targetMinor);
+        const currentBig = BigInt(activeMinor);
+        const progress = progressFromMinor(currentBig, targetBig, 1);
+        const isCompleted = targetBig > 0n && currentBig >= targetBig;
 
         // Calculate projections
         let projectedDate = null;
         let monthlyNeeded = 0;
 
         if (goal.contributions && goal.contributions.length >= 2) {
-            // Calculate average monthly contribution
             const contributions = goal.contributions.map(c => ({
                 date: new Date(c.date),
                 amount: fromMinorUnits(c.amountMinor)
@@ -302,7 +411,7 @@ export const getGoalProgress = async (req, res) => {
             }
         }
 
-        if (goal.targetDate && !goal.isCompleted) {
+        if (goal.targetDate && !isCompleted) {
             const today = new Date();
             const target = new Date(goal.targetDate);
             const monthsLeft = Math.max(1, (target.getFullYear() - today.getFullYear()) * 12 + (target.getMonth() - today.getMonth()));
@@ -315,8 +424,8 @@ export const getGoalProgress = async (req, res) => {
             targetAmount,
             currentAmount,
             remaining,
-            progress: Math.round(progress * 10) / 10,
-            isCompleted: goal.isCompleted,
+            progress,
+            isCompleted,
             targetDate: goal.targetDate,
             projectedDate,
             monthlyNeeded: Math.round(monthlyNeeded * 100) / 100,
@@ -339,53 +448,98 @@ export const getGoalProgress = async (req, res) => {
 // ========================================
 export const getSavingsRate = async (req, res) => {
     try {
-        const { userId, month } = req.query;
-
-        if (!userId) {
-            return res.status(400).json({ error: 'userId is required' });
-        }
+        const effectiveUserId = getEffectiveUserId(req, req.query.userId);
+        const { month, source } = req.query;
 
         const targetMonth = month || new Date().toISOString().slice(0, 7); // YYYY-MM
+        const [year, monthNum] = targetMonth.split('-').map(Number);
+        const lastDay = new Date(year, monthNum, 0).getDate();
         const monthStart = `${targetMonth}-01`;
-        const monthEndDate = new Date(monthStart);
-        monthEndDate.setMonth(monthEndDate.getMonth() + 1);
-        const monthEnd = monthEndDate.toISOString().slice(0, 10);
+        const monthEnd = `${targetMonth}-${String(lastDay).padStart(2, '0')}`;
 
-        // Fuente real: registro diario (DailyTransaction), igual que el resto del dashboard.
+        // Aportes a metas de ahorro del usuario
+        const goalContributions = await SavingsContribution.findAll({
+            include: [{ model: SavingsGoal, as: 'goal', where: { userId: effectiveUserId }, attributes: [] }],
+            where: { date: { [Op.gte]: monthStart, [Op.lte]: monthEnd } }
+        });
+        const totalGoalContributionsMinor = goalContributions.reduce(
+            (sum, contribution) => sum + BigInt(String(contribution.amountMinor ?? 0)),
+            0n
+        );
+        const totalGoalContributions = fromMinorUnits(totalGoalContributionsMinor);
+
+        // Controlled Strangler Switch:
+        let useLedger = source === 'ledger';
+
+        if (!useLedger && source !== 'legacy') {
+            const comparison = await LedgerReadService.compareLegacyVsLedger({
+                userId: effectiveUserId,
+                startDate: monthStart,
+                endDate: monthEnd
+            });
+
+            if (comparison.ledger.transactionCount > 0 || comparison.classification === 'EXACT_MATCH') {
+                useLedger = true;
+            } else {
+                useLedger = false;
+            }
+        }
+
+        if (useLedger) {
+            const ledgerCashFlow = await LedgerReadService.getCashFlow({
+                userId: effectiveUserId,
+                startDate: monthStart,
+                endDate: monthEnd
+            });
+
+            const incomeMinor = BigInt(ledgerCashFlow.totalIncomeMinor);
+            const expenseMinor = BigInt(ledgerCashFlow.totalExpenseMinor);
+            const investedMinor = BigInt(ledgerCashFlow.totalInvestedMinor);
+            const savedMinor = BigInt(ledgerCashFlow.netCashFlowMinor);
+            const savingsRate = savingsRateFromMinor(savedMinor, incomeMinor);
+
+            return res.json({
+                source: 'ledger',
+                month: targetMonth,
+                totalIncome: fromMinorUnits(incomeMinor),
+                totalExpense: fromMinorUnits(expenseMinor),
+                totalInvested: fromMinorUnits(investedMinor),
+                totalSaved: fromMinorUnits(savedMinor),
+                savingsRate,
+                totalGoalContributions
+            });
+        }
+
+        // Diagnostic or Unmigrated Fallback Mode: DailyTransaction
         const transactions = await DailyTransaction.findAll({
             where: {
-                userId,
-                date: { [Op.gte]: monthStart, [Op.lt]: monthEnd }
+                userId: effectiveUserId,
+                date: { [Op.gte]: monthStart, [Op.lte]: monthEnd }
             }
         });
 
-        let totalIncome = 0;
-        let totalExpense = 0;
-        let totalInvested = 0;
+        let totalIncomeMinor = 0n;
+        let totalExpenseMinor = 0n;
+        let totalInvestedMinor = 0n;
         transactions.forEach(t => {
-            const amount = Number(t.amount) || 0;
-            if (t.type === 'income') totalIncome += amount;
-            else if (t.type === 'investment') totalInvested += amount;
-            else totalExpense += amount;
+            const amountMinor = BigInt(String(t.amountMinor ?? 0));
+            const absoluteMinor = amountMinor < 0n ? -amountMinor : amountMinor;
+            if (t.type === 'income') totalIncomeMinor += absoluteMinor;
+            else if (t.type === 'investment') totalInvestedMinor += absoluteMinor;
+            else totalExpenseMinor += absoluteMinor;
         });
 
-        const totalSaved = totalIncome - totalExpense - totalInvested;
-        const savingsRate = totalIncome > 0 ? (totalSaved / totalIncome) * 100 : 0;
-
-        // Aportes reales a metas de ahorro (ej. Fondo de Emergencia) registrados ese mes.
-        const goalContributions = await SavingsContribution.findAll({
-            include: [{ model: SavingsGoal, as: 'goal', where: { userId }, attributes: [] }],
-            where: { date: { [Op.gte]: monthStart, [Op.lt]: monthEnd } }
-        });
-        const totalGoalContributions = goalContributions.reduce((sum, c) => sum + fromMinorUnits(c.amountMinor), 0);
+        const totalSavedMinor = totalIncomeMinor - totalExpenseMinor - totalInvestedMinor;
+        const savingsRate = savingsRateFromMinor(totalSavedMinor, totalIncomeMinor);
 
         res.json({
+            source: 'legacy',
             month: targetMonth,
-            totalIncome,
-            totalExpense,
-            totalInvested,
-            totalSaved,
-            savingsRate: Math.round(savingsRate * 10) / 10,
+            totalIncome: fromMinorUnits(totalIncomeMinor),
+            totalExpense: fromMinorUnits(totalExpenseMinor),
+            totalInvested: fromMinorUnits(totalInvestedMinor),
+            totalSaved: fromMinorUnits(totalSavedMinor),
+            savingsRate,
             totalGoalContributions
         });
     } catch (error) {

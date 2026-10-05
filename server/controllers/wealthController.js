@@ -1,15 +1,35 @@
 import { WealthSnapshot } from '../models/index.js';
+import { getEffectiveUserId } from '../middleware/auth.js';
+import { LedgerReadService } from '../services/ledgerReadService.js';
 import { Op } from 'sequelize';
+
+export const getNetWorth = async (req, res) => {
+    try {
+        const userId = getEffectiveUserId(req, req.query.userId);
+        const { asOfDate, currency = 'DOP' } = req.query;
+
+        const netWorthData = await LedgerReadService.getNetWorth({
+            userId,
+            asOfDate,
+            currency
+        });
+
+        res.json(netWorthData);
+    } catch (error) {
+        console.error('[WealthController] Error calculating net worth:', error);
+        res.status(500).json({ error: 'Failed to calculate net worth from ledger' });
+    }
+};
 
 export const getWealthHistory = async (req, res) => {
     try {
-        const userId = req.query.userId || req.user?.username || 'system';
+        const userId = getEffectiveUserId(req, req.query.userId);
         const { limit = 12 } = req.query;
 
         const history = await WealthSnapshot.findAll({
             where: { userId },
             order: [['date', 'ASC']],
-            // limit: parseInt(limit) // Optional: limit history
+            limit: parseInt(limit) || 12
         });
 
         res.json(history);
@@ -21,7 +41,7 @@ export const getWealthHistory = async (req, res) => {
 
 export const createWealthSnapshot = async (req, res) => {
     try {
-        const userId = req.body.userId || req.user?.username || 'system';
+        const userId = getEffectiveUserId(req, req.body.userId);
         const { date, netWorth, assets, liabilities, breakdown, currency } = req.body;
 
         if (netWorth === undefined) {

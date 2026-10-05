@@ -1,6 +1,8 @@
-import { User, Transaction, DailyTransaction } from '../models/index.js';
+import { User } from '../models/index.js';
+import { LedgerAnalyticsService } from '../services/ledgerAnalyticsService.js';
 import TelegramLink from '../models/TelegramLink.js';
 import bcrypt from 'bcryptjs';
+import { fromMinorUnits } from '../models/account.js';
 
 /**
  * Link a Telegram chat ID to a Magnus username
@@ -112,50 +114,38 @@ export const getReport = async (req, res) => {
             });
         }
 
-        // Get transactions summary
-        const transactions = await Transaction.findAll({ where: { userId: username } });
-        const dailyTransactions = await DailyTransaction.findAll({ where: { userId: username } });
-
-        // Calculate totals
-        const totalIncome = transactions
-            .filter(t => t.type === 'income')
-            .reduce((sum, t) => sum + (parseFloat(t.amount) || 0), 0);
-
-        const totalExpenses = transactions
-            .filter(t => t.type === 'expense')
-            .reduce((sum, t) => sum + (parseFloat(t.amount) || 0), 0);
-
-        const dailyTotal = dailyTransactions
-            .reduce((sum, t) => sum + (parseFloat(t.amount) || 0), 0);
+        // Get ledger financial summary
+        const summary = await LedgerAnalyticsService.getTelegramSummary({ userId: username });
 
         // Format the report
         const report = {
             success: true,
             user: user.name || username,
             summary: {
-                totalIncome,
-                totalExpenses,
-                balance: totalIncome - totalExpenses,
-                dailyTracking: dailyTotal,
-                transactionCount: transactions.length,
-                dailyCount: dailyTransactions.length
+                totalIncome: summary.totalIncome,
+                totalExpenses: summary.totalExpenses,
+                balance: summary.balance,
+                totalInvested: summary.totalInvested,
+                netCashFlow: summary.netCashFlow,
+                transactionCount: summary.transactionCount,
+                accountCount: summary.accountCount
             },
             formattedMessage: `
-📊 *REPORTE FINANCIERO*
+📊 *REPORTE FINANCIERO OFICIAL (LEDGER)*
 ━━━━━━━━━━━━━━━━━━━━━
 👤 Usuario: ${user.name || username}
 
-📈 *Resumen*
-• Ingresos: +$${totalIncome.toLocaleString()}
-• Gastos: -$${totalExpenses.toLocaleString()}
-• Balance: $${(totalIncome - totalExpenses).toLocaleString()}
+📈 *Resumen Ledger (Contabilidad Oficial)*
+• Ingresos: +RD$ ${summary.totalIncome.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+• Gastos: -RD$ ${summary.totalExpenses.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+• Inversiones: RD$ ${summary.totalInvested.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+• Flujo de Caja Neto: RD$ ${summary.netCashFlow.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+• Balance Total en Cuentas: RD$ ${summary.balance.toLocaleString('en-US', { minimumFractionDigits: 2 })}
 
-📅 *Seguimiento Diario*
-• Total: $${dailyTotal.toLocaleString()}
-• Registros: ${dailyTransactions.length}
-
-📝 Transacciones totales: ${transactions.length}
+🏦 Cuentas activas: ${summary.accountCount}
+📝 Asientos contables: ${summary.transactionCount}
 ━━━━━━━━━━━━━━━━━━━━━
+_Datos verificados por partida doble en PostgreSQL_
             `.trim()
         };
 

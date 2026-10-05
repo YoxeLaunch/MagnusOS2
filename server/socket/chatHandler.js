@@ -1,4 +1,5 @@
 import { Op } from 'sequelize';
+import jwt from 'jsonwebtoken';
 import { User } from '../models/index.js'; // From Finanza DB
 import { Message } from '../models/system/index.js'; // From System DB
 
@@ -6,22 +7,47 @@ import { Message } from '../models/system/index.js'; // From System DB
 let connectedUsers = new Map();
 
 /**
+ * Socket.IO Handshake Authentication Middleware
+ * Enforces valid JWT token before establishing connection
+ */
+export const socketAuthMiddleware = (socket, next) => {
+    const JWT_SECRET = process.env.JWT_SECRET;
+    if (!JWT_SECRET) {
+        console.error('[SOCKET:AUTH] JWT_SECRET not configured');
+        return next(new Error('Configuración de seguridad incorrecta en el servidor'));
+    }
+
+    const authHeader = socket.handshake.headers?.authorization;
+    const token = socket.handshake.auth?.token ||
+        (authHeader && authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null) ||
+        socket.handshake.query?.token;
+
+    if (!token) {
+        return next(new Error('Acceso denegado: Token JWT requerido'));
+    }
+
+    try {
+        const decoded = jwt.verify(token, JWT_SECRET);
+        socket.user = decoded; // { username, role }
+        next();
+    } catch (err) {
+        return next(new Error('Acceso denegado: Token inválido o expirado'));
+    }
+};
+
+/**
  * Helper to enrich messages with sender details manually (Cross-DB Join)
  */
 async function enrichMessagesWithSenders(messages) {
-    // 1. Collect unique usernames
     const usernames = [...new Set(messages.map(m => m.fromUsername))];
 
-    // 2. Fetch users from Finanza DB
     const users = await User.findAll({
         where: { username: { [Op.in]: usernames } },
         attributes: ['username', 'name', 'role', 'tags']
     });
 
-    // 3. Create Map
     const userMap = new Map(users.map(u => [u.username, u]));
 
-    // 4. Attach details
     return messages.map(msg => {
         const sender = userMap.get(msg.fromUsername);
         let replyTo = null;
@@ -38,22 +64,51 @@ async function enrichMessagesWithSenders(messages) {
             tags: sender?.tags,
             timestamp: msg.createdAt,
             type: msg.type,
-            to: msg.toUsername, // For private messages
+            to: msg.toUsername,
             replyTo: replyTo
         };
     });
 }
 
 /**
- * Initializes Socket.IO event listeners
+ * Initializes Socket.IO event listeners with strict JWT identity
  * @param {import('socket.io').Server} io 
  */
 export const initSocket = (io) => {
+    // 1. Enforce handshake authentication
+    io.use(socketAuthMiddleware);
+
     io.on('connection', async (socket) => {
-        console.log('[SOCKET] New connection:', socket.id);
+        const authenticatedUsername = socket.user?.username;
+        console.log(`[SOCKET] Authenticated connection from ${authenticatedUsername} (id: ${socket.id})`);
+
+        if (!authenticatedUsername) {
+            socket.disconnect(true);
+            return;
+        }
+
+        // Auto-join personal room by authenticated identity
+        socket.join(authenticatedUsername);
 
         try {
-            // 1. Send Public History (Last 50 messages)
+            // Update connected users map
+            const user = await User.findByPk(authenticatedUsername);
+            if (user) {
+                connectedUsers.set(socket.id, {
+                    username: user.username,
+                    name: user.name,
+                    socketId: socket.id,
+                    status: 'online',
+                    role: user.role,
+                    tags: user.tags,
+                    preferences: user.preferences
+                });
+
+                const userList = Array.from(connectedUsers.values());
+                io.emit('users_update', userList);
+            }
+
+            // Send Public History (Last 50 messages)
             const publicMessages = await Message.findAll({
                 where: { type: 'public' },
                 order: [['createdAt', 'DESC']],
@@ -63,56 +118,40 @@ export const initSocket = (io) => {
             const enriched = await enrichMessagesWithSenders(publicMessages);
             socket.emit('chat_history', enriched.reverse()); // Oldest first
         } catch (error) {
-            console.error('[SOCKET] Error fetching history:', error);
+            console.error('[SOCKET] Error in connection init:', error);
         }
 
-        // 2. User Joins
-        socket.on('join', async (userId) => {
-            const username = userId.username || userId;
-            console.log(`[SOCKET] Join Request from:`, username);
-            socket.join(username);
-
-            try {
-                const user = await User.findByPk(username);
-                if (user) {
-                    connectedUsers.set(socket.id, {
-                        username: user.username,
-                        name: user.name,
-                        socketId: socket.id,
-                        status: 'online',
-                        role: user.role,
-                        tags: user.tags,
-                        preferences: user.preferences
-                    });
-
-                    const userList = Array.from(connectedUsers.values());
-                    io.emit('users_update', userList);
-                }
-            } catch (err) {
-                console.error('[SOCKET] Error joining user:', err);
-            }
+        // 2. User Joins (acknowledgment, identity is locked to socket.user.username)
+        socket.on('join', async () => {
+            console.log(`[SOCKET] Join acknowledged for ${authenticatedUsername}`);
+            socket.join(authenticatedUsername);
         });
 
-        // 3. New Public Message
+        // 3. New Public Message (REMITENTE SIEMPRE ES socket.user.username)
         socket.on('send_message', async (messageData) => {
             try {
+                if (!messageData.text || typeof messageData.text !== 'string' || messageData.text.trim().length === 0) {
+                    return;
+                }
+
+                const cleanText = messageData.text.trim().substring(0, 4000);
+
                 const newMessage = await Message.create({
-                    text: messageData.text,
-                    fromUsername: messageData.username,
+                    text: cleanText,
+                    fromUsername: authenticatedUsername, // Inmutable: derivado del JWT
                     type: 'public',
                     replyTo: messageData.replyTo ? JSON.stringify(messageData.replyTo) : null
                 });
 
-                // Manual Fetch for Sender
-                const sender = await User.findByPk(newMessage.fromUsername, {
+                const sender = await User.findByPk(authenticatedUsername, {
                     attributes: ['name', 'role', 'tags']
                 });
 
                 const formatted = {
                     id: newMessage.id,
                     text: newMessage.text,
-                    username: newMessage.fromUsername,
-                    name: sender?.name,
+                    username: authenticatedUsername,
+                    name: sender?.name || authenticatedUsername,
                     role: sender?.role,
                     tags: sender?.tags,
                     timestamp: newMessage.createdAt,
@@ -126,28 +165,34 @@ export const initSocket = (io) => {
             }
         });
 
-        // 4. Private Message
-        socket.on('send_private_message', async ({ to, text, from, replyTo }) => {
+        // 4. Private Message (REMITENTE SIEMPRE ES socket.user.username)
+        socket.on('send_private_message', async ({ to, text, replyTo }) => {
             try {
+                if (!to || !text || typeof text !== 'string' || text.trim().length === 0) {
+                    return;
+                }
+
+                const cleanText = text.trim().substring(0, 4000);
+
                 const newMessage = await Message.create({
-                    text,
-                    fromUsername: from,
+                    text: cleanText,
+                    fromUsername: authenticatedUsername, // Inmutable: derivado del JWT
                     toUsername: to,
                     type: 'private',
                     replyTo: replyTo ? JSON.stringify(replyTo) : null
                 });
 
-                const sender = await User.findByPk(from, { attributes: ['name'] });
+                const sender = await User.findByPk(authenticatedUsername, { attributes: ['name'] });
 
                 const formatted = {
                     id: newMessage.id,
                     text: newMessage.text,
-                    from: newMessage.fromUsername,
-                    to: newMessage.toUsername,
-                    name: sender?.name,
+                    from: authenticatedUsername,
+                    to,
+                    name: sender?.name || authenticatedUsername,
                     timestamp: newMessage.createdAt,
                     type: 'private',
-                    replyTo: replyTo
+                    replyTo
                 };
 
                 io.to(to).emit('receive_private_message', formatted);
@@ -157,29 +202,29 @@ export const initSocket = (io) => {
             }
         });
 
-        // 5. Get Private History
-        socket.on('get_private_history', async ({ withUser, currentUser }) => {
+        // 5. Get Private History (SOLO puede consultar conversaciones donde es participante: A <-> B)
+        socket.on('get_private_history', async ({ withUser }) => {
             try {
+                if (!withUser) return;
+
                 const messages = await Message.findAll({
                     where: {
                         type: 'private',
                         [Op.or]: [
-                            { fromUsername: currentUser, toUsername: withUser },
-                            { fromUsername: withUser, toUsername: currentUser }
+                            { fromUsername: authenticatedUsername, toUsername: withUser },
+                            { fromUsername: withUser, toUsername: authenticatedUsername }
                         ]
                     },
                     order: [['createdAt', 'ASC']],
                     limit: 50
                 });
 
-                // Enrich with names
                 const senderNames = {};
-                // Helper to get name
-                const getName = async (username) => {
-                    if (senderNames[username]) return senderNames[username];
-                    const u = await User.findByPk(username, { attributes: ['name'] });
-                    senderNames[username] = u?.name || username;
-                    return senderNames[username];
+                const getName = async (uName) => {
+                    if (senderNames[uName]) return senderNames[uName];
+                    const u = await User.findByPk(uName, { attributes: ['name'] });
+                    senderNames[uName] = u?.name || uName;
+                    return senderNames[uName];
                 };
 
                 const formatted = await Promise.all(messages.map(async msg => {
@@ -196,7 +241,7 @@ export const initSocket = (io) => {
                         timestamp: msg.createdAt,
                         type: 'private',
                         name: await getName(msg.fromUsername),
-                        replyTo: replyTo
+                        replyTo
                     };
                 }));
 
@@ -217,31 +262,42 @@ export const initSocket = (io) => {
         });
 
         // 7. Typing Indicators
-        socket.on('typing', ({ username, room }) => {
-            if (room === 'global') {
-                socket.broadcast.emit('user_typing', { username, room: 'global' });
+        socket.on('typing', ({ room }) => {
+            const payload = { username: authenticatedUsername, room: room || 'global' };
+            if (room === 'global' || !room) {
+                socket.broadcast.emit('user_typing', payload);
             } else {
-                io.to(room).emit('user_typing', { username, room });
+                io.to(room).emit('user_typing', payload);
             }
         });
 
-        socket.on('stop_typing', ({ username, room }) => {
-            if (room === 'global') {
-                socket.broadcast.emit('user_stop_typing', { username, room: 'global' });
+        socket.on('stop_typing', ({ room }) => {
+            const payload = { username: authenticatedUsername, room: room || 'global' };
+            if (room === 'global' || !room) {
+                socket.broadcast.emit('user_stop_typing', payload);
             } else {
-                io.to(room).emit('user_stop_typing', { username, room });
+                io.to(room).emit('user_stop_typing', payload);
             }
         });
 
-        // 8. System Broadcast
+        // 8. Admin Broadcast (RESTRINGIDO A ADMIN / SOBERANO POR JWT)
         socket.on('admin:broadcast', (data) => {
-            console.log('[SOCKET] Broadcast received:', data);
+            const isAdmin = socket.user?.role === 'admin' || authenticatedUsername.toLowerCase() === 'soberano';
+            if (!isAdmin) {
+                console.warn(`[SECURITY:SOCKET] Unauthorized admin:broadcast attempt by ${authenticatedUsername}`);
+                socket.emit('error', { message: 'Acceso denegado: solo administradores pueden emitir anuncios.' });
+                return;
+            }
+
+            console.log(`[SOCKET] Admin broadcast sent by ${authenticatedUsername}:`, data?.title);
             io.emit('system:broadcast', {
                 ...data,
+                sender: authenticatedUsername,
                 timestamp: new Date()
             });
         });
     });
 };
+
 
 

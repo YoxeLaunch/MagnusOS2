@@ -1,4 +1,17 @@
-import { DailyTransaction, CurrencyHistory, Transaction } from '../models/index.js';
+import crypto from 'node:crypto';
+import {
+    DailyTransaction,
+    CurrencyHistory,
+    Transaction,
+    Account,
+    LedgerTransaction,
+    TransactionLine,
+    Category,
+    toMinorUnitsBigInt,
+    fromMinorUnits,
+    sequelize
+} from '../models/index.js';
+import { getEffectiveUserId } from '../middleware/auth.js';
 
 // --- RATES CACHE ---
 let ratesCache = {
@@ -10,8 +23,7 @@ const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
 // --- TRANSACTIONS (Budget/Recurring) ---
 export const getTransactions = async (req, res) => {
     try {
-        const { userId } = req.query;
-        if (!userId || userId === 'undefined') return res.json([]);
+        const userId = getEffectiveUserId(req, req.query.userId);
 
         const transactions = await Transaction.findAll({
             where: { userId },
@@ -20,12 +32,7 @@ export const getTransactions = async (req, res) => {
 
         // Safety Clean-up
         const cleanTransactions = transactions.map(t => {
-            // Ensure deductions is a valid object if string or null
             let cleanDeductions = t.deductions;
-
-            // Note: Sequelize with DataTypes.JSON usually returns object or null.
-            // But if it returns string (legacy), we parse it.
-            // We handled this in migration, but being double safe here.
             if (typeof cleanDeductions === 'string') {
                 try {
                     cleanDeductions = JSON.parse(cleanDeductions);
@@ -40,7 +47,8 @@ export const getTransactions = async (req, res) => {
                 id: t.id,
                 userId: t.userId,
                 name: t.name || 'Sin Nombre',
-                amount: Number(t.amount) || 0,
+                amount: fromMinorUnits(t.amountMinor),
+                amountMinor: String(t.amountMinor),
                 frequency: t.frequency || 'Mensual',
                 category: t.category || 'General',
                 currency: t.currency || 'DOP',
@@ -62,7 +70,9 @@ export const getTransactions = async (req, res) => {
 
 export const createTransaction = async (req, res) => {
     try {
-        const transaction = await Transaction.create(req.body);
+        const userId = getEffectiveUserId(req, req.body.userId);
+        const data = { ...req.body, userId };
+        const transaction = await Transaction.create(data);
         res.json(transaction);
     } catch (error) {
         res.status(500).json({ error: error.message });
@@ -72,13 +82,20 @@ export const createTransaction = async (req, res) => {
 export const updateTransaction = async (req, res) => {
     try {
         const { id } = req.params;
-        const [updated] = await Transaction.update(req.body, { where: { id } });
-        if (updated) {
-            const result = await Transaction.findOne({ where: { id } });
-            res.json(result);
-        } else {
-            res.status(404).json({ error: 'Not found' });
-        }
+        const userId = getEffectiveUserId(req);
+        const isAdmin = req.user.role === 'admin' || req.user.username?.toLowerCase() === 'soberano';
+
+        const where = { id };
+        if (!isAdmin) where.userId = userId;
+
+        const data = { ...req.body };
+        delete data.userId;
+        delete data.id;
+
+        const transaction = await Transaction.findOne({ where });
+        if (!transaction) return res.status(404).json({ error: 'Not found' });
+        await transaction.update(data);
+        res.json(transaction);
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
@@ -87,7 +104,13 @@ export const updateTransaction = async (req, res) => {
 export const deleteTransaction = async (req, res) => {
     try {
         const { id } = req.params;
-        const deleted = await Transaction.destroy({ where: { id } });
+        const userId = getEffectiveUserId(req);
+        const isAdmin = req.user.role === 'admin' || req.user.username?.toLowerCase() === 'soberano';
+
+        const where = { id };
+        if (!isAdmin) where.userId = userId;
+
+        const deleted = await Transaction.destroy({ where });
         if (deleted) res.status(204).send();
         else res.status(404).json({ error: 'Not found' });
     } catch (error) {
@@ -98,8 +121,7 @@ export const deleteTransaction = async (req, res) => {
 // --- DAILY TRANSACTIONS ---
 export const getDailyTransactions = async (req, res) => {
     try {
-        const { userId } = req.query;
-        if (!userId || userId === 'undefined') return res.json([]);
+        const userId = getEffectiveUserId(req, req.query.userId);
 
         const transactions = await DailyTransaction.findAll({
             where: { userId },
@@ -110,7 +132,8 @@ export const getDailyTransactions = async (req, res) => {
             id: tx.id,
             userId: tx.userId,
             date: tx.date, // YYYY-MM-DD
-            amount: Number(tx.amount) || 0,
+            amount: fromMinorUnits(tx.amountMinor),
+            amountMinor: String(tx.amountMinor),
             description: tx.description || 'Sin descripción',
             type: tx.type,
             category: tx.category || 'Varios'
@@ -124,35 +147,302 @@ export const getDailyTransactions = async (req, res) => {
 };
 
 export const createDailyTransaction = async (req, res) => {
+    const t = await sequelize.transaction();
     try {
-        const transaction = await DailyTransaction.create(req.body);
-        res.json(transaction);
+        const userId = getEffectiveUserId(req, req.body.userId);
+        const { date, amount, amountMinor, description, type = 'expense', category = 'Varios', currency = 'DOP' } = req.body;
+
+        let minorBigInt;
+        try {
+            minorBigInt = amountMinor !== undefined ? BigInt(String(amountMinor)) : toMinorUnitsBigInt(amount);
+        } catch {
+            await t.rollback();
+            return res.status(400).json({ error: 'Importe numérico inválido' });
+        }
+
+        if (minorBigInt === 0n) {
+            await t.rollback();
+            return res.status(400).json({ error: 'El importe contable no puede ser cero' });
+        }
+
+        const absMinor = minorBigInt < 0n ? -minorBigInt : minorBigInt;
+        const legacyType = (type || 'expense').toLowerCase();
+        const isPositiveToAccount = legacyType === 'income' || legacyType === 'refund';
+        const accountDelta = isPositiveToAccount ? absMinor : -absMinor;
+        const categoryDelta = -accountDelta;
+
+        let account = await Account.findOne({
+            where: { userId, currency, isArchived: false },
+            transaction: t,
+            lock: t.LOCK.UPDATE
+        });
+        if (!account) {
+            account = await Account.create({
+                userId,
+                name: 'Efectivo',
+                type: 'cash',
+                currency,
+                openingBalanceMinor: 0n,
+                currentBalanceMinor: 0n
+            }, { transaction: t });
+        }
+
+        const categoryType = legacyType === 'income' ? 'income' : 'expense';
+        let [cat] = await Category.findOrCreate({
+            where: { userId, name: category },
+            defaults: { userId, name: category, type: categoryType },
+            transaction: t
+        });
+
+        const legacyData = {
+            ...req.body,
+            userId,
+            date: date || new Date().toISOString().split('T')[0],
+            amount: fromMinorUnits(minorBigInt),
+            amountMinor: minorBigInt.toString(),
+            type: legacyType,
+            category: category,
+            description: description || 'Registro diario'
+        };
+        const legacyRow = await DailyTransaction.create(legacyData, { transaction: t });
+
+        const ledgerTx = await LedgerTransaction.create({
+            userId,
+            date: legacyData.date,
+            payeeName: (description || category).slice(0, 100),
+            memo: `DailyTransaction #${legacyRow.id}: ${description || ''}`.trim(),
+            status: 'cleared',
+            type: legacyType === 'investment' ? 'investment' : (legacyType === 'income' ? 'income' : 'expense'),
+            reference: `migrated:daily:${legacyRow.id}`
+        }, { transaction: t });
+
+        await TransactionLine.create({
+            transactionId: ledgerTx.id,
+            accountId: account.id,
+            amountMinor: accountDelta.toString(),
+            currency,
+            memo: description || ''
+        }, { transaction: t });
+
+        await TransactionLine.create({
+            transactionId: ledgerTx.id,
+            categoryId: cat.id,
+            amountMinor: categoryDelta.toString(),
+            currency,
+            memo: category || ''
+        }, { transaction: t });
+
+        const currentAccMinor = BigInt(account.currentBalanceMinor || 0);
+        await account.update({
+            currentBalanceMinor: (currentAccMinor + accountDelta).toString()
+        }, { transaction: t });
+
+        try {
+            const legacyHash = crypto.createHash('sha256').update(`${legacyData.date}|${legacyData.amount}|${description}`).digest('hex').substring(0, 16);
+            await sequelize.query(`
+                INSERT INTO legacy_daily_transaction_mappings 
+                (daily_transaction_id, ledger_transaction_id, user_id, legacy_hash, status, notes)
+                VALUES ($1, $2, $3, $4, 'migrated', 'Created via adapted daily API')
+                ON CONFLICT (daily_transaction_id) DO NOTHING;
+            `, {
+                bind: [legacyRow.id, ledgerTx.id, userId, legacyHash],
+                transaction: t
+            });
+        } catch (_) {}
+
+        await t.commit();
+        res.status(201).json(legacyRow);
     } catch (error) {
+        await t.rollback();
         res.status(500).json({ error: error.message });
     }
 };
 
 export const updateDailyTransaction = async (req, res) => {
+    const t = await sequelize.transaction();
     try {
         const { id } = req.params;
-        const [updated] = await DailyTransaction.update(req.body, { where: { id } });
-        if (updated) {
-            const result = await DailyTransaction.findOne({ where: { id } });
-            res.json(result);
-        } else {
-            res.status(404).json({ error: 'Not found' });
+        const userId = getEffectiveUserId(req);
+        const isAdmin = req.user.role === 'admin' || req.user.username?.toLowerCase() === 'soberano';
+
+        const where = { id };
+        if (!isAdmin) where.userId = userId;
+
+        const data = { ...req.body };
+        delete data.userId;
+        delete data.id;
+
+        const legacyRow = await DailyTransaction.findOne({ where, transaction: t, lock: t.LOCK.UPDATE });
+        if (!legacyRow) {
+            await t.rollback();
+            return res.status(404).json({ error: 'Not found' });
         }
+
+        // DailyTransactions is a compatibility projection. Its financial mutation is
+        // valid only when it can atomically mutate the mapped double-entry event.
+        const [[mapping]] = await sequelize.query(
+            `SELECT ledger_transaction_id FROM legacy_daily_transaction_mappings
+             WHERE daily_transaction_id = $1 AND user_id = $2 LIMIT 1;`,
+            { bind: [id, legacyRow.userId], transaction: t }
+        ).catch(() => [[null]]);
+
+        const reference = `migrated:daily:${id}`;
+        const ledgerTx = mapping?.ledger_transaction_id
+            ? await LedgerTransaction.findOne({ where: { id: mapping.ledger_transaction_id, userId: legacyRow.userId }, transaction: t, lock: t.LOCK.UPDATE })
+            : await LedgerTransaction.findOne({ where: { reference, userId: legacyRow.userId }, transaction: t, lock: t.LOCK.UPDATE });
+
+        if (!ledgerTx) {
+            await t.rollback();
+            return res.status(409).json({ error: 'Movimiento legacy sin asiento Ledger mapeado; la edición está bloqueada para evitar divergencia.' });
+        }
+
+        const oldAccountLine = await TransactionLine.findOne({
+            where: { transactionId: ledgerTx.id },
+            include: [{ model: Account, as: 'account', required: true }],
+            transaction: t,
+            lock: t.LOCK.UPDATE
+        });
+        if (!oldAccountLine?.account) {
+            await t.rollback();
+            return res.status(409).json({ error: 'Asiento Ledger sin línea de cuenta válida; la edición está bloqueada.' });
+        }
+
+        let minorBigInt;
+        try {
+            minorBigInt = data.amountMinor !== undefined
+                ? BigInt(String(data.amountMinor))
+                : (data.amount !== undefined ? toMinorUnitsBigInt(data.amount) : BigInt(legacyRow.amountMinor));
+        } catch {
+            await t.rollback();
+            return res.status(400).json({ error: 'Importe numérico inválido' });
+        }
+        if (minorBigInt === 0n) {
+            await t.rollback();
+            return res.status(400).json({ error: 'El importe contable no puede ser cero' });
+        }
+
+        const legacyType = String(data.type ?? legacyRow.type ?? 'expense').toLowerCase();
+        const description = data.description ?? legacyRow.description ?? 'Registro diario';
+        const category = data.category ?? legacyRow.category ?? 'Varios';
+        const date = data.date ?? legacyRow.date;
+        const currency = oldAccountLine.currency;
+        const absMinor = minorBigInt < 0n ? -minorBigInt : minorBigInt;
+        const isPositiveToAccount = legacyType === 'income' || legacyType === 'refund';
+        const accountDelta = isPositiveToAccount ? absMinor : -absMinor;
+        const categoryDelta = -accountDelta;
+
+        const categoryType = legacyType === 'income' ? 'income' : 'expense';
+        const [cat] = await Category.findOrCreate({
+            where: { userId: legacyRow.userId, name: category },
+            defaults: { userId: legacyRow.userId, name: category, type: categoryType },
+            transaction: t
+        });
+
+        // Reverse the old account impact, then replace the two balanced lines.
+        const account = await Account.findByPk(oldAccountLine.accountId, { transaction: t, lock: t.LOCK.UPDATE });
+        if (!account) {
+            await t.rollback();
+            return res.status(409).json({ error: 'Cuenta del asiento Ledger no encontrada; la edición está bloqueada.' });
+        }
+        const cachedBalance = BigInt(account.currentBalanceMinor || 0);
+        await account.update({
+            currentBalanceMinor: (cachedBalance - BigInt(oldAccountLine.amountMinor) + accountDelta).toString()
+        }, { transaction: t });
+
+        await TransactionLine.destroy({ where: { transactionId: ledgerTx.id }, transaction: t });
+        await TransactionLine.bulkCreate([
+            { transactionId: ledgerTx.id, accountId: account.id, amountMinor: accountDelta.toString(), currency, memo: description },
+            { transactionId: ledgerTx.id, categoryId: cat.id, amountMinor: categoryDelta.toString(), currency, memo: category }
+        ], { transaction: t });
+        await ledgerTx.update({
+            date,
+            payeeName: String(description).slice(0, 100),
+            memo: `DailyTransaction #${legacyRow.id}: ${description}`,
+            type: legacyType === 'investment' ? 'investment' : (legacyType === 'income' ? 'income' : 'expense')
+        }, { transaction: t });
+
+        await legacyRow.update({
+            date,
+            amount: fromMinorUnits(minorBigInt),
+            amountMinor: minorBigInt.toString(),
+            description,
+            type: legacyType,
+            category
+        }, { transaction: t });
+        await t.commit();
+        res.json(legacyRow);
     } catch (error) {
+        await t.rollback().catch(() => {});
         res.status(500).json({ error: error.message });
     }
 };
 
 export const deleteDailyTransaction = async (req, res) => {
+    const t = await sequelize.transaction();
     try {
         const { id } = req.params;
-        await DailyTransaction.destroy({ where: { id } });
+        const userId = getEffectiveUserId(req);
+        const isAdmin = req.user.role === 'admin' || req.user.username?.toLowerCase() === 'soberano';
+
+        const where = { id };
+        if (!isAdmin) where.userId = userId;
+
+        const legacyRow = await DailyTransaction.findOne({ where, transaction: t });
+        if (!legacyRow) {
+            await t.rollback();
+            return res.status(404).json({ error: 'Not found' });
+        }
+
+        let ledgerTxId = null;
+        try {
+            const [mapping] = await sequelize.query(
+                `SELECT ledger_transaction_id FROM legacy_daily_transaction_mappings WHERE daily_transaction_id = $1 LIMIT 1;`,
+                { bind: [id], transaction: t }
+            );
+            if (mapping.length > 0 && mapping[0].ledger_transaction_id) {
+                ledgerTxId = mapping[0].ledger_transaction_id;
+            }
+        } catch (_) {}
+
+        if (!ledgerTxId) {
+            const ref = `migrated:daily:${id}`;
+            const foundLedger = await LedgerTransaction.findOne({ where: { reference: ref }, transaction: t });
+            if (foundLedger) ledgerTxId = foundLedger.id;
+        }
+
+        if (ledgerTxId) {
+            const ledgerTx = await LedgerTransaction.findByPk(ledgerTxId, {
+                include: [{ model: TransactionLine, as: 'lines' }],
+                transaction: t
+            });
+            if (ledgerTx) {
+                for (const line of ledgerTx.lines) {
+                    if (line.accountId) {
+                        const acc = await Account.findByPk(line.accountId, { transaction: t, lock: t.LOCK.UPDATE });
+                        if (acc) {
+                            const cur = BigInt(acc.currentBalanceMinor || 0);
+                            const lineDelta = BigInt(line.amountMinor || 0);
+                            await acc.update({
+                                currentBalanceMinor: (cur - lineDelta).toString()
+                            }, { transaction: t });
+                        }
+                    }
+                }
+                await ledgerTx.destroy({ transaction: t });
+            }
+            try {
+                await sequelize.query(`DELETE FROM legacy_daily_transaction_mappings WHERE daily_transaction_id = $1;`, {
+                    bind: [id],
+                    transaction: t
+                });
+            } catch (_) {}
+        }
+
+        await legacyRow.destroy({ transaction: t });
+        await t.commit();
         res.status(204).send();
     } catch (error) {
+        await t.rollback();
         res.status(500).json({ error: error.message });
     }
 };

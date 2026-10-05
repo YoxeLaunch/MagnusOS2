@@ -31,7 +31,8 @@ export default defineConfig(({ mode }) => {
                 output: {
                     manualChunks: {
                         'vendor-react': ['react', 'react-dom', 'react-router-dom'],
-                        'vendor-ui': ['framer-motion', 'lucide-react', 'recharts'],
+                        'vendor-charts': ['recharts'],
+                        'vendor-ui': ['framer-motion', 'lucide-react'],
                         'vendor-utils': ['date-fns', 'socket.io-client', 'i18next']
                     }
                 }

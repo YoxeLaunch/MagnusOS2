@@ -1,11 +1,18 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # ========================================
-# Magnus-OS2 PostgreSQL Backup Script
+# Magnus-OS2 Hardened PostgreSQL Backup Script
 # ========================================
-# Usage: ./backup.sh
-# Cron example: 0 3 * * * /path/to/backup.sh >> /var/log/magnus_backup.log 2>&1
+# Features:
+# - Strict error handling: set -euo pipefail
+# - Restrictive permissions: umask 077 & chmod 600
+# - Concurrency lockfile via flock
+# - Clean binary stream: docker exec WITHOUT -t flag
+# - Automated gzip integrity testing (gzip -t)
+# - Retention cleanup with error checking
+# ========================================
 
-set -e
+set -euo pipefail
+umask 077
 
 # Configuration
 BACKUP_DIR="${BACKUP_DIR:-/home/osvaldo/backups/magnus-os2}"
@@ -13,38 +20,54 @@ RETENTION_DAYS="${RETENTION_DAYS:-14}"
 POSTGRES_CONTAINER="${POSTGRES_CONTAINER:-magnus_postgres}"
 POSTGRES_DB="${POSTGRES_DB:-magnus}"
 POSTGRES_USER="${POSTGRES_USER:-magnus}"
+LOCK_FILE="/tmp/magnus_backup.lock"
 
-# Timestamp
+# Concurrency lock
+exec 200>"${LOCK_FILE}"
+if ! flock -n 200; then
+    echo "[$(date -Iseconds)] [ERROR] Another backup process is already running. Aborting." >&2
+    exit 1
+fi
+
 TIMESTAMP=$(date +%Y-%m-%d_%H-%M-%S)
-BACKUP_FILE="${BACKUP_DIR}/magnus_${TIMESTAMP}.sql"
+TEMP_FILE="${BACKUP_DIR}/.magnus_${TIMESTAMP}.sql.tmp"
+FINAL_FILE="${BACKUP_DIR}/magnus_${TIMESTAMP}.sql.gz"
 
 echo "========================================="
-echo "Magnus-OS2 Backup - ${TIMESTAMP}"
+echo "Magnus-OS2 Hardened Backup — ${TIMESTAMP}"
 echo "========================================="
 
-# Create backup directory if it doesn't exist
+# Ensure backup destination directory exists with 0700 permissions
 mkdir -p "${BACKUP_DIR}"
+chmod 700 "${BACKUP_DIR}" 2>/dev/null || true
 
-# Perform backup
-echo "[1/3] Creating backup..."
-docker exec -t "${POSTGRES_CONTAINER}" pg_dump -U "${POSTGRES_USER}" "${POSTGRES_DB}" > "${BACKUP_FILE}"
+# 1. Perform database dump via binary stream (no pseudo-TTY)
+echo "[1/4] Dumping PostgreSQL database '${POSTGRES_DB}'..."
+if ! docker exec "${POSTGRES_CONTAINER}" pg_dump -U "${POSTGRES_USER}" "${POSTGRES_DB}" > "${TEMP_FILE}"; then
+    echo "[ERROR] pg_dump failed! Removing temporary file." >&2
+    rm -f "${TEMP_FILE}"
+    exit 1
+fi
 
-# Compress backup
-echo "[2/3] Compressing backup..."
-gzip "${BACKUP_FILE}"
-BACKUP_FILE="${BACKUP_FILE}.gz"
+# 2. Compress the dump
+echo "[2/4] Compressing backup stream..."
+gzip -c "${TEMP_FILE}" > "${FINAL_FILE}"
+rm -f "${TEMP_FILE}"
+chmod 600 "${FINAL_FILE}"
 
-echo "      Backup saved: ${BACKUP_FILE}"
-echo "      Size: $(du -h "${BACKUP_FILE}" | cut -f1)"
+# 3. Test integrity of the compressed archive
+echo "[3/4] Testing backup integrity (gzip -t)..."
+if ! gzip -t "${FINAL_FILE}"; then
+    echo "[ERROR] Backup integrity verification FAILED for ${FINAL_FILE}!" >&2
+    rm -f "${FINAL_FILE}"
+    exit 1
+fi
+echo "      Integrity OK. Saved: ${FINAL_FILE} ($(du -h "${FINAL_FILE}" | cut -f1))"
 
-# Clean old backups
-echo "[3/3] Cleaning old backups (older than ${RETENTION_DAYS} days)..."
-find "${BACKUP_DIR}" -name "magnus_*.sql.gz" -type f -mtime +${RETENTION_DAYS} -delete
+# 4. Clean old backups safely
+echo "[4/4] Enforcing retention policy (${RETENTION_DAYS} days)..."
+find "${BACKUP_DIR}" -name "magnus_*.sql.gz" -type f -mtime +"${RETENTION_DAYS}" -delete || true
 
-# List current backups
-echo ""
-echo "Current backups:"
-ls -lh "${BACKUP_DIR}"/magnus_*.sql.gz 2>/dev/null || echo "No backups found"
-
-echo ""
-echo "Backup completed successfully!"
+echo "========================================="
+echo "Backup successfully completed and verified!"
+echo "========================================="

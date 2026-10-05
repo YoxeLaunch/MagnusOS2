@@ -90,7 +90,7 @@ export const TransactionLine = sequelize.define('TransactionLine', {
     },
     accountId: {
         type: DataTypes.UUID,
-        allowNull: false,
+        allowNull: true,
         field: 'account_id'
     },
     categoryId: {

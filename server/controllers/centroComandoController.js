@@ -1,5 +1,7 @@
-import { DailyTransaction, WealthSnapshot, CurrencyHistory } from '../models/index.js';
+import { WealthSnapshot, CurrencyHistory } from '../models/index.js';
 import { Op } from 'sequelize';
+import { minorUnitsToSafeNumber } from '../models/account.js';
+import { LedgerAnalyticsService } from '../services/ledgerAnalyticsService.js';
 
 // Convert a transaction amount to DOP using the latest known exchange rate for its currency.
 const getLatestRates = async () => {
@@ -75,13 +77,10 @@ export const getCiclos = async (req, res) => {
         const startOfYear = new Date(year - 1, 10, 26); // Cover any previous year overlaps
         const endOfYear = new Date(Math.max(year + 1, new Date().getFullYear()), 1, 25); 
 
-        const transactions = await DailyTransaction.findAll({
-            where: { 
-                userId,
-                date: { [Op.between]: [startOfYear, endOfYear] } 
-            },
-            attributes: ['date'],
-            raw: true
+        const transactions = await LedgerAnalyticsService.getNormalizedTimeline({
+            userId,
+            startDate: startOfYear.toISOString().slice(0, 10),
+            endDate: endOfYear.toISOString().slice(0, 10)
         });
 
         const cycleIds = new Set();
@@ -115,11 +114,8 @@ export const getAnual = async (req, res) => {
         const userId = req.user.username;
         const year = parseInt(req.query.year || new Date().getFullYear());
         
-        // Use all available transactions for YTD calculation of this year
-        const transactions = await DailyTransaction.findAll({ 
-            where: { userId },
-            raw: true 
-        });
+        // Use all available ledger transactions for YTD calculation of this year
+        const transactions = await LedgerAnalyticsService.getNormalizedTimeline({ userId });
         
         const yearTxs = transactions.filter(t => new Date(t.date).getFullYear() === year || getCycleFromId(getCycleId(t.date)).end.getFullYear() === year);
 
@@ -134,7 +130,7 @@ export const getAnual = async (req, res) => {
         const allCycles = new Set();
 
         yearTxs.forEach(t => {
-            const amount = toDOP(Number(t.amount), t.currency, rates);
+            const amount = toDOP(minorUnitsToSafeNumber(t.amountMinor, 'Command center transaction'), t.currency, rates);
             const type = t.type;
             const cycleId = getCycleId(t.date);
             const cycleEndYear = getCycleFromId(cycleId).end.getFullYear();
@@ -178,7 +174,7 @@ export const getAnual = async (req, res) => {
         // Cash global
         let cashGlobal = 0;
         transactions.forEach(t => {
-             const amt = toDOP(Number(t.amount), t.currency, rates);
+             const amt = toDOP(minorUnitsToSafeNumber(t.amountMinor, 'Command center transaction'), t.currency, rates);
              if (t.type==='income') cashGlobal += amt;
              else if(t.type==='expense'||t.type==='gasto') cashGlobal -= amt;
              else if(t.type==='investment'||t.type==='inversion') cashGlobal -= amt;
@@ -221,10 +217,7 @@ export const getMensual = async (req, res) => {
         const prevCicloId = `${prevYear}-${String(prevMonth).padStart(2,'0')}`;
         const prevCycle = getCycleFromId(prevCicloId);
 
-        const transactions = await DailyTransaction.findAll({
-            where: { userId },
-            raw: true
-        });
+        const transactions = await LedgerAnalyticsService.getNormalizedTimeline({ userId });
 
         const rates = await getLatestRates();
 
@@ -237,7 +230,7 @@ export const getMensual = async (req, res) => {
         let inversionAcumulada = 0;
 
         transactions.forEach(t => {
-            const amt = toDOP(Number(t.amount), t.currency, rates);
+            const amt = toDOP(minorUnitsToSafeNumber(t.amountMinor, 'Command center transaction'), t.currency, rates);
             const type = t.type;
             const tDate = new Date(t.date);
             const tCycleId = getCycleId(t.date);

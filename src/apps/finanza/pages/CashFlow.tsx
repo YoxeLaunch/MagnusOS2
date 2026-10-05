@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useData } from '../context/DataContext';
 import { calculateAnnualAmount, calculateAnnualAmountV2, formatCurrency, calculateTotalAnnual } from '../utils/calculations';
@@ -8,12 +8,13 @@ import { CategoryPicker } from '../components/CategoryPicker';
 import {
     Plus, Trash2, TrendingUp, TrendingDown, Calendar, Save, X, Trophy, Pencil,
     ArrowRightLeft, ArrowDownCircle, ArrowUpCircle, Printer, HeartPulse, CreditCard, Shirt, Coins,
-    ArrowUpRight, ChevronDown, ChevronRight, FileText, Tag, CalendarClock, ShieldCheck
+    ArrowUpRight, ChevronDown, ChevronRight, FileText, Tag, CalendarClock, ShieldCheck, Activity
 } from 'lucide-react';
 import { Transaction } from '../types';
 import { exportToCSV } from '../../../shared/utils/csvExport';
 import { PrintOptionsModal, PrintOptions } from '../components/PrintOptionsModal';
 import { DatePicker } from '../../../shared/components/ui/DatePicker';
+import finanzaApi, { CashFlowResponse } from '../api/finanzaApi';
 
 interface StatCardProps {
     label: string;
@@ -114,9 +115,8 @@ const SummaryPreview: React.FC<{ draft: Partial<Transaction>; currencies: any; a
 
 export const CashFlow: React.FC = () => {
     const { t } = useTranslation(['cashflow', 'common']);
-    const [activeTab, setActiveTab] = useState<'income' | 'expense'>('income');
+    const [activeTab, setActiveTab] = useState<'income' | 'expense' | 'ledger'>('ledger');
     const [showPrintModal, setShowPrintModal] = useState(false);
-    console.log("CashFlow Loaded - Fix Applied");
 
     const handlePrint = (options: PrintOptions) => {
         const params = new URLSearchParams();
@@ -144,19 +144,32 @@ export const CashFlow: React.FC = () => {
                 </div>
 
                 {/* Tab Switcher */}
-                <div className="flex bg-gray-100 dark:bg-gray-800 p-1 rounded-xl self-start md:self-auto" role="tablist" aria-label="Selector de tipo de transacción">
+                <div className="flex bg-gray-100 dark:bg-gray-800 p-1 rounded-xl self-start md:self-auto" role="tablist" aria-label="Selector de flujo financiero">
+                    <button
+                        onClick={() => setActiveTab('ledger')}
+                        role="tab"
+                        aria-selected={activeTab === 'ledger'}
+                        aria-controls="panel-ledger"
+                        id="tab-ledger"
+                        className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all ${activeTab === 'ledger'
+                            ? 'bg-card text-primary shadow-sm'
+                            : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
+                            }`}
+                    >
+                        <ShieldCheck size={16} aria-hidden="true" /> Flujo Real (Ledger)
+                    </button>
                     <button
                         onClick={() => setActiveTab('income')}
                         role="tab"
                         aria-selected={activeTab === 'income'}
                         aria-controls="panel-income"
                         id="tab-income"
-                        className={`flex items-center gap-2 px-6 py-2 rounded-lg text-sm font-bold transition-all ${activeTab === 'income'
+                        className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all ${activeTab === 'income'
                             ? 'bg-card text-success shadow-sm'
                             : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
                             }`}
                     >
-                        <ArrowUpCircle size={16} aria-hidden="true" /> {t('cashflow:incomes')}
+                        <ArrowUpCircle size={16} aria-hidden="true" /> Plan Ingresos
                     </button>
                     <button
                         onClick={() => setActiveTab('expense')}
@@ -164,20 +177,26 @@ export const CashFlow: React.FC = () => {
                         aria-selected={activeTab === 'expense'}
                         aria-controls="panel-expense"
                         id="tab-expense"
-                        className={`flex items-center gap-2 px-6 py-2 rounded-lg text-sm font-bold transition-all ${activeTab === 'expense'
+                        className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all ${activeTab === 'expense'
                             ? 'bg-card text-error shadow-sm'
                             : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
                             }`}
                     >
-                        <ArrowDownCircle size={16} aria-hidden="true" /> {t('cashflow:expenses')}
+                        <ArrowDownCircle size={16} aria-hidden="true" /> Plan Gastos
                     </button>
                 </div>
             </header>
 
             <div className="animate-in slide-in-from-bottom-4 duration-300 fade-in">
-                {activeTab === 'income'
-                    ? <div role="tabpanel" id="panel-income" aria-labelledby="tab-income"><IncomesView onPrint={() => setShowPrintModal(true)} /></div>
-                    : <div role="tabpanel" id="panel-expense" aria-labelledby="tab-expense"><ExpensesView /></div>}
+                {activeTab === 'income' && (
+                    <div role="tabpanel" id="panel-income" aria-labelledby="tab-income"><IncomesView onPrint={() => setShowPrintModal(true)} /></div>
+                )}
+                {activeTab === 'expense' && (
+                    <div role="tabpanel" id="panel-expense" aria-labelledby="tab-expense"><ExpensesView /></div>
+                )}
+                {activeTab === 'ledger' && (
+                    <div role="tabpanel" id="panel-ledger" aria-labelledby="tab-ledger"><LedgerCashFlowView /></div>
+                )}
             </div>
 
             {/* Print Modal */}
@@ -186,6 +205,201 @@ export const CashFlow: React.FC = () => {
                 onClose={() => setShowPrintModal(false)}
                 onPrint={handlePrint}
             />
+        </div>
+    );
+};
+
+// --- LEDGER REAL CASH FLOW VIEW (Phase II Unified Read Model) ---
+const LedgerCashFlowView: React.FC = () => {
+    const [startDate, setStartDate] = useState('');
+    const [endDate, setEndDate] = useState('');
+    const [cashFlow, setCashFlow] = useState<CashFlowResponse | null>(null);
+    const [isLoading, setIsLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
+
+    const loadCashFlow = async () => {
+        setIsLoading(true);
+        setError(null);
+        try {
+            const data = await finanzaApi.cashFlow.getCashFlow({
+                startDate: startDate || undefined,
+                endDate: endDate || undefined,
+                currency: 'DOP'
+            });
+            setCashFlow(data);
+        } catch (err: any) {
+            setError(err.message || 'Error al conectar con LedgerReadService');
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        loadCashFlow();
+    }, [startDate, endDate]);
+
+    return (
+        <div className="space-y-6">
+            {/* Filter and Status Bar */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-card p-4 rounded-xl border border-border">
+                <div className="flex items-center gap-2">
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-primary/10 text-primary border border-primary/20">
+                        <ShieldCheck size={14} /> PostgreSQL Double-Entry Engine
+                    </span>
+                    <span className="text-xs text-gray-500 dark:text-gray-400">
+                        Fuente centralizada: LedgerReadService
+                    </span>
+                </div>
+                <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-2 text-xs text-gray-500">
+                        <span>Desde:</span>
+                        <input
+                            type="date"
+                            value={startDate}
+                            onChange={(e) => setStartDate(e.target.value)}
+                            className="bg-background border border-border rounded-lg px-2 py-1 text-xs text-text focus:outline-none focus:ring-1 focus:ring-primary"
+                        />
+                        <span>Hasta:</span>
+                        <input
+                            type="date"
+                            value={endDate}
+                            onChange={(e) => setEndDate(e.target.value)}
+                            className="bg-background border border-border rounded-lg px-2 py-1 text-xs text-text focus:outline-none focus:ring-1 focus:ring-primary"
+                        />
+                    </div>
+                    {(startDate || endDate) && (
+                        <button
+                            onClick={() => { setStartDate(''); setEndDate(''); }}
+                            className="text-xs text-gray-500 hover:text-text px-2 py-1 rounded hover:bg-gray-100 dark:hover:bg-gray-800"
+                        >
+                            Limpiar
+                        </button>
+                    )}
+                </div>
+            </div>
+
+            {isLoading && (
+                <div className="p-12 text-center text-gray-500 animate-pulse">
+                    <Activity className="animate-spin inline-block mr-2" size={20} />
+                    Consultando balance y movimientos del Ledger...
+                </div>
+            )}
+
+            {error && (
+                <div className="p-6 rounded-xl border border-red-500/20 bg-red-500/10 text-red-600 dark:text-red-400 flex items-center justify-between">
+                    <div>
+                        <div className="font-bold">Error en consulta de Ledger</div>
+                        <div className="text-xs">{error}</div>
+                    </div>
+                    <button
+                        onClick={loadCashFlow}
+                        className="px-3 py-1.5 bg-red-600 text-white rounded-lg text-xs font-bold hover:bg-red-700"
+                    >
+                        Reintentar
+                    </button>
+                </div>
+            )}
+
+            {!isLoading && !error && cashFlow && (
+                <>
+                    {/* Summary Stat Cards */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                        <div className="p-4 rounded-xl bg-card border border-border">
+                            <div className="text-xs text-gray-500 font-semibold uppercase">Ingresos Reales</div>
+                            <div className="text-2xl font-bold text-success mt-1">
+                                {formatCurrency(cashFlow.totalIncome)}
+                            </div>
+                            <div className="text-[11px] text-gray-400 mt-1">
+                                {cashFlow.totalIncomeMinor} centavos
+                            </div>
+                        </div>
+
+                        <div className="p-4 rounded-xl bg-card border border-border">
+                            <div className="text-xs text-gray-500 font-semibold uppercase">Gastos Operativos</div>
+                            <div className="text-2xl font-bold text-error mt-1">
+                                {formatCurrency(cashFlow.totalExpense)}
+                            </div>
+                            <div className="text-[11px] text-gray-400 mt-1">
+                                {cashFlow.totalExpenseMinor} centavos
+                            </div>
+                        </div>
+
+                        <div className="p-4 rounded-xl bg-card border border-border">
+                            <div className="text-xs text-gray-500 font-semibold uppercase">Inversiones</div>
+                            <div className="text-2xl font-bold text-amber-500 mt-1">
+                                {formatCurrency(cashFlow.totalInvested)}
+                            </div>
+                            <div className="text-[11px] text-gray-400 mt-1">
+                                {cashFlow.totalInvestedMinor} centavos
+                            </div>
+                        </div>
+
+                        <div className="p-4 rounded-xl bg-card border border-border">
+                            <div className="text-xs text-gray-500 font-semibold uppercase">Flujo de Caja Neto</div>
+                            <div className={`text-2xl font-bold mt-1 ${BigInt(cashFlow.netCashFlowMinor) >= 0n ? 'text-primary' : 'text-error'}`}>
+                                {formatCurrency(cashFlow.netCashFlow)}
+                            </div>
+                            <div className="text-[11px] text-gray-400 mt-1">
+                                {cashFlow.transactionCount} transacciones en período
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Timeline Breakdown Table */}
+                    <div className="bg-card rounded-xl border border-border overflow-hidden">
+                        <div className="p-4 border-b border-border flex items-center justify-between">
+                            <h3 className="font-bold text-text flex items-center gap-2 text-sm">
+                                <Calendar size={16} className="text-primary" /> Desglose Cronológico de Flujo Diario
+                            </h3>
+                            <span className="text-xs text-gray-500">
+                                {cashFlow.timeline.length} días con actividad
+                            </span>
+                        </div>
+
+                        {cashFlow.timeline.length === 0 ? (
+                            <div className="p-8 text-center text-gray-400 text-sm">
+                                No hay movimientos registrados en el período seleccionado.
+                            </div>
+                        ) : (
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-left text-sm">
+                                    <thead className="bg-muted/30 text-xs text-gray-500 border-b border-border">
+                                        <tr>
+                                            <th className="p-3">Fecha</th>
+                                            <th className="p-3 text-right">Ingresos</th>
+                                            <th className="p-3 text-right">Gastos</th>
+                                            <th className="p-3 text-right">Invertido</th>
+                                            <th className="p-3 text-right">Neto Diario</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-border">
+                                        {cashFlow.timeline.map((day) => {
+                                            const netMinor = BigInt(day.netMinor);
+                                            return (
+                                                <tr key={day.date} className="hover:bg-muted/10 transition-colors">
+                                                    <td className="p-3 font-mono text-xs text-text">{day.date}</td>
+                                                    <td className="p-3 text-right font-medium text-success">
+                                                        {BigInt(day.incomeMinor) > 0n ? formatCurrency(day.income) : '—'}
+                                                    </td>
+                                                    <td className="p-3 text-right font-medium text-error">
+                                                        {BigInt(day.expenseMinor) > 0n ? formatCurrency(day.expense) : '—'}
+                                                    </td>
+                                                    <td className="p-3 text-right font-medium text-amber-500">
+                                                        {BigInt(day.investedMinor) > 0n ? formatCurrency(day.invested) : '—'}
+                                                    </td>
+                                                    <td className={`p-3 text-right font-bold ${netMinor >= 0n ? 'text-primary' : 'text-error'}`}>
+                                                        {formatCurrency(day.net)}
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
+                                    </tbody>
+                                </table>
+                            </div>
+                        )}
+                    </div>
+                </>
+            )}
         </div>
     );
 };

@@ -7,9 +7,10 @@ import {
     getFxRatesByPair,
     getFxHistory,
     getTasaRealEvaluation,
-    refreshFxRates
+    refreshFxRates,
+    handleSyncRates
 } from '../controllers/marketController.js';
-import { optionalJWT } from '../middleware/auth.js';
+import { optionalJWT, requireAuthenticated } from '../middleware/auth.js';
 
 const router = Router();
 
@@ -17,6 +18,9 @@ const router = Router();
 router.get('/', getMarkets);
 router.get('/telemetry', getMarkets);
 router.get('/chart/:symbol', getMarketChart);
+
+// Endpoint explícito para sincronizar tasas en la base de datos (comando POST)
+router.post('/sync-rates', requireAuthenticated, handleSyncRates);
 
 // Endpoints de Providence FX (Mercado Cambiario Dominicano)
 router.get('/fx/usd-dop', getFxUsdDop);

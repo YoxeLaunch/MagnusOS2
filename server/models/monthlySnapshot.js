@@ -15,8 +15,13 @@ export const MonthlySnapshot = sequelize.define('MonthlySnapshot', {
     period: {
         // First day of the analyzed month: e.g. '2026-03-01' for March 2026
         type: DataTypes.DATEONLY,
+        allowNull: false
+    },
+    userId: {
+        type: DataTypes.STRING,
         allowNull: false,
-        unique: true
+        field: 'user_id',
+        defaultValue: 'soberano'
     },
     computed_metrics: {
         // Computed by Node.js: { totalIncome, totalExpenses, balance, savingsRate, topCategories, vsLastMonth }
@@ -49,6 +54,7 @@ export const MonthlySnapshot = sequelize.define('MonthlySnapshot', {
     createdAt: 'created_at',
     updatedAt: false,
     indexes: [
-        { fields: ['period'], using: 'BTREE', order: 'DESC' }
+        { unique: true, fields: ['period', 'user_id'] },
+        { fields: ['user_id', 'period'], using: 'BTREE', order: 'DESC' }
     ]
 });

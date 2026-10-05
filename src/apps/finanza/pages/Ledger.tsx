@@ -14,7 +14,7 @@ import {
     Trash2,
     Edit2
 } from 'lucide-react';
-import { ledgerApi, LedgerTransaction, LedgerFilters, transfersApi } from '../api/finanzaApi';
+import { ledgerApi, LedgerTransaction, LedgerFilters, transfersApi, accountsApi } from '../api/finanzaApi';
 import { formatCurrency } from '../utils/calculations';
 import { useAuth } from '../../../shared/context/AuthContext';
 
@@ -146,13 +146,13 @@ const TransactionRow: React.FC<{
 const TransferModal: React.FC<{
     isOpen: boolean;
     onClose: () => void;
-    onSave: (data: { fromAccountId: string; toAccountId: string; amount: number; memo?: string }) => void;
+    onSave: (data: { fromAccountId: string; toAccountId: string; amount: string; memo?: string }) => void;
     accounts: Array<{ id: string; name: string }>;
 }> = ({ isOpen, onClose, onSave, accounts }) => {
     const [form, setForm] = useState({
         fromAccountId: '',
         toAccountId: '',
-        amount: 0,
+        amount: '',
         memo: ''
     });
 
@@ -202,7 +202,7 @@ const TransferModal: React.FC<{
                             type="number"
                             step="0.01"
                             value={form.amount}
-                            onChange={e => setForm({ ...form, amount: parseFloat(e.target.value) || 0 })}
+                            onChange={e => setForm({ ...form, amount: e.target.value })}
                             className="w-full px-3 py-2 bg-input border border-border rounded-lg"
                             required
                         />
@@ -280,11 +280,8 @@ export const Ledger: React.FC = () => {
     const loadAccounts = async () => {
         if (!user?.username) return;
         try {
-            const res = await fetch(`/api/finanza/accounts?userId=${user.username}`);
-            if (res.ok) {
-                const data = await res.json();
-                setAccounts(data);
-            }
+            const data = await accountsApi.getAll(user.username);
+            setAccounts(data);
         } catch (error) {
             console.error('Error loading accounts:', error);
         }
@@ -318,7 +315,7 @@ export const Ledger: React.FC = () => {
         }
     };
 
-    const handleTransfer = async (data: { fromAccountId: string; toAccountId: string; amount: number; memo?: string }) => {
+    const handleTransfer = async (data: { fromAccountId: string; toAccountId: string; amount: string; memo?: string }) => {
         if (!user?.username) return;
         try {
             await transfersApi.create({

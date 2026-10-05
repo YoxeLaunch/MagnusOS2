@@ -5,7 +5,7 @@ import { User } from './user.js';
 import { WealthSnapshot } from './wealthSnapshot.js';
 
 // New Ledger Models (P1)
-import { Account, toMinorUnits, fromMinorUnits } from './account.js';
+import { Account, toMinorUnits, toMinorUnitsBigInt, fromMinorUnits, minorToDecimalString, minorUnitsToSafeNumber } from './account.js';
 import { Category, Payee } from './category.js';
 import { LedgerTransaction, TransactionLine } from './ledger.js';
 import { SavingsGoal, SavingsContribution } from './savingsGoal.js';
@@ -52,6 +52,8 @@ SavingsGoal.belongsTo(Account, { foreignKey: 'linked_account_id', as: 'linkedAcc
 User.hasMany(FinancialAnomaly, { foreignKey: 'user_id', sourceKey: 'username', as: 'anomalies' });
 FinancialAnomaly.belongsTo(User, { foreignKey: 'user_id', targetKey: 'username', as: 'user' });
 
+import { MigrationRunner } from '../services/migrationRunner.js';
+
 // ========================================
 // Database Initialization
 // ========================================
@@ -70,23 +72,26 @@ export const initDb = async () => {
 
             await sequelize.query('PRAGMA foreign_keys = ON;');
         } else {
-            // PostgreSQL: sync en modo seguro (sin ALTER automático).
-            // IMPORTANTE: Para cambios de esquema, usar migraciones explícitas.
-            // `alter: true` fue deshabilitado porque puede eliminar columnas silenciosamente en prod.
-            await sequelize.sync({ alter: false });
+            // PostgreSQL Schema Governance:
+            // En producción: NUNCA ejecutar sequelize.sync(). Gobernanza estricta por migraciones.
+            if (process.env.NODE_ENV === 'production') {
+                console.log('[DB] Production environment detected: verifying migration state (read-only).');
+                const runner = new MigrationRunner(sequelize);
+                await runner.assertUpToDate();
+            } else {
+                // En desarrollo / test: aplica migraciones versionadas de forma determinista
+                const runner = new MigrationRunner(sequelize);
+                await runner.up();
+            }
         }
 
-        console.log(`[DB] Database synced (${dbInfo.type.toUpperCase()})`);
-
-        // Índices únicos seguros para integridad de series temporales
-        await sequelize.query('CREATE UNIQUE INDEX IF NOT EXISTS uq_fuel_price_fuel_validfrom ON fuel_price_observations(fuel_id, valid_from);').catch(() => {});
-        await sequelize.query('CREATE UNIQUE INDEX IF NOT EXISTS uq_fuel_policy_valid_from ON fuel_policy_weeks(valid_from);').catch(() => {});
+        console.log(`[DB] Database initialized and migrations verified (${dbInfo.type.toUpperCase()})`);
 
         // Seed default categories if none exist
         await seedDefaultCategories();
 
     } catch (error) {
-        console.error('[DB] Error syncing database:', error);
+        console.error('[DB] Error initializing database:', error);
         // Don't throw in development, allow the app to continue
         if (process.env.NODE_ENV === 'production') {
             throw error;
@@ -173,8 +178,16 @@ export {
 
     // Helpers
     toMinorUnits,
+    toMinorUnitsBigInt,
     fromMinorUnits,
+    minorToDecimalString,
+    minorUnitsToSafeNumber,
+
+    // Schema Governance & Migrations
+    MigrationRunner,
 
     // Sequelize instance
     sequelize
 };
+
+export { SchemaDriftService } from '../services/schemaDriftService.js';

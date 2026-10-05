@@ -15,13 +15,27 @@ export const getUsers = async (req, res) => {
 
 export const updateUser = async (req, res) => {
     const { username } = req.params;
-    const updates = req.body;
+    const body = req.body || {};
 
     try {
         const user = await User.findByPk(username);
         if (!user) return res.status(404).json({ error: 'Usuario no encontrado' });
 
-        await user.update(updates);
+        // Allowlist explícita para evitar Mass Assignment (CWE-915)
+        // Campos privilegiados (role, password, username, tags) NO se modifican por aquí.
+        const safeUpdates = {};
+        if (typeof body.name === 'string') safeUpdates.name = body.name.trim().substring(0, 100);
+        if (body.preferences && typeof body.preferences === 'object' && !Array.isArray(body.preferences)) {
+            safeUpdates.preferences = { ...(user.preferences || {}), ...body.preferences };
+        }
+
+        // Si el usuario autenticado es admin, puede actualizar tags explícitamente si se proporcionan
+        const isAdmin = req.user?.role === 'admin' || req.user?.username?.toLowerCase() === 'soberano';
+        if (isAdmin && Array.isArray(body.tags)) {
+            safeUpdates.tags = body.tags;
+        }
+
+        await user.update(safeUpdates);
 
         const userData = user.toJSON();
         const { password, ...safeUser } = userData;
@@ -33,6 +47,11 @@ export const updateUser = async (req, res) => {
 
 export const deleteUser = async (req, res) => {
     const { username } = req.params;
+
+    const isAdmin = req.user?.role === 'admin' || req.user?.username?.toLowerCase() === 'soberano';
+    if (!isAdmin) {
+        return res.status(403).json({ error: 'Solo administradores pueden eliminar usuarios' });
+    }
 
     if (username.toLowerCase() === 'soberano') {
         return res.status(403).json({ error: 'No se puede eliminar al usuario Soberano' });
@@ -79,6 +98,11 @@ export const updateUserPreferences = async (req, res) => {
 export const updateUserTags = async (req, res) => {
     const { username } = req.params;
     const { tag, action } = req.body;
+
+    const isAdmin = req.user?.role === 'admin' || req.user?.username?.toLowerCase() === 'soberano';
+    if (!isAdmin) {
+        return res.status(403).json({ error: 'Solo administradores pueden modificar tags' });
+    }
 
     try {
         const user = await User.findByPk(username);

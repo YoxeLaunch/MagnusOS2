@@ -448,7 +448,7 @@ export const aggregateMonthly = (dailyTransactions) => {
     const monthlyMap = {};
 
     dailyTransactions.forEach(t => {
-        const amount = parseFloat(t.amount) || 0;
+        const amount = exactAmountForAnalytics(t);
         const month = t.date.substring(0, 7); // YYYY-MM
         if (!monthlyMap[month]) {
             monthlyMap[month] = { month, income: 0, expense: 0 };
@@ -476,7 +476,7 @@ export const aggregateDailyFlows = (dailyTransactions) => {
     const dailyMap = {};
 
     dailyTransactions.forEach(t => {
-        const amount = parseFloat(t.amount) || 0;
+        const amount = exactAmountForAnalytics(t);
         const date = t.date.substring(0, 10);
         if (!dailyMap[date]) {
             dailyMap[date] = { date, netFlow: 0 };
@@ -500,11 +500,18 @@ export const aggregateExpensesByCategory = (dailyTransactions) => {
     return dailyTransactions
         .filter(t => {
             const isExpense = t.type === 'expense' || t.type === 'gasto';
-            return isExpense && parseFloat(t.amount) > 0;
+            return isExpense && exactAmountForAnalytics(t) > 0;
         })
         .map(t => ({
             date: t.date.substring(0, 10),
             category: t.category || t.description?.split(' ')[0] || 'Otros',
-            amount: Math.abs(parseFloat(t.amount))
+            amount: Math.abs(exactAmountForAnalytics(t))
         }));
+};
+import { minorUnitsToSafeNumber, toMinorUnitsBigInt } from '../models/account.js';
+
+const exactAmountForAnalytics = transaction => {
+    const minor = transaction.amountMinor ?? transaction.amount_minor;
+    const exactMinor = minor == null ? toMinorUnitsBigInt(transaction.amount ?? 0) : BigInt(String(minor));
+    return minorUnitsToSafeNumber(exactMinor, 'Econometrics transaction amount');
 };

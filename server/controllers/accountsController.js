@@ -1,4 +1,6 @@
-import { Account, toMinorUnits, fromMinorUnits } from '../models/index.js';
+import { Account, TransactionLine, toMinorUnits, toMinorUnitsBigInt, fromMinorUnits, minorToDecimalString } from '../models/index.js';
+import { LedgerReadService } from '../services/ledgerReadService.js';
+import { getEffectiveUserId } from '../middleware/auth.js';
 import { Op } from 'sequelize';
 
 // ========================================
@@ -7,13 +9,10 @@ import { Op } from 'sequelize';
 // ========================================
 export const getAccounts = async (req, res) => {
     try {
-        const { userId, includeArchived } = req.query;
+        const { includeArchived } = req.query;
+        const effectiveUserId = getEffectiveUserId(req, req.query.userId);
 
-        if (!userId) {
-            return res.status(400).json({ error: 'userId is required' });
-        }
-
-        const where = { userId };
+        const where = { userId: effectiveUserId };
         if (includeArchived !== 'true') {
             where.isArchived = false;
         }
@@ -43,8 +42,8 @@ export const getAccounts = async (req, res) => {
 // ========================================
 export const createAccount = async (req, res) => {
     try {
+        const effectiveUserId = getEffectiveUserId(req, req.body.userId);
         const {
-            userId,
             name,
             type,
             currency = 'DOP',
@@ -53,9 +52,9 @@ export const createAccount = async (req, res) => {
             notes
         } = req.body;
 
-        if (!userId || !name || !type) {
+        if (!name || !type) {
             return res.status(400).json({
-                error: 'userId, name, and type are required'
+                error: 'name and type are required'
             });
         }
 
@@ -67,16 +66,21 @@ export const createAccount = async (req, res) => {
         }
 
         // Get max sort order for user
-        const maxOrder = await Account.max('sortOrder', { where: { userId } }) || 0;
+        const maxOrder = await Account.max('sortOrder', { where: { userId: effectiveUserId } }) || 0;
+
+        let openingMinor = toMinorUnitsBigInt(openingBalance);
+        if ((type === 'credit_card' || type === 'loan') && openingMinor > 0n) {
+            openingMinor = -openingMinor;
+        }
 
         const account = await Account.create({
-            userId,
-            name,
+            userId: effectiveUserId,
+            name: name.trim(),
             type,
             currency,
             institution,
-            openingBalanceMinor: toMinorUnits(openingBalance),
-            currentBalanceMinor: toMinorUnits(openingBalance), // Initial balance = opening
+            openingBalanceMinor: openingMinor.toString(),
+            currentBalanceMinor: openingMinor.toString(), // Liabilities use negative credit balances.
             notes,
             sortOrder: maxOrder + 1
         });
@@ -99,22 +103,44 @@ export const createAccount = async (req, res) => {
 export const updateAccount = async (req, res) => {
     try {
         const { id } = req.params;
-        const updates = req.body;
+        const updates = { ...req.body };
+        const isAdmin = req.user.role === 'admin' || req.user.username?.toLowerCase() === 'soberano';
 
-        const account = await Account.findByPk(id);
+        const where = { id };
+        if (!isAdmin) {
+            where.userId = req.user.username;
+        }
+
+        const account = await Account.findOne({ where });
         if (!account) {
             return res.status(404).json({ error: 'Account not found' });
         }
 
-        // Convert opening balance if provided
-        if (updates.openingBalance !== undefined) {
-            updates.openingBalanceMinor = toMinorUnits(updates.openingBalance);
+        // Guard opening balance: block change if account has transactions, or atomically update both opening and cache
+        if (updates.openingBalance !== undefined || updates.openingBalanceMinor !== undefined) {
+            const lineCount = await TransactionLine.count({ where: { accountId: id } });
+            if (lineCount > 0) {
+                return res.status(400).json({
+                    error: 'No se puede modificar el saldo inicial de una cuenta con transacciones registradas. Registre un asiento de ajuste contable.'
+                });
+            }
+            const rawVal = updates.openingBalance !== undefined ? updates.openingBalance : updates.openingBalanceMinor;
+            let parsedOpeningMinor = toMinorUnitsBigInt(rawVal);
+            if ((account.type === 'credit_card' || account.type === 'loan') && parsedOpeningMinor > 0n) {
+                parsedOpeningMinor = -parsedOpeningMinor;
+            }
+            const newOpeningMinor = parsedOpeningMinor.toString();
+            updates.openingBalanceMinor = newOpeningMinor;
+            updates.currentBalanceMinor = newOpeningMinor;
             delete updates.openingBalance;
+        } else {
+            delete updates.currentBalanceMinor;
         }
 
-        // Don't allow direct update of currentBalanceMinor (calculated field)
-        delete updates.currentBalanceMinor;
+        // Don't allow direct update of currentBalance or userId
         delete updates.currentBalance;
+        delete updates.userId;
+        delete updates.id;
 
         await account.update(updates);
 
@@ -136,8 +162,14 @@ export const updateAccount = async (req, res) => {
 export const archiveAccount = async (req, res) => {
     try {
         const { id } = req.params;
+        const isAdmin = req.user.role === 'admin' || req.user.username?.toLowerCase() === 'soberano';
 
-        const account = await Account.findByPk(id);
+        const where = { id };
+        if (!isAdmin) {
+            where.userId = req.user.username;
+        }
+
+        const account = await Account.findOne({ where });
         if (!account) {
             return res.status(404).json({ error: 'Account not found' });
         }
@@ -159,19 +191,41 @@ export const getAccountBalance = async (req, res) => {
     try {
         const { id } = req.params;
         const { asOf } = req.query; // Optional date filter
+        const isAdmin = req.user.role === 'admin' || req.user.username?.toLowerCase() === 'soberano';
 
-        const account = await Account.findByPk(id);
+        const where = { id };
+        if (!isAdmin) {
+            where.userId = req.user.username;
+        }
+
+        const account = await Account.findOne({ where });
         if (!account) {
             return res.status(404).json({ error: 'Account not found' });
         }
 
-        // TODO: Calculate balance from transaction lines
-        // For now, return the cached balance
+        let currentBalance = fromMinorUnits(account.currentBalanceMinor);
+        let currentBalanceMinor = account.currentBalanceMinor || '0';
+
+        if (asOf) {
+            const balances = await LedgerReadService.getBalances({
+                userId: account.userId,
+                accountIds: [id],
+                asOfDate: asOf
+            });
+            const derived = balances.accounts[0];
+            if (derived) {
+                currentBalance = derived.derivedBalance;
+                currentBalanceMinor = derived.derivedBalanceMinor;
+            }
+        }
+
         res.json({
             accountId: id,
             accountName: account.name,
             openingBalance: fromMinorUnits(account.openingBalanceMinor),
-            currentBalance: fromMinorUnits(account.currentBalanceMinor),
+            openingBalanceMinor: account.openingBalanceMinor || '0',
+            currentBalance,
+            currentBalanceMinor,
             currency: account.currency,
             asOf: asOf || new Date().toISOString().split('T')[0]
         });
@@ -187,16 +241,17 @@ export const getAccountBalance = async (req, res) => {
 // ========================================
 export const reorderAccounts = async (req, res) => {
     try {
-        const { userId, order } = req.body; // order = [{id, sortOrder}, ...]
+        const effectiveUserId = getEffectiveUserId(req, req.body.userId);
+        const { order } = req.body; // order = [{id, sortOrder}, ...]
 
-        if (!userId || !Array.isArray(order)) {
-            return res.status(400).json({ error: 'userId and order array are required' });
+        if (!Array.isArray(order)) {
+            return res.status(400).json({ error: 'order array is required' });
         }
 
-        // Update each account's sort order
+        // Update each account's sort order belonging to the user
         await Promise.all(
             order.map(({ id, sortOrder }) =>
-                Account.update({ sortOrder }, { where: { id, userId } })
+                Account.update({ sortOrder }, { where: { id, userId: effectiveUserId } })
             )
         );
 

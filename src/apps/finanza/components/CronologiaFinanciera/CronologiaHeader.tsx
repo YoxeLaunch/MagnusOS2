@@ -5,6 +5,7 @@ import { FlujoWaterfall } from './FlujoWaterfall';
 import { FormulaStrip } from './FormulaStrip';
 import type { FinancialCycle } from '../../utils/financialCycle';
 import type { DailyTransaction } from '../../types';
+import { apiFetch } from '../../../../shared/utils/apiFetch';
 
 interface CronologiaHeaderProps {
     currentCycle: FinancialCycle;
@@ -32,8 +33,8 @@ export const CronologiaHeader: React.FC<CronologiaHeaderProps> = ({
     useEffect(() => {
         const fetchHistorical = async () => {
             try {
-                // As per user specification
-                const res = await fetch('/api/ledger/investments?groupBy=cycle');
+                // Authenticated request via apiFetch
+                const res = await apiFetch('/api/ledger/investments?groupBy=cycle');
                 if (res.ok) {
                     const data = await res.json();
                     // Assumes { data: [{ ciclo: string, amount: number }, ...] } or array directly

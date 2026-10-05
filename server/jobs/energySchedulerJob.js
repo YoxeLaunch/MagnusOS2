@@ -8,6 +8,7 @@
 
 import cron from 'node-cron';
 import { energyService } from '../services/energy/energyService.js';
+import { jobObservability } from '../services/jobObservabilityService.js';
 
 export const scheduleEnergyJob = () => {
     const isEnabled = process.env.ENERGY_SCHEDULER_ENABLED !== 'false';
@@ -23,7 +24,14 @@ export const scheduleEnergyJob = () => {
     cron.schedule(fridayCron, async () => {
         console.log(`[ENERGY_SCHEDULER] Chequeo de ventana de resolución MICM (${new Date().toLocaleTimeString('es-DO', { timeZone: 'America/Santo_Domingo' })})...`);
         try {
-            await energyService.getEnergySummary({ forceRefresh: true });
+            await jobObservability.executeMonitoredJob('energy_weekly_sync', async () => {
+                const summary = await energyService.getEnergySummary({ forceRefresh: true });
+                return {
+                    summary: `MICM energy resolution checked (${summary?.fuels?.length || 0} fuels)`,
+                    itemsProcessed: summary?.fuels?.length || 0,
+                    failuresCount: 0
+                };
+            });
         } catch (error) {
             console.error('[ENERGY_SCHEDULER] Error en chequeo de viernes:', error.message);
         }

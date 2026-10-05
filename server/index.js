@@ -8,6 +8,7 @@ import { initAuditorDb } from './models/auditor.js';
 import { initSocket } from './socket/chatHandler.js';
 import { initDockerSocket } from './socket/dockerSocket.js';
 import routes from './routes/index.js';
+import healthRoutes from './routes/health.routes.js';
 import { initSystemDb } from './models/system/index.js';
 import { securityHeaders, apiLimiter } from './middleware/security.js';
 import { scheduleCurrencyRateJob, fetchAndStoreRates } from './jobs/currencyRateJob.js';
@@ -15,29 +16,16 @@ import { scheduleFxJob } from './jobs/fxSchedulerJob.js';
 import { scheduleMacroJob } from './jobs/macroSchedulerJob.js';
 import { scheduleEnergyJob } from './jobs/energySchedulerJob.js';
 import { eventEngine } from './services/macro/eventEngine.js';
+import { jobObservability } from './services/jobObservabilityService.js';
 import { fileURLToPath } from 'url';
 import path from 'path';
 
 const app = express();
 const server = http.createServer(app);
 
-// Static files (Images fallback)
+// Static files paths
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-app.use(express.static(path.join(__dirname, '../dist'))); // Serve public folder
-// Fallback a public/: archivos subidos en runtime (mentores, publicaciones)
-// que no existen dentro de dist/ porque se generan después del build
-app.use(express.static(path.join(__dirname, '../public')));
-
-const io = new Server(server, {
-    cors: {
-        origin: process.env.NODE_ENV === 'production'
-            ? (process.env.CORS_ORIGINS ? process.env.CORS_ORIGINS.split(',') : ['http://localhost:3000'])
-            : '*',
-        methods: ["GET", "POST"],
-        credentials: true
-    }
-});
 
 const PORT = process.env.PORT || 4001;
 
@@ -54,16 +42,33 @@ const corsOptions = {
     credentials: true
 };
 
-// Middleware
-app.use(cors(corsOptions));
+// 1. Security Headers first (protects both static assets and API routes)
 app.use(securityHeaders);
+
+// 2. CORS
+app.use(cors(corsOptions));
+
+// 3. Static files
+app.use(express.static(path.join(__dirname, '../dist'))); // Serve public folder
+app.use(express.static(path.join(__dirname, '../public')));
+
+const io = new Server(server, {
+    cors: {
+        origin: process.env.NODE_ENV === 'production'
+            ? (process.env.CORS_ORIGINS ? process.env.CORS_ORIGINS.split(',') : ['http://localhost:3000'])
+            : '*',
+        methods: ["GET", "POST"],
+        credentials: true
+    }
+});
+
+// Rate limiting & JSON parser
 app.use(apiLimiter);
 app.use(express.json({ limit: '1mb' })); // Rutas de importación usan su propio límite extendido
 
-// Health Check Endpoint para Docker
-app.get('/api/health', (req, res) => {
-    res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
-});
+// Health Check Probes (Liveness & Readiness public, Deep protected)
+app.use('/health', healthRoutes);
+app.use('/api/health', healthRoutes);
 
 // Logger & Socket Injection
 app.use((req, res, next) => {
@@ -90,6 +95,9 @@ const startServer = async () => {
         console.log('>>> [OPTIMIZED] Starting Critical DB Init...');
         // Parallelize critical database initialization
         await Promise.all([initDb(), initSystemDb(), initAuditorDb()]);
+
+        // Recover any jobs orphaned by unexpected shutdowns / crashes
+        await jobObservability.recoverCrashedJobsOnStartup();
 
         // Start Server immediately after DBs are ready
         server.listen(PORT, '0.0.0.0', () => {

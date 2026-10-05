@@ -9,60 +9,36 @@
  *   POST /api/econometrics/detect-anomalies — Run anomaly detection scan
  */
 
-import { DailyTransaction, FinancialAnomaly, Account } from '../models/index.js';
+import { FinancialAnomaly } from '../models/index.js';
+import { getEffectiveUserId } from '../middleware/auth.js';
 import {
     calculateMPC,
     forecastLiquidity,
-    detectAnomalies,
-    aggregateMonthly,
-    aggregateDailyFlows,
-    aggregateExpensesByCategory
+    detectAnomalies
 } from '../services/econometricsService.js';
-import { Op } from 'sequelize';
+import { LedgerAnalyticsService } from '../services/ledgerAnalyticsService.js';
 
 // ========================================
 // GET /api/econometrics/dashboard
-// Returns MPC, forecast summary, and pending anomaly count.
+// Returns MPC, forecast summary, and pending anomaly count derived from ledger.
 // ========================================
 export const getDashboard = async (req, res) => {
     try {
-        const { userId } = req.query;
-        if (!userId) {
-            return res.status(400).json({ error: 'userId is required' });
-        }
+        const effectiveUserId = getEffectiveUserId(req, req.query.userId);
 
-        // Fetch all daily transactions for this user
-        const transactions = await DailyTransaction.findAll({
-            where: { userId },
-            order: [['date', 'ASC']],
-            raw: true
-        });
+        // Fetch datasets derived directly from the double-entry ledger
+        const dataset = await LedgerAnalyticsService.getEconometricsDataset({ userId: effectiveUserId });
+        const { monthlyData, dailyFlows, currentBalance } = dataset;
 
         // 1. Calculate MPC
-        const monthlyData = aggregateMonthly(transactions);
         const mpc = calculateMPC(monthlyData);
 
         // 2. Forecast summary
-        const dailyFlows = aggregateDailyFlows(transactions);
-        // Get current balance from accounts (sum of all active accounts)
-        let currentBalance = 0;
-        try {
-            const accounts = await Account.findAll({
-                where: { userId, status: 'active' },
-                attributes: ['currentBalanceMinor'],
-                raw: true
-            });
-            // fromMinorUnits equivalent: divide by 100
-            currentBalance = accounts.reduce((sum, a) => sum + (a.currentBalanceMinor || 0) / 100, 0);
-        } catch {
-            // Accounts table may not exist for all users; use 0 as fallback
-        }
-
         const forecastResult = forecastLiquidity(dailyFlows, currentBalance);
 
         // 3. Pending anomaly count
         const pendingAnomalies = await FinancialAnomaly.count({
-            where: { userId, status: 'pending' }
+            where: { userId: effectiveUserId, status: 'pending' }
         });
 
         res.json({
@@ -90,30 +66,10 @@ export const getDashboard = async (req, res) => {
 // ========================================
 export const getForecast = async (req, res) => {
     try {
-        const { userId } = req.query;
-        if (!userId) {
-            return res.status(400).json({ error: 'userId is required' });
-        }
+        const effectiveUserId = getEffectiveUserId(req, req.query.userId);
 
-        const transactions = await DailyTransaction.findAll({
-            where: { userId },
-            order: [['date', 'ASC']],
-            raw: true
-        });
-
-        const dailyFlows = aggregateDailyFlows(transactions);
-
-        let currentBalance = 0;
-        try {
-            const accounts = await Account.findAll({
-                where: { userId, status: 'active' },
-                attributes: ['currentBalanceMinor'],
-                raw: true
-            });
-            currentBalance = accounts.reduce((sum, a) => sum + (a.currentBalanceMinor || 0) / 100, 0);
-        } catch {
-            // Fallback
-        }
+        const dataset = await LedgerAnalyticsService.getEconometricsDataset({ userId: effectiveUserId });
+        const { dailyFlows, currentBalance } = dataset;
 
         const result = forecastLiquidity(dailyFlows, currentBalance);
 
@@ -130,12 +86,10 @@ export const getForecast = async (req, res) => {
 // ========================================
 export const getAnomalies = async (req, res) => {
     try {
-        const { userId, status } = req.query;
-        if (!userId) {
-            return res.status(400).json({ error: 'userId is required' });
-        }
+        const effectiveUserId = getEffectiveUserId(req, req.query.userId);
+        const { status } = req.query;
 
-        const where = { userId };
+        const where = { userId: effectiveUserId };
         if (status) where.status = status;
 
         const anomalies = await FinancialAnomaly.findAll({
@@ -159,15 +113,19 @@ export const justifyAnomaly = async (req, res) => {
     try {
         const { id } = req.params;
         const { justification } = req.body;
+        const effectiveUserId = getEffectiveUserId(req);
+        const isAdmin = req.user.role === 'admin' || req.user.username?.toLowerCase() === 'soberano';
 
         if (!justification || typeof justification !== 'string' || justification.trim().length === 0) {
             return res.status(400).json({ error: 'Se requiere una justificación válida.' });
         }
 
-        // Limit justification length to prevent abuse
         const sanitizedJustification = justification.trim().substring(0, 500);
 
-        const anomaly = await FinancialAnomaly.findByPk(id);
+        const where = { id };
+        if (!isAdmin) where.userId = effectiveUserId;
+
+        const anomaly = await FinancialAnomaly.findOne({ where });
         if (!anomaly) {
             return res.status(404).json({ error: 'Anomalía no encontrada.' });
         }
@@ -190,27 +148,19 @@ export const justifyAnomaly = async (req, res) => {
 // ========================================
 export const runDetection = async (req, res) => {
     try {
-        const { userId } = req.body;
-        if (!userId) {
-            return res.status(400).json({ error: 'userId is required' });
-        }
+        const effectiveUserId = getEffectiveUserId(req, req.body.userId);
 
-        // Fetch expense transactions
-        const transactions = await DailyTransaction.findAll({
-            where: { userId },
-            order: [['date', 'ASC']],
-            raw: true
-        });
+        const dataset = await LedgerAnalyticsService.getEconometricsDataset({ userId: effectiveUserId });
+        const { categoryExpenses } = dataset;
 
-        const expenseData = aggregateExpensesByCategory(transactions);
-        const { anomalies, categorySummaries } = detectAnomalies(expenseData);
+        const { anomalies, categorySummaries } = detectAnomalies(categoryExpenses);
 
         // Persist new anomalies (avoid duplicates for same user+date+category)
         let saved = 0;
         for (const anomaly of anomalies) {
             const existing = await FinancialAnomaly.findOne({
                 where: {
-                    userId,
+                    userId: effectiveUserId,
                     date: anomaly.date,
                     category: anomaly.category
                 }
@@ -218,7 +168,7 @@ export const runDetection = async (req, res) => {
 
             if (!existing) {
                 await FinancialAnomaly.create({
-                    userId,
+                    userId: effectiveUserId,
                     date: anomaly.date,
                     category: anomaly.category,
                     amountActual: anomaly.amountActual,
@@ -232,7 +182,7 @@ export const runDetection = async (req, res) => {
             }
         }
 
-        console.log(`[Econometrics] Detection complete for ${userId}: ${anomalies.length} found, ${saved} new saved.`);
+        console.log(`[Econometrics] Detection complete for ${effectiveUserId}: ${anomalies.length} found, ${saved} new saved.`);
 
         res.json({
             detected: anomalies.length,

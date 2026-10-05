@@ -141,8 +141,16 @@ export const calculateTotalAnnual = (transactions: Transaction[], currencies?: C
  * @param currency - Código de moneda ('DOP', 'USD', 'EUR'). Default: 'DOP'.
  * @returns String formateado (ej: RD$ 1,500.00).
  */
-export const formatCurrency = (amount: number, currency: 'DOP' | 'USD' | 'EUR' = 'DOP') => {
-  return new Intl.NumberFormat('es-DO', { style: 'currency', currency }).format(amount);
+export const formatCurrency = (amount: number | string, currency: 'DOP' | 'USD' | 'EUR' = 'DOP') => {
+  if (typeof amount === 'string' && /^[+-]?\d+(?:\.\d{1,2})?$/.test(amount)) {
+    const negative = amount.startsWith('-');
+    const unsigned = amount.replace(/^[+-]/, '');
+    const [integer, fraction = ''] = unsigned.split('.');
+    const grouped = new Intl.NumberFormat('es-DO', { maximumFractionDigits: 0 }).format(BigInt(integer));
+    const symbols = { DOP: 'RD$', USD: 'US$', EUR: '€' } as const;
+    return `${negative ? '-' : ''}${symbols[currency]}\u00a0${grouped}.${fraction.padEnd(2, '0')}`;
+  }
+  return new Intl.NumberFormat('es-DO', { style: 'currency', currency }).format(Number(amount));
 };
 
 /**
@@ -152,6 +160,13 @@ export const formatCurrency = (amount: number, currency: 'DOP' | 'USD' | 'EUR' =
  */
 export const formatUSD = (amount: number) => {
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
+};
+
+/** Converts exact minor units only when every cent remains representable for charting. */
+export const minorUnitsToChartNumber = (minor: string): number | null => {
+  const value = BigInt(minor);
+  if (value > BigInt(Number.MAX_SAFE_INTEGER) || value < BigInt(Number.MIN_SAFE_INTEGER)) return null;
+  return Number(value) / 100;
 };
 
 export interface PortfolioSnapshot {
@@ -184,7 +199,8 @@ export const getPortfolioSnapshot = (data: any, dailyTransactions: any[] = [], c
     const balance = convertToDOP(Number(acc.currentBalance) || 0, acc.currency);
 
     if (acc.type === 'credit_card' || acc.type === 'loan') {
-      totals.debts += balance;
+      if (balance < 0) totals.debts += -balance;
+      else totals.liquid += balance; // overpayment / credit balance
     } else if (acc.type === 'investment') {
       totals.invested += balance;
     } else {
@@ -205,15 +221,17 @@ export const getPortfolioSnapshot = (data: any, dailyTransactions: any[] = [], c
   });
   const dailyNet = dailyIncome - dailyExpense - dailyInvestment;
 
-  // Preferir el saldo declarado de las cuentas; sumarlo con dailyNet duplicaría el dinero
-  // cuando la cuenta ya refleja ese acumulado del registro diario.
-  const liquidAssets = accountsBalance > 0 ? accountsBalance : dailyNet;
+  // Si existen cuentas registradas, su saldo es la verdad canónica (incluso si es 0 o negativo).
+  // Solo recurrir a dailyNet si no existen cuentas configuradas.
+  const hasDeclaredAccounts = (data?.accounts || []).length > 0;
+  const liquidAssets = hasDeclaredAccounts ? accountsBalance : dailyNet;
 
   const investmentsValue = (data?.investments || []).reduce((sum: number, inv: any) => sum + convertToDOP(inv.currentValue ?? inv.amount ?? 0, inv.currency), 0);
-  // Las inversiones antiguas no están vinculadas a cuentas. Para no contarlas dos
-  // veces, las cuentas de inversión se usan como respaldo solo si no hay inversiones
-  // declaradas en la fuente histórica.
-  const investedAssets = investmentsValue + (investmentsValue > 0 ? 0 : accountTotals.invested) + dailyInvestment;
+  // Las cuentas de inversión son la fuente canónica del libro mayor.
+  // Evitar sumar dailyInvestment cuando ya existe una cuenta de inversión o saldo declarado.
+  const investedAssets = accountTotals.invested > 0 
+    ? accountTotals.invested 
+    : (investmentsValue > 0 ? investmentsValue : dailyInvestment);
 
   const materialAssets = (data?.assets || []).reduce((sum: number, a: any) => sum + (a.value || 0), 0);
   const declaredDebts = (data?.debts || []).reduce((sum: number, d: any) => sum + convertToDOP(Number(d.amount) || 0, d.currency), 0);

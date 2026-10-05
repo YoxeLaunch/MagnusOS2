@@ -1,7 +1,7 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { useData } from '../context/DataContext';
-import { calculateTotalAnnual, calculateAnnualAmountV2, formatCurrency } from '../utils/calculations';
+import { calculateTotalAnnual, calculateAnnualAmountV2, formatCurrency, minorUnitsToChartNumber } from '../utils/calculations';
 import { getFinancialCycle, isDateInCycle } from '../utils/financialCycle';
 import { Printer, Activity, PieChart as PieChartIcon, TrendingUp, Receipt, PiggyBank, Flag, Wallet, Gauge } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, PieChart, Pie } from 'recharts';
@@ -20,6 +20,7 @@ import { getDaysInMonth, getDaysElapsed } from '../utils/financialMetrics';
 import { DashboardSkeleton } from '../../../shared/components/Skeleton';
 import { useAuth } from '../../../shared/context/AuthContext';
 import { apiFetch } from '../../../shared/utils/apiFetch';
+import { cashFlowApi, CashFlowResponse, NetWorthResponse } from '../api/finanzaApi';
 
 export const Dashboard: React.FC = () => {
   const { data, dailyTransactions, currencies, isLoading } = useData();
@@ -63,6 +64,10 @@ export const Dashboard: React.FC = () => {
     return amount;
   };
 
+  const [ledgerCycleStats, setLedgerCycleStats] = useState<{ income: number; expense: number; investment: number; balance: number } | null>(null);
+  const [ledgerNetWorth, setLedgerNetWorth] = useState<NetWorthResponse | null>(null);
+  const [ledgerChartOverflow, setLedgerChartOverflow] = useState(false);
+
   // Calculate Real Stats (Current Financial Cycle)
   const realStats = useMemo(() => {
     const now = new Date();
@@ -81,11 +86,53 @@ export const Dashboard: React.FC = () => {
       }
     });
 
-    return { income, expense, investment, balance: income - expense - investment, cycleLabel: currentCycle.label };
-  }, [dailyTransactions, currencies]);
+    const calculated = { income, expense, investment, balance: income - expense - investment, cycleLabel: currentCycle.label };
+    if (ledgerChartOverflow) return { income: 0, expense: 0, investment: 0, balance: 0, cycleLabel: currentCycle.label };
+    return ledgerCycleStats ? { ...ledgerCycleStats, cycleLabel: currentCycle.label } : calculated;
+  }, [dailyTransactions, currencies, ledgerCycleStats, ledgerChartOverflow]);
+
+  useEffect(() => {
+    let mounted = true;
+    const now = new Date();
+    const currentCycle = getFinancialCycle(now);
+    Promise.all([
+      cashFlowApi.getCashFlow({
+        startDate: currentCycle.start.toISOString().slice(0, 10),
+        endDate: currentCycle.end.toISOString().slice(0, 10)
+      }),
+      cashFlowApi.getNetWorth({ asOfDate: now.toISOString().slice(0, 10) })
+    ]).then(([cf, nw]: [CashFlowResponse, NetWorthResponse]) => {
+      if (mounted) {
+        const chartValues = [cf.totalIncomeMinor, cf.totalExpenseMinor, cf.totalInvestedMinor, cf.netCashFlowMinor]
+          .map(minorUnitsToChartNumber);
+        const netWorthIsSafe = minorUnitsToChartNumber(nw.netWorthMinor) !== null
+          && nw.accounts.every(account => minorUnitsToChartNumber(account.balanceMinor) !== null);
+        const overflow = chartValues.some(value => value === null) || !netWorthIsSafe;
+        setLedgerChartOverflow(overflow);
+        if (!overflow) {
+          setLedgerCycleStats({
+            income: chartValues[0]!,
+            expense: chartValues[1]!,
+            investment: chartValues[2]!,
+            balance: chartValues[3]!
+          });
+        }
+        setLedgerNetWorth(nw);
+      }
+    }).catch(() => null);
+    return () => { mounted = false; };
+  }, []);
 
   // Calculate Global Stats (All Time)
   const globalStats = useMemo(() => {
+    if (ledgerNetWorth) {
+      const invested = ledgerNetWorth.accounts
+        .filter(account => account.type === 'investment')
+        .reduce((sum, account) => sum + Math.max(0, Number(account.balance)), 0);
+      const totalWealth = Number(ledgerNetWorth.netWorth);
+      return { available: totalWealth - invested, investment: invested, totalWealth };
+    }
+
     let income = 0;
     let expense = 0;
     let investment = 0;
@@ -98,8 +145,13 @@ export const Dashboard: React.FC = () => {
     });
 
     const available = income - expense - investment;
-    return { available, investment };
-  }, [dailyTransactions, currencies]);
+    return { available, investment, totalWealth: available + investment };
+  }, [dailyTransactions, currencies, ledgerNetWorth]);
+
+  const ledgerComparisonData = [
+    { name: 'Ingresos', value: realStats.income, fill: '#3b82f6' },
+    { name: 'Gastos', value: realStats.expense, fill: '#ef4444' }
+  ];
 
   // Filter and Summary Calculations
   const { totalIncomeCurrent, totalExpenseCurrent, comparisonData, expenseChartData } = useMemo(() => {
@@ -172,21 +224,32 @@ export const Dashboard: React.FC = () => {
 
 
       {/* ROW 1: WEALTH WIDGET + HEALTH INDICATORS */}
+      {ledgerChartOverflow && (
+        <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-sm text-amber-700 dark:text-amber-300">
+          Los importes exactos exceden el rango seguro de JavaScript. Se ocultaron las métricas gráficas; Cash Flow conserva y muestra los valores exactos.
+        </div>
+      )}
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
         {/* Wealth Widget */}
-        <WealthWidget
-          totalWealth={globalStats.available + globalStats.investment}
-          invested={globalStats.investment}
-          available={globalStats.available}
-          monthlyGrowth={0}
-        />
+        {ledgerChartOverflow ? (
+          <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-5 text-sm text-amber-700 dark:text-amber-300">
+            Patrimonio disponible en formato exacto en la vista de Patrimonio.
+          </div>
+        ) : (
+          <WealthWidget
+            totalWealth={globalStats.totalWealth}
+            invested={globalStats.investment}
+            available={globalStats.available}
+            monthlyGrowth={0}
+          />
+        )}
 
         {/* Health Indicators - Take 3 columns */}
         <div className="lg:col-span-3">
           <HealthIndicators
             income={realStats.income}
             expense={realStats.expense}
-            balance={250000}
+            balance={realStats.balance}
             daysElapsed={daysElapsed}
             currentDate={now}
           />
@@ -203,7 +266,7 @@ export const Dashboard: React.FC = () => {
           </h2>
           <div className="h-64 w-full">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={comparisonData}>
+              <BarChart data={ledgerComparisonData}>
                 <CartesianGrid strokeDasharray="3 3" opacity={0.1} />
                 <XAxis dataKey="name" stroke="#9ca3af" axisLine={false} tickLine={false} />
                 <YAxis stroke="#9ca3af" tickFormatter={(val) => `$${val}`} axisLine={false} tickLine={false} />
@@ -220,7 +283,7 @@ export const Dashboard: React.FC = () => {
                   itemStyle={{ color: '#fff' }}
                 />
                 <Bar dataKey="value" radius={[4, 4, 0, 0]}>
-                  {comparisonData.map((entry, index) => (
+                  {ledgerComparisonData.map((entry, index) => (
                     <Cell key={`cell-${index}`} fill={entry.fill} />
                   ))}
                 </Bar>

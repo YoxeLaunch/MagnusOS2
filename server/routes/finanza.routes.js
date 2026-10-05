@@ -32,7 +32,9 @@ router.post('/finanza/accounts/reorder', accountsController.reorderAccounts);
 // ========================================
 // LEDGER (New - P1)
 // ========================================
+router.get('/finanza/ledger/reconciliation', ledgerController.reconcileBalances);
 router.get('/finanza/ledger', ledgerController.getLedgerTransactions);
+router.get('/finanza/cashflow', ledgerController.getCashFlowSummary);
 router.post('/finanza/ledger/transactions', ledgerController.createTransaction);
 router.patch('/finanza/ledger/transactions/:id', ledgerController.updateTransaction);
 router.delete('/finanza/ledger/transactions/:id', ledgerController.deleteTransaction);
@@ -63,10 +65,12 @@ router.post('/finanza/import', importBodyParser, importController.importTransact
 router.post('/finanza/import/categorize', importBodyParser, importController.categorizeImports);
 
 // ========================================
-// WEALTH (New - Phase 1)
+// WEALTH (New - Phase 1 & 2)
 // ========================================
 router.get('/wealth/history', wealthController.getWealthHistory);
 router.post('/wealth/snapshot', wealthController.createWealthSnapshot);
+router.get('/wealth/net-worth', wealthController.getNetWorth);
+router.get('/finanza/wealth/net-worth', wealthController.getNetWorth);
 
 // ========================================
 // LEGACY ENDPOINTS (to be deprecated)

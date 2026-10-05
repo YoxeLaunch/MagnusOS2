@@ -15,6 +15,7 @@ import {
 import { formatCurrency } from '../utils/calculations';
 import { useAuth } from '../../../shared/context/AuthContext';
 import { apiFetch } from '../../../shared/utils/apiFetch';
+import { accountsApi, type Account } from '../api/finanzaApi';
 
 // API Client
 const API_BASE = '/api/finanza';
@@ -31,9 +32,13 @@ interface SavingsGoal {
     isCompleted: boolean;
     icon?: string;
     color?: string;
+    linkedAccountId?: string;
+    linkedAccount?: Pick<Account, 'id' | 'name'>;
 }
 
-type SavingsGoalFormData = Pick<SavingsGoal, 'name' | 'targetAmount' | 'targetDate' | 'currency'>;
+type SavingsGoalFormData = Omit<Pick<SavingsGoal, 'name' | 'targetAmount' | 'targetDate' | 'currency' | 'linkedAccountId'>, 'targetAmount'> & {
+    targetAmount: string;
+};
 
 // ========================================
 // Goal Card Component
@@ -42,8 +47,7 @@ const GoalCard: React.FC<{
     goal: SavingsGoal;
     onEdit: () => void;
     onDelete: () => void;
-    onContribute: () => void;
-}> = ({ goal, onEdit, onDelete, onContribute }) => {
+}> = ({ goal, onEdit, onDelete }) => {
     const [showMenu, setShowMenu] = useState(false);
 
     const remaining = Math.max(0, goal.targetAmount - goal.currentAmount);
@@ -146,12 +150,11 @@ const GoalCard: React.FC<{
                             {formatCurrency(goal.monthlyNeeded, goal.currency)}/mes
                         </p>
                     </div>
-                    <button
-                        onClick={onContribute}
-                        className="px-3 py-1.5 bg-primary/10 text-primary rounded-lg text-sm font-medium hover:bg-primary/20 transition-colors"
-                    >
-                        + Aportar
-                    </button>
+                    <p className="max-w-[12rem] text-right text-xs text-muted-foreground">
+                        {goal.linkedAccount
+                            ? `Saldo de ${goal.linkedAccount.name}`
+                            : 'Vincula una cuenta para medir el progreso'}
+                    </p>
                 </div>
             )}
 
@@ -170,26 +173,29 @@ const GoalCard: React.FC<{
 const GoalModal: React.FC<{
     isOpen: boolean;
     onClose: () => void;
-    onSave: (goal: Partial<SavingsGoal>) => void;
+    onSave: (goal: SavingsGoalFormData) => void;
     goal?: SavingsGoal | null;
-}> = ({ isOpen, onClose, onSave, goal }) => {
+    accounts: Account[];
+}> = ({ isOpen, onClose, onSave, goal, accounts }) => {
     const [formData, setFormData] = useState<SavingsGoalFormData>({
         name: '',
-        targetAmount: 0,
+        targetAmount: '',
         targetDate: '',
-        currency: 'DOP'
+        currency: 'DOP',
+        linkedAccountId: undefined
     });
 
     useEffect(() => {
         if (goal) {
             setFormData({
                 name: goal.name,
-                targetAmount: goal.targetAmount,
+                targetAmount: String(goal.targetAmount),
                 targetDate: goal.targetDate || '',
-                currency: goal.currency
+                currency: goal.currency,
+                linkedAccountId: goal.linkedAccountId
             });
         } else {
-            setFormData({ name: '', targetAmount: 0, targetDate: '', currency: 'DOP' });
+            setFormData({ name: '', targetAmount: '', targetDate: '', currency: 'DOP', linkedAccountId: undefined });
         }
     }, [goal, isOpen]);
 
@@ -215,6 +221,27 @@ const GoalModal: React.FC<{
                         />
                     </div>
 
+                    <div>
+                        <label className="block text-sm font-medium mb-1">Cuenta de ahorro</label>
+                        <select
+                            value={formData.linkedAccountId || ''}
+                            onChange={e => setFormData({ ...formData, linkedAccountId: e.target.value || undefined })}
+                            className="w-full px-3 py-2 bg-input border border-border rounded-lg"
+                            required={!goal}
+                            disabled={Boolean(goal)}
+                        >
+                            <option value="">Selecciona una cuenta</option>
+                            {accounts.filter(account => !account.isArchived).map(account => (
+                                <option key={account.id} value={account.id}>
+                                    {account.name} ({account.currency})
+                                </option>
+                            ))}
+                        </select>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                            El saldo de esta cuenta será la única fuente del progreso.
+                        </p>
+                    </div>
+
                     <div className="grid grid-cols-2 gap-4">
                         <div>
                             <label className="block text-sm font-medium mb-1">Monto Meta</label>
@@ -222,7 +249,7 @@ const GoalModal: React.FC<{
                                 type="number"
                                 step="0.01"
                                 value={formData.targetAmount}
-                                onChange={e => setFormData({ ...formData, targetAmount: parseFloat(e.target.value) || 0 })}
+                                onChange={e => setFormData({ ...formData, targetAmount: e.target.value })}
                                 className="w-full px-3 py-2 bg-input border border-border rounded-lg"
                                 required
                             />
@@ -273,92 +300,26 @@ const GoalModal: React.FC<{
 };
 
 // ========================================
-// Contribute Modal
-// ========================================
-const ContributeModal: React.FC<{
-    isOpen: boolean;
-    onClose: () => void;
-    onSave: (amount: number) => void;
-    goal: SavingsGoal | null;
-}> = ({ isOpen, onClose, onSave, goal }) => {
-    const [amount, setAmount] = useState(0);
-
-    if (!isOpen || !goal) return null;
-
-    const remaining = goal.targetAmount - goal.currentAmount;
-
-    return (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-            <div className="bg-card border border-border rounded-2xl p-6 w-full max-w-sm mx-4">
-                <h2 className="text-xl font-bold mb-2">Aportar a {goal.name}</h2>
-                <p className="text-sm text-muted-foreground mb-4">
-                    Restante: {formatCurrency(remaining, goal.currency)}
-                </p>
-
-                <div className="mb-4">
-                    <label className="block text-sm font-medium mb-1">Monto a aportar</label>
-                    <input
-                        type="number"
-                        step="0.01"
-                        value={amount}
-                        onChange={e => setAmount(parseFloat(e.target.value) || 0)}
-                        className="w-full px-3 py-2 bg-input border border-border rounded-lg text-lg"
-                        autoFocus
-                    />
-                </div>
-
-                {/* Quick amounts */}
-                <div className="flex gap-2 mb-4">
-                    {[goal.monthlyNeeded, remaining / 2, remaining].filter(a => a > 0).slice(0, 3).map((quickAmount, i) => (
-                        <button
-                            key={i}
-                            onClick={() => setAmount(Math.round(quickAmount * 100) / 100)}
-                            className="flex-1 px-2 py-1 text-xs bg-muted rounded-lg hover:bg-muted/80"
-                        >
-                            {formatCurrency(quickAmount, goal.currency)}
-                        </button>
-                    ))}
-                </div>
-
-                <div className="flex gap-3">
-                    <button
-                        onClick={onClose}
-                        className="flex-1 px-4 py-2 border border-border rounded-lg"
-                    >
-                        Cancelar
-                    </button>
-                    <button
-                        onClick={() => onSave(amount)}
-                        disabled={amount <= 0}
-                        className="flex-1 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 disabled:opacity-50"
-                    >
-                        Aportar
-                    </button>
-                </div>
-            </div>
-        </div>
-    );
-};
-
-// ========================================
 // Main Savings Page
 // ========================================
 export const Savings: React.FC = () => {
     const { user } = useAuth();
     const [goals, setGoals] = useState<SavingsGoal[]>([]);
+    const [accounts, setAccounts] = useState<Account[]>([]);
     const [loading, setLoading] = useState(true);
     const [showModal, setShowModal] = useState(false);
-    const [showContributeModal, setShowContributeModal] = useState(false);
     const [editingGoal, setEditingGoal] = useState<SavingsGoal | null>(null);
-    const [contributingGoal, setContributingGoal] = useState<SavingsGoal | null>(null);
 
     const loadGoals = async () => {
         if (!user?.username) return;
         try {
-            const res = await apiFetch(`${API_BASE}/savings-goals?userId=${user.username}`);
-            if (!res.ok) throw new Error('Failed to fetch');
-            const data = await res.json();
-            setGoals(data);
+            const [goalsRes, accountData] = await Promise.all([
+                apiFetch(`${API_BASE}/savings-goals?userId=${user.username}`),
+                accountsApi.getAll(user.username)
+            ]);
+            if (!goalsRes.ok) throw new Error('Failed to fetch');
+            setGoals(await goalsRes.json());
+            setAccounts(accountData);
         } catch (error) {
             console.error('Error loading goals:', error);
         } finally {
@@ -370,7 +331,7 @@ export const Savings: React.FC = () => {
         loadGoals();
     }, [user?.username]);
 
-    const handleSave = async (goalData: Partial<SavingsGoal>) => {
+    const handleSave = async (goalData: SavingsGoalFormData) => {
         if (!user?.username) return;
 
         try {
@@ -403,23 +364,6 @@ export const Savings: React.FC = () => {
             await loadGoals();
         } catch (error) {
             console.error('Error deleting goal:', error);
-        }
-    };
-
-    const handleContribute = async (amount: number) => {
-        if (!contributingGoal) return;
-        try {
-            const res = await apiFetch(`${API_BASE}/savings-goals/${contributingGoal.id}/contribute`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ amount })
-            });
-            if (!res.ok) throw new Error('Failed to contribute');
-            await loadGoals();
-            setShowContributeModal(false);
-            setContributingGoal(null);
-        } catch (error) {
-            console.error('Error contributing:', error);
         }
     };
 
@@ -511,7 +455,6 @@ export const Savings: React.FC = () => {
                             goal={goal}
                             onEdit={() => { setEditingGoal(goal); setShowModal(true); }}
                             onDelete={() => handleDelete(goal.id)}
-                            onContribute={() => { setContributingGoal(goal); setShowContributeModal(true); }}
                         />
                     ))}
                 </div>
@@ -523,12 +466,7 @@ export const Savings: React.FC = () => {
                 onClose={() => { setShowModal(false); setEditingGoal(null); }}
                 onSave={handleSave}
                 goal={editingGoal}
-            />
-            <ContributeModal
-                isOpen={showContributeModal}
-                onClose={() => { setShowContributeModal(false); setContributingGoal(null); }}
-                onSave={handleContribute}
-                goal={contributingGoal}
+                accounts={accounts}
             />
         </div>
     );

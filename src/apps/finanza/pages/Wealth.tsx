@@ -2,14 +2,13 @@
 import React, { useState, useEffect } from 'react';
 import { useData } from '../context/DataContext';
 import { getPortfolioSnapshot, formatCurrency } from '../utils/calculations';
+import { cashFlowApi, NetWorthResponse, CashFlowResponse } from '../api/finanzaApi';
+import { minorToSafeNumber, parseDecimalToSafeNumber } from '../utils/moneySafety';
 import { Building2, TrendingUp, PiggyBank, DollarSign, Wallet, ArrowUpRight, ArrowDownRight, RefreshCw, X } from 'lucide-react';
-import { AssetAllocation } from '../components/AssetAllocation';
-import { Investments } from './Investments';
-import { PortfolioHistory } from '../components/PortfolioHistory';
 import { MarketIntel } from '../components/MarketIntel';
 
 export const Wealth: React.FC = () => {
-    const { data, dailyTransactions, wealthHistory, currencies } = useData();
+    const { data, dailyTransactions, currencies } = useData();
     const [currentDate, setCurrentDate] = useState(new Date());
 
     // Currency State
@@ -24,24 +23,64 @@ export const Wealth: React.FC = () => {
         console.log('Wealth Dashboard Mounted - Triggering Snapshot Check');
     }, []);
 
+    const [ledgerNetWorth, setLedgerNetWorth] = useState<NetWorthResponse | null>(null);
+    const [ledgerCashFlow, setLedgerCashFlow] = useState<CashFlowResponse | null>(null);
+
+    // Fetch canonical ledger net worth and cash flow
+    useEffect(() => {
+        let mounted = true;
+        const now = currentDate.toISOString().slice(0, 10);
+        const monthStart = `${now.slice(0, 7)}-01`;
+        const [y, m] = now.slice(0, 7).split('-').map(Number);
+        const lastDay = new Date(y, m, 0).getDate();
+        const monthEnd = `${now.slice(0, 7)}-${String(lastDay).padStart(2, '0')}`;
+
+        Promise.all([
+            cashFlowApi.getNetWorth({ asOfDate: now }).catch(() => null),
+            cashFlowApi.getCashFlow({ startDate: monthStart, endDate: monthEnd }).catch(() => null)
+        ]).then(([nw, cf]) => {
+            if (mounted) {
+                if (nw) setLedgerNetWorth(nw);
+                if (cf) setLedgerCashFlow(cf);
+            }
+        });
+
+        return () => { mounted = false; };
+    }, [currentDate]);
+
     // Safety check for data
     if (!data) return <div className="p-8 text-center text-slate-500">Cargando datos financieros...</div>;
 
-    // Misma fuente de verdad que Investments.tsx, PrintReport.tsx y Projections.tsx
-    const { liquidAssets, investedAssets, materialAssets, netWorth, dailyInvestment } = getPortfolioSnapshot(data, dailyTransactions, currencies);
+    const { liquidAssets, investedAssets, materialAssets, netWorth, cashFlow, savingsRate } = (() => {
+        const snap = getPortfolioSnapshot(data, dailyTransactions, currencies);
+        const finalNetWorth = ledgerNetWorth
+            ? (ledgerNetWorth.netWorthMinor ? minorToSafeNumber(ledgerNetWorth.netWorthMinor, 'netWorth') : parseDecimalToSafeNumber(ledgerNetWorth.netWorth, 'netWorth'))
+            : snap.netWorth;
+        const finalCashFlow = ledgerCashFlow
+            ? (ledgerCashFlow.netCashFlowMinor ? minorToSafeNumber(ledgerCashFlow.netCashFlowMinor, 'netCashFlow') : parseDecimalToSafeNumber(ledgerCashFlow.netCashFlow, 'netCashFlow'))
+            : (snap.dailyNet || 0);
+        const finalIncome = ledgerCashFlow
+            ? (ledgerCashFlow.totalIncomeMinor ? minorToSafeNumber(ledgerCashFlow.totalIncomeMinor, 'totalIncome') : parseDecimalToSafeNumber(ledgerCashFlow.totalIncome, 'totalIncome'))
+            : 0;
+        const finalSavingsRate = finalIncome > 0 ? (finalCashFlow / finalIncome) * 100 : 0;
+        const ledgerInvested = ledgerNetWorth?.accounts
+            .filter(account => account.type === 'investment')
+            .reduce((sum, account) => sum + Math.max(0, account.balanceMinor ? minorToSafeNumber(account.balanceMinor, 'account.balance') : parseDecimalToSafeNumber(account.balance, 'account.balance')), 0);
+        const finalInvested = ledgerNetWorth ? (ledgerInvested || 0) : snap.investedAssets;
+        const ledgerAssets = ledgerNetWorth
+            ? (ledgerNetWorth.assetsMinor ? minorToSafeNumber(ledgerNetWorth.assetsMinor, 'assets') : parseDecimalToSafeNumber(ledgerNetWorth.assets, 'assets'))
+            : snap.liquidAssets;
+        const finalLiquid = ledgerNetWorth ? Math.max(0, ledgerAssets - finalInvested) : snap.liquidAssets;
 
-    // Fixed calculations with proper types and property checks
-    const monthlyTransactions = (data as any).transactions || [];
-    const monthlyIncome = monthlyTransactions
-        .filter((t: any) => t.type === 'income' && (t.date || '').startsWith(currentDate.toISOString().slice(0, 7)))
-        .reduce((sum: number, t: any) => sum + t.amount, 0);
-
-    const monthlyExpenses = monthlyTransactions
-        .filter((t: any) => t.type === 'expense' && (t.date || '').startsWith(currentDate.toISOString().slice(0, 7)))
-        .reduce((sum: number, t: any) => sum + t.amount, 0);
-
-    const cashFlow = monthlyIncome - monthlyExpenses;
-    const savingsRate = monthlyIncome > 0 ? (cashFlow / monthlyIncome) * 100 : 0;
+        return {
+            liquidAssets: Math.max(0, finalLiquid),
+            investedAssets: finalInvested,
+            materialAssets: ledgerNetWorth ? 0 : snap.materialAssets,
+            netWorth: finalNetWorth,
+            cashFlow: finalCashFlow,
+            savingsRate: finalSavingsRate
+        };
+    })();
 
     return (
         <div className="max-w-[1600px] mx-auto p-6 md:p-8 space-y-8 pb-32">
@@ -116,33 +155,6 @@ export const Wealth: React.FC = () => {
                 />
             </div>
 
-            {/* SECTION 2: CHARTS */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-
-                {/* Evolution Chart (2/3 width) */}
-                <div className="lg:col-span-2 bg-slate-900 text-white p-6 rounded-2xl shadow-lg border border-slate-800">
-                    <div className="flex justify-between items-center mb-6">
-                        <h3 className="text-lg font-bold flex items-center gap-2">
-                            <TrendingUp size={20} className="text-blue-500" />
-                            Evolución del Patrimonio
-                        </h3>
-                        <span className="text-xs font-bold bg-white/10 px-2 py-1 rounded text-slate-300">YTD</span>
-                    </div>
-                    <div className="h-[350px] w-full">
-                        {/* PASSING REQUIRED PROP: history */}
-                        <PortfolioHistory history={wealthHistory || []} />
-                    </div>
-                </div>
-
-                {/* Asset Allocation (1/3 width) */}
-                <div className="lg:col-span-1 bg-slate-900 text-white p-6 rounded-2xl shadow-lg border border-slate-800 flex flex-col">
-                    <h3 className="text-lg font-bold mb-6">Distribución</h3>
-                    <div className="flex-1 flex items-center justify-center">
-                        <AssetAllocation investments={data.investments || []} dailyInvestmentTotal={dailyInvestment} />
-                    </div>
-                </div>
-            </div>
-
             {/* SECTION 3: ASSET BREAKDOWN */}
             <div>
                 <h2 className="text-xl font-bold text-slate-900 dark:text-white mb-6 flex items-center gap-2">
@@ -158,7 +170,7 @@ export const Wealth: React.FC = () => {
                             <span className="text-emerald-600">{formatCurrency(liquidAssets)}</span>
                         </h4>
                         <div className="space-y-3">
-                            {((data as any).accounts || []).map((acc: any) => (
+                            {(ledgerNetWorth?.accounts || []).filter(acc => ['cash', 'checking', 'savings'].includes(acc.type)).map(acc => (
                                 <div key={acc.id} className="flex justify-between items-center text-sm p-2 hover:bg-gray-50 dark:hover:bg-white/5 rounded-lg transition-colors">
                                     <div className="flex items-center gap-3">
                                         <div className="w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center text-blue-600 dark:text-blue-400">
@@ -169,7 +181,7 @@ export const Wealth: React.FC = () => {
                                             <p className="text-xs text-gray-400 capitalize">{acc.type}</p>
                                         </div>
                                     </div>
-                                    <span className="font-mono font-bold text-gray-900 dark:text-white">{formatCurrency(acc.currentBalance)}</span>
+                                    <span className="font-mono font-bold text-gray-900 dark:text-white">{formatCurrency(acc.balance, acc.currency)}</span>
                                 </div>
                             ))}
                         </div>
@@ -182,7 +194,7 @@ export const Wealth: React.FC = () => {
                             <span className="text-purple-600">{formatCurrency(investedAssets)}</span>
                         </h4>
                         <div className="space-y-3">
-                            {(data.investments || []).slice(0, 5).map((inv: any) => (
+                            {(ledgerNetWorth?.accounts || []).filter(acc => acc.type === 'investment').map(inv => (
                                 <div key={inv.id} className="flex justify-between items-center text-sm p-2 hover:bg-gray-50 dark:hover:bg-white/5 rounded-lg transition-colors">
                                     <div className="flex items-center gap-3">
                                         <div className="w-8 h-8 rounded-full bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center text-purple-600 dark:text-purple-400">
@@ -190,17 +202,12 @@ export const Wealth: React.FC = () => {
                                         </div>
                                         <div>
                                             <p className="font-medium text-gray-700 dark:text-gray-300">{inv.name}</p>
-                                            <p className="text-xs text-gray-400 capitalize">{inv.category}</p>
+                                            <p className="text-xs text-gray-400 capitalize">Cuenta ledger</p>
                                         </div>
                                     </div>
-                                    <span className="font-mono font-bold text-gray-900 dark:text-white">{formatCurrency(inv.currentValue || inv.amount)}</span>
+                                    <span className="font-mono font-bold text-gray-900 dark:text-white">{formatCurrency(inv.balance, inv.currency)}</span>
                                 </div>
                             ))}
-                            {(data.investments || []).length > 5 && (
-                                <p className="text-xs text-center text-gray-400 pt-2">
-                                    + {(data.investments || []).length - 5} más...
-                                </p>
-                            )}
                         </div>
                     </div>
 
@@ -210,28 +217,10 @@ export const Wealth: React.FC = () => {
                             <span>Activos Físicos</span>
                             <span className="text-amber-600">{formatCurrency(materialAssets)}</span>
                         </h4>
-                        <div className="space-y-3">
-                            {((data as any).assets || []).slice(0, 5).map((asset: any) => (
-                                <div key={asset.id} className="flex justify-between items-center text-sm p-2 hover:bg-gray-50 dark:hover:bg-white/5 rounded-lg transition-colors">
-                                    <div className="flex items-center gap-3">
-                                        <div className="w-8 h-8 rounded-full bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center text-amber-600 dark:text-amber-400">
-                                            <Building2 size={16} />
-                                        </div>
-                                        <div>
-                                            <p className="font-medium text-gray-700 dark:text-gray-300">{asset.name}</p>
-                                            <p className="text-xs text-gray-400 capitalize">{asset.type}</p>
-                                        </div>
-                                    </div>
-                                    <span className="font-mono font-bold text-gray-900 dark:text-white">{formatCurrency(asset.value)}</span>
-                                </div>
-                            ))}
-                        </div>
+                        <p className="text-sm text-muted-foreground">No incluidos hasta que estén respaldados por una cuenta ledger.</p>
                     </div>
                 </div>
             </div>
-
-            {/* Gestión unificada: inversiones y patrimonio comparten la misma fuente de datos. */}
-            <Investments embedded />
 
             {/* SECCIÓN MERCADO // INDICADORES CLAVE */}
             <MarketIntel variant="summary" />

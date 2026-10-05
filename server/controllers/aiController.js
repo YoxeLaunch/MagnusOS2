@@ -1,5 +1,7 @@
-import { DailyTransaction, FinancialAnomaly, Account } from '../models/index.js';
+import { FinancialAnomaly, Account } from '../models/index.js';
+import { getEffectiveUserId } from '../middleware/auth.js';
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import { LedgerAnalyticsService } from '../services/ledgerAnalyticsService.js';
 import {
     getSnapshot,
     saveSnapshot,
@@ -12,6 +14,7 @@ import {
     aggregateMonthly,
     aggregateDailyFlows
 } from '../services/econometricsService.js';
+import { minorUnitsToSafeNumber, toMinorUnitsBigInt } from '../models/account.js';
 
 // ========================================
 // Configuration
@@ -73,7 +76,8 @@ const computeMetrics = (transactions) => {
     const categoryMap = {};
 
     for (const tx of transactions) {
-        const amount = parseFloat(tx.amount) || 0;
+        const exactMinor = tx.amountMinor == null ? toMinorUnitsBigInt(tx.amount ?? 0) : BigInt(String(tx.amountMinor));
+        const amount = Math.abs(minorUnitsToSafeNumber(exactMinor, 'AI transaction amount'));
         const isExpense = (tx.type === 'expense') || (tx.type === 'gasto');
         const isIncome = (tx.type === 'income') || (tx.type === 'ingreso');
         const cat = tx.category || tx.description?.split(' ')[0] || 'Otros';
@@ -128,29 +132,15 @@ const computeMetrics = (transactions) => {
  */
 const buildEconometricContext = async (userId) => {
     try {
-        const transactions = await DailyTransaction.findAll({
-            where: { userId },
-            order: [['date', 'ASC']],
-            raw: true
-        });
+        const dataset = await LedgerAnalyticsService.getEconometricsDataset({ userId });
+        const { monthlyData, dailyFlows, currentBalance, totalTransactions } = dataset;
 
-        if (transactions.length < 10) return '';
+        if (totalTransactions < 10) return '';
 
         // MPC
-        const monthlyData = aggregateMonthly(transactions);
         const mpc = calculateMPC(monthlyData);
 
         // Forecast summary
-        const dailyFlows = aggregateDailyFlows(transactions);
-        let currentBalance = 0;
-        try {
-            const accounts = await Account.findAll({
-                where: { userId, status: 'active' },
-                attributes: ['currentBalanceMinor'],
-                raw: true
-            });
-            currentBalance = accounts.reduce((sum, a) => sum + (a.currentBalanceMinor || 0) / 100, 0);
-        } catch { /* fallback */ }
         const forecast = forecastLiquidity(dailyFlows, currentBalance);
 
         // Pending anomalies
@@ -194,10 +184,9 @@ const buildEconometricContext = async (userId) => {
 const buildChatContext = async (userId, message, history = []) => {
     let recentTx = [];
     try {
-        recentTx = await DailyTransaction.findAll({
-            where: { userId },
-            limit: 3,
-            order: [['date', 'DESC']]
+        recentTx = await LedgerAnalyticsService.getNormalizedTimeline({
+            userId,
+            limit: 3
         });
     } catch (e) {
         console.error('[AI] DB error in chat context:', e.message);
@@ -225,7 +214,7 @@ ${historyContext ? `\nHistorial reciente de la conversación:\n${historyContext}
  */
 const buildQuickContext = async (userId, message, period) => {
     // Try to serve from cached snapshot first
-    const snapshot = await getSnapshot(period);
+    const snapshot = await getSnapshot(userId, period);
     let metricsContext = '';
 
     if (snapshot && !isStale(snapshot)) {
@@ -241,10 +230,9 @@ const buildQuickContext = async (userId, message, period) => {
         // No snapshot, use last 10 transactions
         let recentTx = [];
         try {
-            recentTx = await DailyTransaction.findAll({
-                where: { userId },
-                limit: 10,
-                order: [['date', 'DESC']]
+            recentTx = await LedgerAnalyticsService.getNormalizedTimeline({
+                userId,
+                limit: 10
             });
         } catch (e) {
             console.error('[AI] DB error in quick context:', e.message);
@@ -266,7 +254,7 @@ ${await buildEconometricContext(userId)}`;
  * Returns pre-calculated data if snapshot exists.
  */
 const buildDeepContext = async (userId, message, period) => {
-    const snapshot = await getSnapshot(period);
+    const snapshot = await getSnapshot(userId, period);
     if (snapshot && !isStale(snapshot)) {
         console.log(`[AI] Context-Mode: deep | Source: cached-snapshot | Period: ${snapshot.period}`);
         return { cached: true, snapshot };
@@ -274,10 +262,9 @@ const buildDeepContext = async (userId, message, period) => {
 
     let recentTx = [];
     try {
-        recentTx = await DailyTransaction.findAll({
-            where: { userId },
-            limit: 300,
-            order: [['date', 'DESC']]
+        recentTx = await LedgerAnalyticsService.getNormalizedTimeline({
+            userId,
+            limit: 300
         });
     } catch (e) {
         console.error('[AI] DB error in deep context:', e.message);
@@ -320,11 +307,12 @@ ${await buildEconometricContext(userId)}`;
 // ========================================
 export const chat = async (req, res) => {
     try {
-        const { message, userId, mode = 'chat', period, history = [] } = req.body;
-        console.log(`[AI] Request | User: ${userId} | Mode: ${mode} | Message: "${message.substring(0, 50)}"`);
+        const effectiveUserId = getEffectiveUserId(req, req.body.userId);
+        const { message, mode = 'chat', period, history = [] } = req.body;
+        console.log(`[AI] Request | User: ${effectiveUserId} | Mode: ${mode} | Message: "${message ? message.substring(0, 50) : ''}"`);
 
         // --- Rate Limiter (deep mode only) ---
-        if (mode === 'deep' && !checkRateLimit(userId)) {
+        if (mode === 'deep' && !checkRateLimit(effectiveUserId)) {
             return res.status(429).json({
                 error: 'Límite de análisis profundo alcanzado (10/día). Inténtalo mañana.',
                 retryAfter: 'tomorrow'
@@ -350,11 +338,11 @@ export const chat = async (req, res) => {
         // --- Build context ONCE based on mode ---
         let contextResult;
         if (mode === 'quick') {
-            contextResult = await buildQuickContext(userId, message, period);
+            contextResult = await buildQuickContext(effectiveUserId, message, period);
         } else if (mode === 'deep') {
-            contextResult = await buildDeepContext(userId, message, period);
+            contextResult = await buildDeepContext(effectiveUserId, message, period);
         } else {
-            contextResult = await buildChatContext(userId, message, history);
+            contextResult = await buildChatContext(effectiveUserId, message, history);
         }
 
         // --- Serve from cache if available (deep mode only) ---
@@ -553,8 +541,9 @@ export const analyze = async (req, res) => {
  */
 export const listSnapshots = async (req, res) => {
     try {
+        const effectiveUserId = getEffectiveUserId(req);
         const { listSnapshots: listFn } = await import('../services/snapshotService.js');
-        const snapshots = await listFn(24);
+        const snapshots = await listFn(effectiveUserId, 24);
         res.json({ snapshots });
     } catch (error) {
         console.error('[AI] Error listing snapshots:', error.message);
@@ -567,9 +556,14 @@ export const listSnapshots = async (req, res) => {
  */
 export const getSnapshotById = async (req, res) => {
     try {
+        const effectiveUserId = getEffectiveUserId(req);
+        const isAdmin = req.user?.role === 'admin' || req.user?.username?.toLowerCase() === 'soberano';
         const { MonthlySnapshot } = await import('../models/monthlySnapshot.js');
         const snap = await MonthlySnapshot.findByPk(req.params.id);
         if (!snap) return res.status(404).json({ error: 'Snapshot no encontrado.' });
+        if (snap.userId !== effectiveUserId && !isAdmin) {
+            return res.status(403).json({ error: 'No autorizado para ver este snapshot.' });
+        }
         res.json({ snapshot: snap });
     } catch (error) {
         console.error('[AI] Error getting snapshot:', error.message);
@@ -582,6 +576,11 @@ export const getSnapshotById = async (req, res) => {
  */
 export const deleteSnapshot = async (req, res) => {
     try {
+        const isAdmin = req.user?.role === 'admin' || req.user?.username?.toLowerCase() === 'soberano';
+        if (!isAdmin) {
+            return res.status(403).json({ error: 'Solo administradores pueden eliminar snapshots mensuales.' });
+        }
+
         const { MonthlySnapshot } = await import('../models/monthlySnapshot.js');
         const snap = await MonthlySnapshot.findByPk(req.params.id);
         if (!snap) return res.status(404).json({ error: 'Snapshot no encontrado.' });
@@ -593,4 +592,3 @@ export const deleteSnapshot = async (req, res) => {
         res.status(500).json({ error: 'Error al eliminar snapshot.' });
     }
 };
-

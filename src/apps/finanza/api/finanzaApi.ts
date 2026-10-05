@@ -165,7 +165,7 @@ export interface TransferRequest {
     date: string;
     fromAccountId: string;
     toAccountId: string;
-    amount: number;
+    amount: number | string;
     memo?: string;
     reference?: string;
 }
@@ -206,13 +206,111 @@ export const categoriesApi = {
 };
 
 // ========================================
+// CASH FLOW & READ MODEL (Phase II)
+// ========================================
+export interface CashFlowDay {
+    date: string;
+    incomeMinor: string;
+    expenseMinor: string;
+    investedMinor: string;
+    netMinor: string;
+    income: number | string;
+    expense: number | string;
+    invested: number | string;
+    net: number | string;
+}
+
+export interface CashFlowResponse {
+    source?: 'ledger' | 'legacy';
+    period: { startDate: string | null; endDate: string | null };
+    currency: string;
+    totalIncomeMinor: string;
+    totalExpenseMinor: string;
+    totalInvestedMinor: string;
+    netCashFlowMinor: string;
+    totalIncome: number | string;
+    totalExpense: number | string;
+    totalInvested: number | string;
+    netCashFlow: number | string;
+    transactionCount: number;
+    timeline: CashFlowDay[];
+}
+
+export interface SavingsRateResponse {
+    source: 'ledger' | 'legacy';
+    month: string;
+    totalIncome: number;
+    totalExpense: number;
+    totalInvested: number;
+    totalSaved: number;
+    savingsRate: number;
+    totalGoalContributions: number;
+}
+
+export interface NetWorthResponse {
+    asOfDate: string;
+    currency: string;
+    assetsMinor: string;
+    liabilitiesMinor: string;
+    netWorthMinor: string;
+    assets: number | string;
+    liabilities: number | string;
+    netWorth: number | string;
+    accountsCount: number;
+    accounts: Array<{
+        id: string;
+        name: string;
+        type: Account['type'];
+        currency: Account['currency'];
+        balanceMinor: string;
+        balance: number | string;
+    }>;
+}
+
+export const cashFlowApi = {
+    getCashFlow: async (params?: { startDate?: string; endDate?: string; currency?: string; source?: 'ledger' | 'legacy' | 'compare' }): Promise<CashFlowResponse> => {
+        const search = new URLSearchParams();
+        if (params?.startDate) {
+            search.set('startDate', params.startDate);
+            search.set('from', params.startDate);
+        }
+        if (params?.endDate) {
+            search.set('endDate', params.endDate);
+            search.set('to', params.endDate);
+        }
+        if (params?.currency) search.set('currency', params.currency);
+        if (params?.source) search.set('source', params.source);
+        const res = await apiFetch(`${API_BASE}/cashflow?${search.toString()}`);
+        if (!res.ok) throw new Error('Failed to fetch cash flow summary');
+        return res.json();
+    },
+    getSavingsRate: async (params?: { month?: string; source?: 'ledger' | 'legacy' }): Promise<SavingsRateResponse> => {
+        const search = new URLSearchParams();
+        if (params?.month) search.set('month', params.month);
+        if (params?.source) search.set('source', params.source);
+        const res = await apiFetch(`${API_BASE}/savings-rate?${search.toString()}`);
+        if (!res.ok) throw new Error('Failed to fetch savings rate');
+        return res.json();
+    },
+    getNetWorth: async (params?: { asOfDate?: string; currency?: string }): Promise<NetWorthResponse> => {
+        const search = new URLSearchParams();
+        if (params?.asOfDate) search.set('asOfDate', params.asOfDate);
+        if (params?.currency) search.set('currency', params.currency);
+        const res = await apiFetch(`${API_BASE}/wealth/net-worth?${search.toString()}`);
+        if (!res.ok) throw new Error('Failed to fetch net worth');
+        return res.json();
+    }
+};
+
+// ========================================
 // Export all APIs
 // ========================================
 export const finanzaApi = {
     accounts: accountsApi,
     ledger: ledgerApi,
     transfers: transfersApi,
-    categories: categoriesApi
+    categories: categoriesApi,
+    cashFlow: cashFlowApi
 };
 
 export default finanzaApi;
