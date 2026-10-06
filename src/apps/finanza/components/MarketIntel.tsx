@@ -119,6 +119,7 @@ export const MarketIntel: React.FC<MarketIntelProps> = ({ embedded = false, vari
   const [chartData, setChartData] = useState<ChartResponse | null>(null);
   const [hoveredPoint, setHoveredPoint] = useState<ChartPoint | null>(null);
   const [calcAmount, setCalcAmount] = useState<number>(100);
+  const [isFxModalOpen, setIsFxModalOpen] = useState(false);
   const [fxModalCurrency, setFxModalCurrency] = useState<'USD' | 'EUR'>('USD');
   const [marketModule, setMarketModule] = useState<'all' | 'fx' | 'banking' | 'macro' | 'energy' | 'global'>('all');
 
