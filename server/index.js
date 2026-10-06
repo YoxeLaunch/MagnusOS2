@@ -15,6 +15,7 @@ import { scheduleCurrencyRateJob, fetchAndStoreRates } from './jobs/currencyRate
 import { scheduleFxJob } from './jobs/fxSchedulerJob.js';
 import { scheduleMacroJob } from './jobs/macroSchedulerJob.js';
 import { scheduleEnergyJob } from './jobs/energySchedulerJob.js';
+import { scheduleSbJob } from './jobs/sbSchedulerJob.js';
 import { eventEngine } from './services/macro/eventEngine.js';
 import { jobObservability } from './services/jobObservabilityService.js';
 import { fileURLToPath } from 'url';
@@ -128,6 +129,9 @@ const startServer = async () => {
 
         // Planificador de Combustibles y Mercado Energético (Energía RD)
         scheduleEnergyJob();
+
+        // Planificador de Estadísticas del Sistema Financiero (Superintendencia de Bancos RD)
+        scheduleSbJob();
 
         // Initialize Socket
         initSocket(io);

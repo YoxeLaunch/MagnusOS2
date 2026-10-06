@@ -16,6 +16,7 @@ import { FxProviderHealth } from './fxProviderHealth.js';
 import { MacroIndicator, MacroObservation, MacroSourceHealth } from './macroIndicator.js';
 import { MagnusEvent, MagnusNotification } from './magnusEvent.js';
 import { FuelCatalog, FuelPriceObservation, FuelPolicyWeek, FuelSourceHealth } from './fuelPrice.js';
+import { SbBankingMetric, SbSyncRun } from './sbBankingMetric.js';
 
 // ========================================
 // Legacy Associations (to be deprecated)
@@ -175,6 +176,10 @@ export {
     FuelPriceObservation,
     FuelPolicyWeek,
     FuelSourceHealth,
+
+    // Superintendencia de Bancos (SB) Models
+    SbBankingMetric,
+    SbSyncRun,
 
     // Helpers
     toMinorUnits,

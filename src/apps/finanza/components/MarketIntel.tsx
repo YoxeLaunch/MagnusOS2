@@ -36,6 +36,9 @@ import { apiFetch } from '../../../shared/utils/apiFetch';
 import { FxMercadoModal } from './FxMercadoModal';
 import { MacroRdSection } from './macro/MacroRdSection';
 import { EnergyRdSection } from './energy/EnergyRdSection';
+import { BankingSection } from './banking/BankingSection';
+import { BankingContextCard } from './banking/BankingContextCard';
+import { Landmark } from 'lucide-react';
 
 export interface MarketQuote {
   symbol: string;
@@ -116,8 +119,8 @@ export const MarketIntel: React.FC<MarketIntelProps> = ({ embedded = false, vari
   const [chartData, setChartData] = useState<ChartResponse | null>(null);
   const [hoveredPoint, setHoveredPoint] = useState<ChartPoint | null>(null);
   const [calcAmount, setCalcAmount] = useState<number>(100);
-  const [isFxModalOpen, setIsFxModalOpen] = useState(false);
   const [fxModalCurrency, setFxModalCurrency] = useState<'USD' | 'EUR'>('USD');
+  const [marketModule, setMarketModule] = useState<'all' | 'fx' | 'banking' | 'macro' | 'energy' | 'global'>('all');
 
   // Extraer saldos reales de cuentas en USD y EUR de las cuentas de Magnus
   const { usdBalance, eurBalance } = useMemo(() => {
@@ -354,6 +357,74 @@ export const MarketIntel: React.FC<MarketIntelProps> = ({ embedded = false, vari
           )}
         </div>
       </div>
+
+      {/* Subnavegación de Módulos de Mercado (sólo en vista Full) */}
+      {currentVariant === 'full' && (
+        <div className="flex items-center gap-1.5 p-1 rounded-xl bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/5 overflow-x-auto">
+          <button
+            onClick={() => setMarketModule('all')}
+            className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all whitespace-nowrap ${
+              marketModule === 'all'
+                ? 'bg-white dark:bg-neutral-800 text-blue-600 dark:text-blue-400 shadow-sm'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+            }`}
+          >
+            Vista Unificada
+          </button>
+          <button
+            onClick={() => setMarketModule('fx')}
+            className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all whitespace-nowrap flex items-center gap-1.5 ${
+              marketModule === 'fx'
+                ? 'bg-white dark:bg-neutral-800 text-blue-600 dark:text-blue-400 shadow-sm'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+            }`}
+          >
+            Providence FX
+          </button>
+          <button
+            onClick={() => setMarketModule('banking')}
+            className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all whitespace-nowrap flex items-center gap-1.5 ${
+              marketModule === 'banking'
+                ? 'bg-white dark:bg-neutral-800 text-cyan-600 dark:text-cyan-400 shadow-sm'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+            }`}
+          >
+            <Landmark size={14} className="text-cyan-500" />
+            <span>Sistema Bancario</span>
+            <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-cyan-100 text-cyan-800 dark:bg-cyan-950 dark:text-cyan-300">SB v2</span>
+          </button>
+          <button
+            onClick={() => setMarketModule('macro')}
+            className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all whitespace-nowrap flex items-center gap-1.5 ${
+              marketModule === 'macro'
+                ? 'bg-white dark:bg-neutral-800 text-indigo-600 dark:text-indigo-400 shadow-sm'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+            }`}
+          >
+            Macro RD
+          </button>
+          <button
+            onClick={() => setMarketModule('energy')}
+            className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all whitespace-nowrap flex items-center gap-1.5 ${
+              marketModule === 'energy'
+                ? 'bg-white dark:bg-neutral-800 text-amber-600 dark:text-amber-400 shadow-sm'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+            }`}
+          >
+            Energía RD
+          </button>
+          <button
+            onClick={() => setMarketModule('global')}
+            className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all whitespace-nowrap flex items-center gap-1.5 ${
+              marketModule === 'global'
+                ? 'bg-white dark:bg-neutral-800 text-blue-600 dark:text-blue-400 shadow-sm'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+            }`}
+          >
+            Mercados Globales
+          </button>
+        </div>
+      )}
 
       {/* ========================================================================= */}
       {/* 2. CONVERSIÓN DE BALANCES DE DIVISAS (DÓLARES Y EUROS A DOP)             */}
@@ -611,7 +682,24 @@ export const MarketIntel: React.FC<MarketIntelProps> = ({ embedded = false, vari
             </div>
           </div>
         </div>
+
+        {/* WIDGET COMPACTO: CONTEXTO BANCARIO (FASE 2) */}
+        <BankingContextCard onNavigateToBanking={() => {
+          setMarketModule('banking');
+          setTimeout(() => {
+            document.getElementById('sistema-bancario-section')?.scrollIntoView({ behavior: 'smooth' });
+          }, 100);
+        }} />
       </div>
+
+      {/* ========================================================================= */}
+      {/* 2.2 SISTEMA BANCARIO SB RD (SUPERINTENDENCIA DE BANCOS DE LA REP. DOM.)    */}
+      {/* ========================================================================= */}
+      {currentVariant === 'full' && (marketModule === 'all' || marketModule === 'banking') && (
+        <div id="sistema-bancario-section" className="scroll-mt-6">
+          <BankingSection />
+        </div>
+      )}
 
       {/* ========================================================================= */}
       {/* 3. KPIS PRIORITARIOS GLOBALES (S&P 500, ORO, WTI, BRENT)                  */}
@@ -686,17 +774,17 @@ export const MarketIntel: React.FC<MarketIntelProps> = ({ embedded = false, vari
       {/* ========================================================================= */}
       {/* 3.5 CONTEXTO MACRO RD (BANCO CENTRAL DE LA REPÚBLICA DOMINICANA)           */}
       {/* ========================================================================= */}
-      {currentVariant === 'full' && <MacroRdSection />}
+      {currentVariant === 'full' && (marketModule === 'all' || marketModule === 'macro') && <MacroRdSection />}
 
       {/* ========================================================================= */}
       {/* 3.6 ENERGÍA RD // COMBUSTIBLES (MINISTERIO DE INDUSTRIA, COMERCIO Y MIPYMES) */}
       {/* ========================================================================= */}
-      {currentVariant === 'full' && <EnergyRdSection />}
+      {currentVariant === 'full' && (marketModule === 'all' || marketModule === 'energy') && <EnergyRdSection />}
 
       {/* ========================================================================= */}
       {/* 4. SECCIÓN COMPLETA DE CATEGORÍAS (SÓLO EN VISTA 'FULL' // MERCADO)       */}
       {/* ========================================================================= */}
-      {currentVariant === 'full' && (
+      {currentVariant === 'full' && (marketModule === 'all' || marketModule === 'global') && (
         <div className="space-y-4 pt-4">
           {/* Navegación por pestañas y buscador rápido */}
           <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4 border-b border-slate-200 dark:border-white/10 pb-4">
