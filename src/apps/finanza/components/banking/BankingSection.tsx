@@ -145,7 +145,10 @@ export const BankingSection: React.FC<BankingSectionProps> = ({
             {/* Active Sub-Tab View */}
             <div className="min-h-[500px]">
                 {activeTab === 'RESUMEN' && (
-                    <ResumenTab onSelectInstitution={handleSelectEntity} />
+                    <ResumenTab
+                        onSelectInstitution={handleSelectEntity}
+                        onSelectTab={(tabId) => setActiveTab(tabId as BankingSubTab)}
+                    />
                 )}
 
                 {activeTab === 'RENDIMIENTOS' && (
