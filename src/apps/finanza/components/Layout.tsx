@@ -19,7 +19,8 @@ import {
   ArrowRightLeft,
   ShieldCheck,
   PieChart,
-  Target
+  Target,
+  Landmark
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { MasterLayout } from '../../../shared/components/layout/MasterLayout';
@@ -31,6 +32,7 @@ const FINANZA_NAV_ITEMS = [
   { path: "/finanza/seguimiento", label: "Seguimiento Diario", icon: Receipt },
   { path: "/finanza/patrimonio", label: "Patrimonio Global", icon: Wallet },
   { path: "/finanza/mercado", label: "Mercado", icon: TrendingUp },
+  { path: "/finanza/banca", label: "Sistema Bancario", icon: Landmark },
   { path: "/finanza/ahorros", label: "Metas de Ahorro", icon: Target },
   { path: "/finanza/proyecciones", label: "Proyección 2026", icon: LineChart },
 ];
@@ -194,6 +196,13 @@ const Sidebar = ({ isDark, toggleTheme }: any) => {
             label="Mercado"
             badge="En Vivo"
             isActive={location.pathname.includes("/finanza/mercado")}
+          />
+          <NavLink
+            to="/finanza/banca"
+            icon={Landmark}
+            label="Sistema Bancario"
+            badge="SB v2"
+            isActive={location.pathname.includes("/finanza/banca") || location.pathname.includes("/finanza/sistema-bancario")}
           />
           <NavLink
             to="/finanza/ahorros"

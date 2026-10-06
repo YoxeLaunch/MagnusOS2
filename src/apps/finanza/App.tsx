@@ -21,6 +21,7 @@ const Ledger = lazy(() => import('./pages/Ledger').then(module => ({ default: mo
 // New P3 Pages
 const Import = lazy(() => import('./pages/Import').then(module => ({ default: module.Import })));
 const MarketPage = lazy(() => import('./pages/MarketPage').then(module => ({ default: module.MarketPage })));
+const BankingPage = lazy(() => import('./pages/BankingPage').then(module => ({ default: module.BankingPage })));
 
 const LoadingFallback = () => (
   <div className="flex items-center justify-center h-full min-h-[400px]">
@@ -48,6 +49,8 @@ const App: React.FC = () => {
                       <Route path="flujo" element={<CashFlow />} />
                       <Route path="patrimonio" element={<Wealth />} />
                       <Route path="mercado" element={<MarketPage />} />
+                      <Route path="banca" element={<BankingPage />} />
+                      <Route path="sistema-bancario" element={<Navigate to="../banca" replace />} />
                       <Route path="inversiones" element={<Navigate to="../patrimonio" replace />} />
                       <Route path="seguimiento" element={<Tracking />} />
                       <Route path="proyecciones" element={<Projections />} />
