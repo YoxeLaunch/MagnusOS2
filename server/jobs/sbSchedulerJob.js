@@ -26,6 +26,9 @@ export const scheduleSbJob = () => {
         try {
             await jobObservability.executeMonitoredJob('sb_statistics_sync', async () => {
                 const result = await sbStatisticsService.syncLatestSbPeriod();
+                if (result.action === 'MISCONFIGURED') {
+                    throw new Error('SB_CONFIG_MISSING');
+                }
                 return {
                     summary: `SB Monthly Sync: ${result.action} - ${result.message}`,
                     itemsProcessed: result.syncResult?.totalReceived || 0,
@@ -49,6 +52,9 @@ export const scheduleSbJob = () => {
             console.log('[SB_SCHEDULER] Comprobando períodos pendientes de la Superintendencia de Bancos al inicio...');
             await jobObservability.executeMonitoredJob('sb_startup_check', async () => {
                 const check = await sbStatisticsService.syncLatestSbPeriod();
+                if (check.action === 'MISCONFIGURED') {
+                    throw new Error('SB_CONFIG_MISSING');
+                }
                 console.log(`[SB_SCHEDULER] Verificación inicial: ${check.message}`);
                 return {
                     summary: check.message,

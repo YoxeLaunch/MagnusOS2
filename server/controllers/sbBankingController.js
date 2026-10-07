@@ -8,6 +8,7 @@
 import { sequelize, SbBankingMetric, SbSyncRun } from '../models/index.js';
 import { sbStatisticsService } from '../services/sb/sbStatisticsService.js';
 import { Op } from 'sequelize';
+import { calculateHhi, classifyHhi } from '../services/sb/sbMetrics.js';
 
 // In-Memory SWR Cache for fast reads
 const memoryCache = new Map();
@@ -133,6 +134,14 @@ export const getBankingSummary = async (req, res) => {
             LIMIT 5;
         `, { bind: [totalSystemBalance > 0 ? totalSystemBalance : 1, targetPeriod] });
 
+        const [entityBalances] = await sequelize.query(`
+            SELECT SUM(balance) AS balance
+            FROM public.sb_banking_metrics
+            WHERE periodo = $1
+            GROUP BY entidad;
+        `, { bind: [targetPeriod] });
+        const hhiValue = calculateHhi(entityBalances.map(row => row.balance));
+
         // Distribución física vs jurídica
         const [holderDistribution] = await sequelize.query(`
             SELECT
@@ -163,6 +172,13 @@ export const getBankingSummary = async (req, res) => {
                 usdDepositsEquivDop: usdBalance,
                 totalSystemDop: totalSystemBalance,
                 methodology: 'SB_DOMINICAN_REPUBLIC_OFFICIAL_DOP_EQUIVALENT'
+            },
+            hhi: {
+                value: hhiValue,
+                scale: '0-10000',
+                classification: classifyHhi(hhiValue),
+                methodology: 'SUM_OF_ENTITY_MARKET_SHARE_PERCENT_SQUARED',
+                disclaimer: 'Criterio analítico de concentración; no es una evaluación de solvencia.'
             },
             currencies: currencyMap,
             topBanks: topBanks.map(b => ({
@@ -599,19 +615,28 @@ export const getBankingSyncStatus = async (req, res) => {
  * POST /api/markets/banking/sync
  */
 export const handleTriggerSync = async (req, res) => {
+    const audit = {
+        user: req.user?.username || 'unknown',
+        requestedPeriod: req.body?.period || 'LATEST_AVAILABLE',
+        triggeredAt: new Date().toISOString(),
+        source: 'manual_api'
+    };
     try {
         const { period } = req.body || {};
         if (period) {
-            const syncResult = await sbStatisticsService.syncSbMonth(period);
+            const syncResult = await sbStatisticsService.syncSbMonth(period, { audit });
             memoryCache.clear();
+            console.info('[SB_SYNC_AUDIT]', JSON.stringify({ ...audit, result: syncResult.status }));
             return res.json({ success: true, message: `Período ${period} sincronizado`, data: syncResult });
         }
 
-        const latestCheck = await sbStatisticsService.syncLatestSbPeriod();
+        const latestCheck = await sbStatisticsService.syncLatestSbPeriod({ audit });
         memoryCache.clear();
+        console.info('[SB_SYNC_AUDIT]', JSON.stringify({ ...audit, result: latestCheck.action }));
         res.json({ success: true, message: latestCheck.message, data: latestCheck });
 
     } catch (error) {
+        console.warn('[SB_SYNC_AUDIT]', JSON.stringify({ ...audit, result: 'FAILED', error: error.message }));
         console.error('[SB_CONTROLLER] Error en handleTriggerSync:', error);
         res.status(500).json({ success: false, error: error.message });
     }

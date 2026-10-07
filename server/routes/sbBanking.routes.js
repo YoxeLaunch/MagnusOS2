@@ -17,7 +17,7 @@ import {
     getBankingSyncStatus,
     handleTriggerSync
 } from '../controllers/sbBankingController.js';
-import { optionalJWT, requireAuthenticated } from '../middleware/auth.js';
+import { requireAuthenticated, requireAdmin } from '../middleware/auth.js';
 
 const router = Router();
 
@@ -29,9 +29,11 @@ router.get('/dollarization-trend', getDollarizationTrend);
 router.get('/institution/:entity', getBankingInstitution);
 router.get('/history', getBankingHistory);
 router.get('/provinces', getBankingProvinces);
+// Compatibility alias; /provinces remains the canonical endpoint.
+router.get('/geography', getBankingProvinces);
 router.get('/sync-status', getBankingSyncStatus);
 
-// Disparador de sincronización manual protegido
-router.post('/sync', optionalJWT, handleTriggerSync);
+// Manual ingestion mutates financial data and consumes SB quota: admin only.
+router.post('/sync', requireAuthenticated, requireAdmin, handleTriggerSync);
 
 export default router;

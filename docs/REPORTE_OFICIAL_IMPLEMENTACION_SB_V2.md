@@ -13,7 +13,7 @@ Durante la jornada se ha completado con éxito la integración integral, de extr
 
 La plataforma ahora cuenta con:
 1. **Infraestructura de Datos y Backend Bancario**: Ingesta automatizada con dual API key, validación de esquemas, deduplicación e idempotencia con persistencia histórica en **PostgreSQL**.
-2. **Motor de Inteligencia y KPIs Financieros**: Métricas de balance sistémico (RD$ 3.52 Trillones), Índice de Dolarización (DSI 29.70%), curva de rendimientos ponderados DOP/USD, concentración de mercado (HHI) y cuotas de mercado del Top 5 de bancos.
+2. **Motor de Inteligencia y KPIs Financieros**: Métricas de balance sistémico, Índice de Dolarización (DSI), curva de rendimientos ponderados DOP/USD, HHI y cuotas de mercado. Los valores dependen del período consultado.
 3. **Módulo Visual Financiero Dedicado (`/finanza/banca`)**: Arquitectura desacoplada de la sección de Mercado tradicional, con **6 submódulos temáticos de grado institucional**, diseño terminal oscuro (`#0f172a`), interactividad en tiempo real y compatibilidad responsive.
 4. **DevOps y Alta Disponibilidad**: Persistencia completa en volúmenes Docker (`magnus_pgdata`), auto-recuperación ante apagones (`restart: unless-stopped`) e imagen base actualizada (`magnus-os2-magnus:latest`).
 
@@ -67,7 +67,7 @@ flowchart TD
 #### Parámetros de Seguridad de la Conexión:
 - **Rotación Automática de Llaves**: El sistema alterna de forma transparente entre la llave primaria y secundaria en caso de recibir respuestas `429 Too Many Requests` o fallas transitorias de red.
 - **Deduplicación e Idempotencia**: Cada carga mensual computa un hash determinista SHA-256 sobre el payload. Si los datos del mes ya existen, se actualizan vía `ON CONFLICT (periodo, entidad_codigo, tipo_deposito, moneda) DO UPDATE` sin duplicar filas.
-- **Sincronización Periódica**: Cron programado automáticamente para el día 3 de cada mes a las 06:00 UTC (`0 6 3 * *`), coincidiendo con el calendario de publicación mensual de la SB.
+- **Sincronización Periódica**: Cron programado automáticamente para el día 16 de cada mes a las 03:00, zona `America/Santo_Domingo` (`0 3 16 * *`). La consulta verifica disponibilidad y no asume publicación garantizada.
 
 ---
 
@@ -77,10 +77,8 @@ Se diseñó e implementó un esquema normalizado de nivel financiero:
 
 | Tabla / Vista | Propósito | Llaves e Índices |
 |---|---|---|
-| `sb_captaciones_balance` | Registra balances captados, número de instrumentos y tasas de interés ponderadas segregadas por banco, moneda (DOP/USD/EUR) y tipo de producto. | `PK: (periodo, entidad_codigo, tipo_deposito, moneda)`. Índices b-tree sobre `periodo`, `entidad_codigo`, `moneda`. |
-| `sb_captaciones_geografia` | Almacena la distribución territorial de los depósitos por regiones y provincias del país. | `PK: (periodo, provincia_codigo, moneda)`. |
-| `sb_sync_history` | Auditoría de cada ejecución del proceso ETL: timestamp, registros ingresados, registros actualizados, estado y duración en ms. | `PK: id`, index en `created_at`. |
-| `v_sb_latest_system_summary` | Vista materializada/optimizada para la carga instantánea de los KPIs consolidados del sistema en el dashboard. | Cache precalculado de balances totales y ponderaciones. |
+| `sb_banking_metrics` | Snapshot de captaciones por período, entidad, provincia, persona y divisa. | `UNIQUE (periodo, entidad, tipo_entidad, provincia, persona, divisa)`. |
+| `sb_sync_runs` | Telemetría de ejecuciones ETL: recibidos, insertados, actualizados, sin cambios, duración y metadatos. | `PK: id`, índices por período y ejecución. |
 
 ---
 
@@ -95,7 +93,8 @@ La capa backend expone los siguientes endpoints bajo `/api/markets/banking`:
 | `GET` | `/api/markets/banking/deposits` | Desglose de captaciones por tipo (ahorro, plazo, corriente) y tenedor (física/jurídica). |
 | `GET` | `/api/markets/banking/dollarization-trend` | Evolución cronológica del Índice de Dolarización del Sistema (DSI) y saldos en divisas. |
 | `GET` | `/api/markets/banking/institution/:entity` | Ficha analítica detallada de una entidad individual (cuota, tasas, balances históricos). |
-| `GET` | `/api/markets/banking/geography` | Distribución geográfica de los depósitos por región y provincia. |
+| `GET` | `/api/markets/banking/provinces` | Endpoint geográfico canónico por región y provincia. |
+| `GET` | `/api/markets/banking/geography` | Alias compatible de `/provinces`. |
 | `GET` | `/api/markets/banking/history` | Registros históricos cronológicos para análisis temporal y regresiones. |
 | `GET` | `/api/markets/banking/sync-status` | Estado de la última sincronización con la SB, salud del pipeline y latencia. |
 | `POST`| `/api/markets/banking/sync` | Disparador manual protegido para forzar sincronización y refresco de datos. |
@@ -119,7 +118,7 @@ En concordancia con las directrices operativas:
 
 #### Detalle de los Módulos:
 1. **Resumen Ejecutivo (`ResumenTab.tsx`)**:
-   - **Métricas Clave**: RD$ 3.52 Trillones en depósitos (+1.17% crecimiento intermensual), 11.89 millones de instrumentos, 29.70% de dolarización (DSI) y tasa ponderada del sistema de 4.76%.
+   - **Métricas Clave**: los valores son derivados por período. Para agosto de 2026: RD$ 3.518T, +1.17% MoM, DSI 29.70%, tasa global ponderada 3.6171% y HHI 2,024.84.
    - **Distribución de Mercado Top 5**: Barras analíticas interactivas con acceso directo a Banco de Reservas (36.1%), Banco Popular (27.4%), Banco BHD (18.1%), Banco Santa Cruz y Scotiabank República Dominicana.
    - **Desglose Institucional**: Segmentación de pasivos entre Personas Físicas vs. Jurídicas.
 2. **Tasas & Rendimientos (`TasasTab.tsx`)**:

@@ -57,9 +57,14 @@ services:
   # Magnus-OS2 (All-in-One: Node 20)
   # ========================================
   magnus:
+    image: magnus-os2-magnus:${IMAGE_TAG:-latest}
     build:
       context: .
       dockerfile: Dockerfile.api
+      args:
+        GIT_SHA: ${GIT_SHA:-unknown}
+        BUILD_DATE: ${BUILD_DATE:-unknown}
+        IMAGE_SOURCE: ${IMAGE_SOURCE:-local://Magnus-OS2}
     container_name: magnus_os2_app
     env_file:
       - .env

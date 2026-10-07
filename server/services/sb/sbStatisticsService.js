@@ -7,6 +7,7 @@
 
 import { sequelize, SbBankingMetric, SbSyncRun } from '../../models/index.js';
 import { Op } from 'sequelize';
+import { assessSbVolumeAnomalies, getSbOperationalStatus } from './sbMetrics.js';
 
 const BROWSER_USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36';
 const DEFAULT_BASE_URL = 'https://apis.sb.gob.do/estadisticas/v2';
@@ -395,6 +396,11 @@ export class SbStatisticsService {
         const durationMs = Date.now() - startTime;
         const status = totalReceived === 0 ? 'EMPTY' : (totalFailed > 0 ? 'PARTIAL' : 'SUCCESS');
 
+        const anomalyWarnings = await this.#getAnomalyWarnings(periodo);
+        for (const warning of anomalyWarnings) {
+            console.warn(`[SB_DATA_QUALITY] ${warning.code}`, warning);
+        }
+
         // Registrar en tabla sb_sync_runs
         await SbSyncRun.create({
             periodo,
@@ -409,6 +415,8 @@ export class SbStatisticsService {
             errorMessage: totalFailed > 0 ? `${totalFailed} fallos durante la sincronización` : null,
             metadata: {
                 entities: entitySummaries,
+                anomalyWarnings,
+                manualAudit: options.audit || null,
                 completedAt: new Date().toISOString()
             }
         });
@@ -427,8 +435,33 @@ export class SbStatisticsService {
             totalUnchanged,
             totalFailed,
             durationMs,
-            activeKey: this.activeKeyType
+            activeKey: this.activeKeyType,
+            anomalyWarnings
         };
+    }
+
+    async #getAnomalyWarnings(periodo) {
+        const [rows] = await sequelize.query(`
+            WITH current_period AS (
+                SELECT COUNT(*)::int AS record_count, COUNT(DISTINCT entidad)::int AS entity_count
+                FROM public.sb_banking_metrics WHERE periodo = $1
+            ), previous_period_key AS (
+                SELECT DISTINCT periodo FROM public.sb_banking_metrics
+                WHERE periodo < $1 ORDER BY periodo DESC LIMIT 1
+            ), previous_period AS (
+                SELECT COUNT(*)::int AS record_count, COUNT(DISTINCT entidad)::int AS entity_count
+                FROM public.sb_banking_metrics WHERE periodo = (SELECT periodo FROM previous_period_key)
+            )
+            SELECT c.record_count AS current_record_count, c.entity_count AS current_entity_count,
+                   p.record_count AS previous_record_count, p.entity_count AS previous_entity_count
+            FROM current_period c CROSS JOIN previous_period p;
+        `, { bind: [periodo] });
+        const row = rows[0];
+        if (!row || row.previous_record_count === null) return [];
+        return assessSbVolumeAnomalies({
+            current: { recordCount: row.current_record_count, entityCount: row.current_entity_count },
+            previous: { recordCount: row.previous_record_count, entityCount: row.previous_entity_count }
+        });
     }
 
     /**
@@ -483,7 +516,20 @@ export class SbStatisticsService {
     /**
      * Verifica cuál es el último período disponible en la SB y en BD y sincroniza si hay pendientes
      */
-    async syncLatestSbPeriod() {
+    async syncLatestSbPeriod(options = {}) {
+        const operationalStatus = getSbOperationalStatus({
+            enabled: this.enabled,
+            hasPrimaryKey: Boolean(this.primaryKey),
+            hasSecondaryKey: Boolean(this.secondaryKey)
+        });
+        if (operationalStatus === 'MISCONFIGURED') {
+            console.error('[SB_CONFIG_MISSING] SB_ENABLED=true but no SB API key is configured.');
+            return {
+                action: 'MISCONFIGURED',
+                operationalStatus,
+                message: 'SB_CONFIG_MISSING: no primary or secondary SB API key is configured.'
+            };
+        }
         // 1. Obtener último período en BD
         const lastDbRecord = await SbBankingMetric.findOne({
             order: [['periodo', 'DESC']]
@@ -528,7 +574,7 @@ export class SbStatisticsService {
         }
 
         console.log(`[SB_SERVICE] Nuevo período detectado en la SB: ${latestPublished} (Último en BD: ${lastDbPeriod || 'ninguno'}). Sincronizando...`);
-        const syncResult = await this.syncSbMonth(latestPublished);
+        const syncResult = await this.syncSbMonth(latestPublished, options);
 
         return {
             action: 'SYNCED',
@@ -556,16 +602,19 @@ export class SbStatisticsService {
             limit: 5
         });
 
+        const hasPrimaryKey = Boolean(this.primaryKey);
+        const hasSecondaryKey = Boolean(this.secondaryKey);
         return {
             enabled: this.enabled,
+            operationalStatus: getSbOperationalStatus({ enabled: this.enabled, hasPrimaryKey, hasSecondaryKey }),
             totalRecords,
             minPeriodo: periodRange[0]?.min_periodo || null,
             maxPeriodo: periodRange[0]?.max_periodo || null,
             totalEntidades: parseInt(periodRange[0]?.total_entidades || '0', 10),
             totalDivisas: parseInt(periodRange[0]?.total_divisas || '0', 10),
             activeKey: this.activeKeyType,
-            hasPrimaryKey: Boolean(this.primaryKey),
-            hasSecondaryKey: Boolean(this.secondaryKey),
+            hasPrimaryKey,
+            hasSecondaryKey,
             recentRuns: lastRuns
         };
     }

@@ -15,6 +15,13 @@ RUN npm run build
 FROM node:20-alpine
 WORKDIR /app
 
+ARG GIT_SHA=unknown
+ARG BUILD_DATE=unknown
+ARG IMAGE_SOURCE=local://Magnus-OS2
+LABEL org.opencontainers.image.revision=$GIT_SHA \
+      org.opencontainers.image.created=$BUILD_DATE \
+      org.opencontainers.image.source=$IMAGE_SOURCE
+
 # pg_dump (16.x, igual que el servidor postgres:16-alpine) para backups desde el panel admin
 RUN apk add --no-cache postgresql16-client
 

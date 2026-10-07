@@ -144,7 +144,7 @@ export const ResumenTab: React.FC<ResumenTabProps> = ({
       {/* ========================================================================= */}
       {/* 1. SEIS KPI CARDS PRINCIPALES                                            */}
       {/* ========================================================================= */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-7 gap-3">
         {/* KPI 1: Captaciones Totales */}
         <div className="bg-[#0f172a] border border-slate-800 rounded-xl p-3.5 shadow-sm flex flex-col justify-between" title={formatMoneyFull(data.totalSystemBalanceDop)}>
           <div className="flex items-center justify-between text-slate-400 mb-1">
@@ -224,6 +224,21 @@ export const ResumenTab: React.FC<ResumenTabProps> = ({
             40
           </div>
           <span className="text-[10px] text-slate-400 mt-1 font-mono">Entidades SB supervisadas</span>
+        </div>
+
+        {/* KPI 7: Concentración de mercado */}
+        <div
+          className="bg-[#0f172a] border border-slate-800 rounded-xl p-3.5 shadow-sm flex flex-col justify-between"
+          title="Índice Herfindahl-Hirschman de concentración de mercado. Criterio analítico; no evalúa solvencia."
+        >
+          <div className="flex items-center justify-between text-slate-400 mb-1">
+            <span className="text-[10px] uppercase font-bold tracking-wider font-mono">HHI</span>
+            <PieIcon size={14} className="text-violet-400" />
+          </div>
+          <div className="font-mono text-lg md:text-xl font-bold text-violet-300">
+            {data.hhi?.value?.toLocaleString?.('en-US', { maximumFractionDigits: 2 }) || 'N/D'}
+          </div>
+          <span className="text-[10px] text-slate-400 mt-1 font-mono">Escala 0–10,000</span>
         </div>
       </div>
 
