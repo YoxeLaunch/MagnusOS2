@@ -20,12 +20,12 @@ server.tool(
 
             // Formatting the output for better readability by the LLM
             const formatted = containers.map(c => ({
-                Id: c.Id.substring(0, 12),
-                Names: c.Names,
-                Image: c.Image,
-                State: c.State,
-                Status: c.Status,
-                Ports: c.Ports.map(p => `${p.PrivatePort}->${p.PublicPort}`).join(', ')
+                Id: c.Id ? c.Id.substring(0, 12) : 'unknown',
+                Names: c.Names || [],
+                Image: c.Image || '',
+                State: c.State || '',
+                Status: c.Status || '',
+                Ports: (c.Ports || []).map(p => `${p.PrivatePort}->${p.PublicPort}`).join(', ')
             }));
 
             return {

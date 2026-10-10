@@ -50,7 +50,7 @@ export const ServiceCard: React.FC<Props> = ({ container, onOpenTerminal, url })
     }, [socket, container.Id]);
 
     const isRunning = container.State === 'running';
-    const containerName = container.Names[0].replace('/', '');
+    const containerName = (container.Names?.[0] || container.Id || 'unnamed').replace(/^\//, '');
     const meta = resolveServiceMeta(containerName);
     const Icon = meta.icon;
     const hostname = typeof window !== 'undefined' ? window.location.hostname : 'localhost';

@@ -179,7 +179,30 @@ ${svcRow5}
 };
 
 // --- DOCKER SURVEILLANCE ---
+const getContainerRawName = (c) => {
+    if (c?.Names && Array.isArray(c.Names) && c.Names.length > 0 && c.Names[0]) {
+        return c.Names[0];
+    }
+    if (c?.Labels?.['com.docker.swarm.task.name']) {
+        return c.Labels['com.docker.swarm.task.name'];
+    }
+    if (c?.Labels?.['com.docker.swarm.service.name']) {
+        return c.Labels['com.docker.swarm.service.name'];
+    }
+    if (c?.Labels?.['com.docker.compose.service']) {
+        return c.Labels['com.docker.compose.service'];
+    }
+    if (c?.Image && typeof c.Image === 'string') {
+        return c.Image.split(':')[0].split('/').pop();
+    }
+    if (c?.Id && typeof c.Id === 'string') {
+        return c.Id.slice(0, 12);
+    }
+    return 'nodo_desconocido';
+};
+
 const cleanContainerName = (raw) => {
+    if (!raw || typeof raw !== 'string') return 'desconocido';
     let name = raw.replace(/^\//, '');
     name = name.replace(/^[a-f0-9]{12}_/, '');
     const swarmMatch = name.match(/^(.+)\.(\d+)\.[a-z0-9]{20,}$/i);
@@ -187,6 +210,7 @@ const cleanContainerName = (raw) => {
 };
 
 const cleanStatus = (s) => {
+    if (!s || typeof s !== 'string') return 'desconocido';
     return s
         .replace(/About an hour/i, '1h')
         .replace(/hours?/i, 'h')
@@ -200,12 +224,14 @@ const cleanStatus = (s) => {
 
 const statusStyle = (state, status) => {
     const cleanDesc = cleanStatus(status);
-    if (state === 'running') {
-        if (/unhealthy/i.test(status)) return { badge: cAmber('[DEGRADED]'), text: chalk.yellow(cleanDesc) };
-        if (/health: starting/i.test(status)) return { badge: chalk.cyan('[STARTING]'), text: chalk.cyan(cleanDesc) };
+    const st = (state || '').toLowerCase();
+    if (st === 'running') {
+        if (/unhealthy/i.test(status || '')) return { badge: cAmber('[DEGRADED]'), text: chalk.yellow(cleanDesc) };
+        if (/health: starting/i.test(status || '')) return { badge: chalk.cyan('[STARTING]'), text: chalk.cyan(cleanDesc) };
         return { badge: cGreen('[ONLINE]  '), text: chalk.white(cleanDesc) };
     }
-    if (state === 'restarting') return { badge: cAmber('[RESTART] '), text: chalk.yellow(cleanDesc) };
+    if (st === 'restarting') return { badge: cAmber('[RESTART] '), text: chalk.yellow(cleanDesc) };
+    if (st === 'dead') return { badge: cRed('[DEAD]    '), text: chalk.red(cleanDesc) };
     return { badge: cDim('[HALTED]  '), text: chalk.dim(cleanDesc) };
 };
 
@@ -222,7 +248,7 @@ const printDockerSurveillance = async () => {
         return;
     }
 
-    if (containers.length === 0) {
+    if (!Array.isArray(containers) || containers.length === 0) {
         console.log(boxen(cDim('No se detectaron nodos activos en la matriz.'), {
             padding: 1, margin: 1, borderStyle: 'round', borderColor: 'gray',
             title: ' [ DOCKER SURVEILLANCE MATRIX ] ', titleAlignment: 'center'
@@ -231,10 +257,14 @@ const printDockerSurveillance = async () => {
     }
 
     // Filtrar réplicas muertas de servicios que ya están activos para evitar saturar la matriz
-    const activeNames = new Set(containers.filter(c => c.State === 'running').map(c => cleanContainerName(c.Names[0])));
+    const activeNames = new Set(
+        containers
+            .filter(c => c.State === 'running')
+            .map(c => cleanContainerName(getContainerRawName(c)))
+    );
     const uniqueContainers = containers.filter(c => {
         if (c.State === 'running') return true;
-        const name = cleanContainerName(c.Names[0]);
+        const name = cleanContainerName(getContainerRawName(c));
         return !activeNames.has(name);
     });
 
@@ -245,10 +275,10 @@ const printDockerSurveillance = async () => {
     const nameWidth = 24;
 
     const lines = uniqueContainers.map((c) => {
-        const name = cleanContainerName(c.Names[0]).padEnd(nameWidth).slice(0, nameWidth);
+        const name = cleanContainerName(getContainerRawName(c)).padEnd(nameWidth).slice(0, nameWidth);
         const { badge, text } = statusStyle(c.State, c.Status);
         const ports = (c.Ports || [])
-            .filter(p => p.PublicPort)
+            .filter(p => p && p.PublicPort)
             .map(p => p.PublicPort)
             .filter((v, i, arr) => arr.indexOf(v) === i)
             .slice(0, 3)

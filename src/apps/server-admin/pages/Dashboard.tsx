@@ -69,7 +69,7 @@ export const Dashboard: React.FC = () => {
                         <div className="p-4 bg-[#0f1219] border-b border-slate-700 flex justify-between items-center">
                             <h3 className="text-lg font-mono text-cyan-400 flex items-center gap-2">
                                 <Terminal className="w-5 h-5" />
-                                {selectedContainer.Names[0]}
+                                {selectedContainer.Names?.[0]?.replace(/^\//, '') || selectedContainer.Id}
                             </h3>
                             <button
                                 onClick={() => setSelectedContainer(null)}

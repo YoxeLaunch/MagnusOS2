@@ -108,15 +108,16 @@ export const updateUserTags = async (req, res) => {
         const user = await User.findByPk(username);
         if (!user) return res.status(404).json({ error: 'Usuario no encontrado' });
 
-        let tags = user.tags || [];
+        let tags = Array.isArray(user.tags) ? [...user.tags] : [];
         if (action === 'add') {
             if (!tags.includes(tag)) tags.push(tag);
         } else if (action === 'remove') {
             tags = tags.filter(t => t !== tag);
         }
 
-        // Explicitly set because of potential JSON reference issues if modifying in place
-        await user.update({ tags: [...tags] });
+        user.tags = tags;
+        user.changed('tags', true);
+        await user.save();
 
         // --- VIP NOTIFICATION SYSTEM ---
         if (tag === 'VIP' && req.io) {
