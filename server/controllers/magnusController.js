@@ -1,5 +1,6 @@
 import { User, Transaction, DailyTransaction } from '../models/index.js';
 import { Mentor, UserChecklist, UserCalendar, CurriculumModule, Mission } from '../models/system/index.js';
+import { writeAdminAudit } from '../services/adminAuditService.js';
 
 // --- USERS ---
 export const getUsers = async (req, res) => {
@@ -68,6 +69,8 @@ export const deleteUser = async (req, res) => {
         await UserCalendar.destroy({ where: { userId: username } });
         await user.destroy();
 
+        await writeAdminAudit(req, { action: 'user.delete', resourceType: 'user', resourceId: username });
+
         res.json({ success: true, message: `Usuario ${username} eliminado.` });
     } catch (error) {
         res.status(500).json({ error: 'Error eliminando usuario' });
@@ -118,6 +121,8 @@ export const updateUserTags = async (req, res) => {
         user.tags = tags;
         user.changed('tags', true);
         await user.save();
+
+        await writeAdminAudit(req, { action: 'user.tags.update', resourceType: 'user', resourceId: username, metadata: { tag, action } });
 
         // --- VIP NOTIFICATION SYSTEM ---
         if (tag === 'VIP' && req.io) {

@@ -10,7 +10,7 @@ import {
     refreshFxRates,
     handleSyncRates
 } from '../controllers/marketController.js';
-import { optionalJWT, requireAuthenticated } from '../middleware/auth.js';
+import { requireAuthenticated, requireAdmin } from '../middleware/auth.js';
 
 const router = Router();
 
@@ -28,6 +28,7 @@ router.get('/fx/eur-dop', getFxEurDop);
 router.get('/fx/pair/:pair', getFxRatesByPair);
 router.get('/fx/history/:institution', getFxHistory);
 router.get('/fx/evaluation/tasareal', getTasaRealEvaluation);
-router.post('/fx/refresh', optionalJWT, refreshFxRates);
+// A forced refresh consumes external-provider capacity; restrict it server-side.
+router.post('/fx/refresh', requireAuthenticated, requireAdmin, refreshFxRates);
 
 export default router;

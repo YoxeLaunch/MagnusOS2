@@ -168,3 +168,28 @@
   --border-color: #3b82f6;
   /* Blue 500 */
 }
+
+/* Panel Admin: intentionally small, local primitives for operational views. */
+.panel {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 0.75rem;
+  background: rgba(255, 255, 255, 0.035);
+  padding: 1.25rem;
+}
+
+.action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  border: 1px solid rgba(34, 211, 238, 0.35);
+  border-radius: 0.5rem;
+  background: rgba(34, 211, 238, 0.1);
+  color: rgb(207, 250, 254);
+  padding: 0.55rem 0.8rem;
+  font-size: 0.875rem;
+  transition: background-color 150ms ease, opacity 150ms ease;
+}
+
+.action:hover:not(:disabled) { background: rgba(34, 211, 238, 0.18); }
+.action:disabled { cursor: not-allowed; opacity: 0.55; }

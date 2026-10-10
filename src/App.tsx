@@ -124,11 +124,11 @@ function AppContent() {
                 <Route path="/auditor/*" element={<Navigate to="/home" replace />} />
 
                 <Route path="/admin/*" element={
-                    user ? (
-                        <Suspense fallback={<div className="flex items-center justify-center min-h-screen text-lg">Cargando Server HUD...</div>}>
+                    user && (user.role === 'admin' || user.username?.toLowerCase() === 'soberano') ? (
+                        <Suspense fallback={<div className="flex items-center justify-center min-h-screen text-lg">Cargando Panel Admin...</div>}>
                             <ServerAdminApp />
                         </Suspense>
-                    ) : <Navigate to="/login" />
+                    ) : <Navigate to={user ? "/home" : "/login"} />
                 } />
             </Routes>
 

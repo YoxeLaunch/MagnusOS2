@@ -2,6 +2,7 @@
 // server/middleware/auth.js — JWT Verification Middleware
 // ========================================
 import jwt from 'jsonwebtoken';
+import { AuthSession } from '../models/index.js';
 
 const JWT_SECRET = process.env.JWT_SECRET;
 
@@ -11,7 +12,7 @@ const JWT_SECRET = process.env.JWT_SECRET;
  *
  * Modo STRICT: rechaza requests sin token válido (401).
  */
-export const verifyJWT = (req, res, next) => {
+export const verifyJWT = async (req, res, next) => {
     const secret = process.env.JWT_SECRET;
     if (!secret) {
         console.error('[AUTH] JWT_SECRET no está configurado. Verificar .env');
@@ -29,6 +30,14 @@ export const verifyJWT = (req, res, next) => {
 
     try {
         const decoded = jwt.verify(token, secret);
+        // Tokens issued before the session registry do not have jti and remain
+        // compatible until expiration. New tokens are checked for revocation.
+        if (decoded.jti) {
+            const session = await AuthSession.findByPk(decoded.jti);
+            if (!session || session.revokedAt || new Date(session.expiresAt).getTime() <= Date.now()) {
+                return res.status(401).json({ error: 'Sesión revocada o expirada. Inicia sesión de nuevo.' });
+            }
+        }
         req.user = decoded; // { username, role, iat, exp }
         next();
     } catch (err) {
@@ -142,12 +151,11 @@ export const getEffectiveUserId = (req, targetOverride = null) => {
 /**
  * Helper para generar un token JWT
  */
-export const generateToken = (user) => {
+export const generateToken = (user, session) => {
     if (!JWT_SECRET) throw new Error('JWT_SECRET no configurado');
     return jwt.sign(
-        { username: user.username, role: user.role },
+        { username: user.username, role: user.role, jti: session.id },
         JWT_SECRET,
         { expiresIn: '24h' }
     );
 };
-

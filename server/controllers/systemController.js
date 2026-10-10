@@ -6,6 +6,7 @@ import { fileURLToPath } from 'url';
 import { spawn } from 'child_process';
 import zlib from 'zlib';
 import { SystemUpdate, AppSettings } from '../models/system/index.js';
+import { writeAdminAudit } from '../services/adminAuditService.js';
 
 // ... imports ...
 
@@ -73,14 +74,20 @@ export const getUpdates = async (req, res) => {
 export const createUpdate = async (req, res) => {
     try {
         const { title, description, type, date, isPublished } = req.body;
+        const allowedTypes = new Set(['feature', 'fix', 'security']);
+        if (typeof title !== 'string' || !title.trim() || title.length > 160 || typeof description !== 'string' || !description.trim() || description.length > 2000 || (type && !allowedTypes.has(type))) {
+            return res.status(400).json({ error: 'Datos de novedad inválidos.' });
+        }
 
         const newUpdate = await SystemUpdate.create({
-            title,
-            description,
+            title: title.trim(),
+            description: description.trim(),
             type: type || 'feature',
             date: date || new Date(),
             isPublished: isPublished !== undefined ? isPublished : true
         });
+
+        await writeAdminAudit(req, { action: 'communications.update.create', resourceType: 'system_update', resourceId: String(newUpdate.id) });
 
         res.json(newUpdate);
     } catch (error) {
@@ -123,22 +130,31 @@ export const handleUpload = (req, res) => {
 };
 
 // --- SYSTEM BROADCAST ---
-export const sendBroadcast = (req, res) => {
+export const sendBroadcast = async (req, res) => {
     try {
         const { title, message, type } = req.body;
+
+        if (typeof title !== 'string' || !title.trim() || title.length > 120 || typeof message !== 'string' || !message.trim() || message.length > 1000) {
+            return res.status(400).json({ error: 'Título o mensaje inválido.' });
+        }
+        const allowedTypes = new Set(['info', 'success', 'warning', 'error']);
+        if (type !== undefined && !allowedTypes.has(type)) {
+            return res.status(400).json({ error: 'Tipo de comunicación inválido.' });
+        }
 
         if (!req.io) {
             throw new Error('Socket.IO not initialized in request');
         }
 
         req.io.emit('system:broadcast', {
-            title,
-            message,
+            title: title.trim(),
+            message: message.trim(),
             type: type || 'info',
             timestamp: new Date()
         });
 
         console.log(`[BROADCAST] Sent: ${title}`);
+        await writeAdminAudit(req, { action: 'communications.broadcast', resourceType: 'global_broadcast', metadata: { type: type || 'info', titleLength: String(title || '').length } });
         res.json({ success: true, message: 'Broadcast sent to all clients' });
     } catch (error) {
         console.error('[BROADCAST] Error:', error);
@@ -194,6 +210,7 @@ export const backupDatabase = (req, res) => {
         responded = true;
         fs.unlink(destPath, () => {});
         console.error('[BACKUP]', message, details || '');
+        writeAdminAudit(req, { action: 'backup.create', resourceType: 'database', outcome: 'failed', metadata: { error: message } });
         res.status(500).json({ error: message, details });
     };
 
@@ -208,6 +225,7 @@ export const backupDatabase = (req, res) => {
         }
         isBackingUp = false;
         responded = true;
+        writeAdminAudit(req, { action: 'backup.create', resourceType: 'database', resourceId: filename, metadata: { size: stats.size } });
         res.json({
             success: true,
             message: 'Backup creado correctamente',
@@ -238,6 +256,38 @@ export const listBackups = (req, res) => {
         console.error('[BACKUP] Error listando:', error);
         res.status(500).json({ error: 'Error listando backups' });
     }
+};
+
+// Validates gzip framing and decompression only. It deliberately does not claim
+// that a PostgreSQL restore succeeds; that requires an isolated restore drill.
+export const verifyBackupIntegrity = (req, res) => {
+    const { filename } = req.params;
+    if (!SAFE_BACKUP_NAME.test(filename)) return res.status(400).json({ error: 'Nombre de archivo inválido' });
+    const filePath = path.join(BACKUP_DIR, filename);
+    if (!fs.existsSync(filePath)) return res.status(404).json({ error: 'Backup no encontrado' });
+
+    const source = fs.createReadStream(filePath);
+    const gunzip = zlib.createGunzip();
+    let uncompressedBytes = 0;
+    let completed = false;
+    const fail = async () => {
+        if (completed) return;
+        completed = true;
+        await writeAdminAudit(req, { action: 'backup.integrity.verify', resourceType: 'backup', resourceId: filename, outcome: 'failed' });
+        res.status(422).json({ verified: false, error: 'El archivo no supera la verificación de compresión.' });
+    };
+
+    source.on('error', fail);
+    gunzip.on('error', fail);
+    gunzip.on('data', chunk => { uncompressedBytes += chunk.length; });
+    gunzip.on('end', async () => {
+        if (completed) return;
+        if (uncompressedBytes === 0) return fail();
+        completed = true;
+        await writeAdminAudit(req, { action: 'backup.integrity.verify', resourceType: 'backup', resourceId: filename, metadata: { uncompressedBytes } });
+        res.json({ verified: true, method: 'gzip_decompression', uncompressedBytes, note: 'La descompresión es válida; una restauración aislada sigue siendo necesaria.' });
+    });
+    source.pipe(gunzip);
 };
 
 export const downloadBackup = (req, res) => {
@@ -289,6 +339,9 @@ export const getBanners = async (req, res) => {
 export const saveBanners = async (req, res) => {
     try {
         const { banner1, banner2 } = req.body;
+        if ((banner1 !== undefined && (typeof banner1 !== 'string' || banner1.length > 1000)) || (banner2 !== undefined && (typeof banner2 !== 'string' || banner2.length > 1000))) {
+            return res.status(400).json({ error: 'Contenido de portada inválido.' });
+        }
 
         // Upsert banner1
         if (banner1 !== undefined) {
@@ -305,6 +358,8 @@ export const saveBanners = async (req, res) => {
                 value: banner2
             });
         }
+
+        await writeAdminAudit(req, { action: 'settings.banners.update', resourceType: 'landing_banner' });
 
         res.json({
             success: true,

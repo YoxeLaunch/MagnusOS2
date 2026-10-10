@@ -20,6 +20,7 @@ import { eventEngine } from './services/macro/eventEngine.js';
 import { jobObservability } from './services/jobObservabilityService.js';
 import { fileURLToPath } from 'url';
 import path from 'path';
+import crypto from 'crypto';
 
 const app = express();
 const server = http.createServer(app);
@@ -74,6 +75,11 @@ app.use('/api/health', healthRoutes);
 // Logger & Socket Injection
 app.use((req, res, next) => {
     req.io = io;
+    const suppliedCorrelation = req.get('x-correlation-id');
+    req.auditCorrelationId = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(suppliedCorrelation || '')
+        ? suppliedCorrelation
+        : crypto.randomUUID();
+    res.setHeader('X-Correlation-Id', req.auditCorrelationId);
     console.log(`[REQUEST] ${req.method} ${req.url}`);
     next();
 });

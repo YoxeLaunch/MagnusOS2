@@ -39,6 +39,9 @@ export const authService = {
     },
 
     logout: () => {
+        // Best effort: apiFetch captures the token synchronously before storage is cleared.
+        // Local sign-out must still succeed if the server is temporarily unreachable.
+        void apiFetch('/api/logout', { method: 'POST' }).catch(() => undefined);
         localStorage.removeItem('sistemam_current_user');
         localStorage.removeItem('sistemam_token');
         localStorage.removeItem('magnus_current_user'); // Clean up legacy

@@ -1,6 +1,8 @@
 import { User } from '../models/index.js';
 import bcrypt from 'bcryptjs';
 import { generateToken } from '../middleware/auth.js';
+import { writeAdminAudit } from '../services/adminAuditService.js';
+import { createSession, revokeSession } from '../services/sessionService.js';
 
 export const login = async (req, res) => {
     try {
@@ -36,7 +38,8 @@ export const login = async (req, res) => {
 
             const userData = user.toJSON();
             const { password: _, ...safeUser } = userData;
-            const token = generateToken(user);
+            const session = await createSession(user, req);
+            const token = generateToken(user, session);
             res.json({ ...safeUser, token });
         } else {
             res.status(401).json({ error: 'Contraseña incorrecta' });
@@ -80,7 +83,8 @@ export const register = async (req, res) => {
 
         const userData = created.toJSON();
         const { password: _, ...safeUser } = userData;
-        const token = generateToken(created);
+        const session = await createSession(created, req);
+        const token = generateToken(created, session);
 
         // Retornar usuario y token JWT para mantener sesión coherente de inmediato
         res.status(201).json({ ...safeUser, token });
@@ -88,6 +92,11 @@ export const register = async (req, res) => {
         console.error('[AUTH] Error en registro:', error);
         res.status(500).json({ error: 'Error interno en registro' });
     }
+};
+
+export const logout = async (req, res) => {
+    if (req.user?.jti) await revokeSession(req.user.jti, req.user.username);
+    res.status(204).end();
 };
 
 export const updatePassword = async (req, res) => {
@@ -138,6 +147,10 @@ export const updatePassword = async (req, res) => {
 
         // Registro de auditoría mínimo sin contraseñas
         console.log(`[AUDIT:AUTH] Password changed for ${username} by ${authenticatedUsername} (role: ${req.user.role}) at ${new Date().toISOString()}`);
+        await writeAdminAudit(req, {
+            action: 'user.password.update', resourceType: 'user', resourceId: username,
+            metadata: { selfService: isSelf }
+        });
 
         res.json({ success: true, message: 'Contraseña actualizada correctamente' });
     } catch (error) {

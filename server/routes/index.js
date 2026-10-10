@@ -13,6 +13,7 @@ import marketRoutes from './market.routes.js';
 import { macroRoutes, notificationRoutes } from './macro.routes.js';
 import energyRoutes from './energy.routes.js';
 import bankingRoutes from './sbBanking.routes.js';
+import adminRoutes from './admin.routes.js';
 
 const router = Router();
 
@@ -34,5 +35,6 @@ router.use('/telegram', telegramRoutes);
 router.use('/ai', aiRoutes);
 router.use('/centro-comando', centroComandoRoutes);
 router.use('/econometrics', econometricsRoutes);
+router.use('/admin', adminRoutes);
 
 export default router;

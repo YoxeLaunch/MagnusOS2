@@ -9,21 +9,23 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { spawn } from 'node:child_process';
+import zlib from 'node:zlib';
 import { Sequelize } from 'sequelize';
 import { sequelize as mainSequelize } from '../server/models/index.js';
 import { MigrationRunner } from '../server/services/migrationRunner.js';
 import { SchemaDriftService } from '../server/services/schemaDriftService.js';
 
 const BACKUP_PATH = process.env.BACKUP_PATH || '/home/osvaldo/backups/magnus-os2/magnus_pre_phase2c_backup.sql';
-const TEST_HOST = '127.0.0.1';
-const TEST_PORT = 5433;
-const TEST_USER = 'magnus_test_user';
-const TEST_PASS = 'magnus_test_secret_pass';
-const DRILL_DB_NAME = 'magnus_restore_drill';
+const TEST_HOST = process.env.RESTORE_DRILL_HOST || '127.0.0.1';
+const TEST_PORT = Number.parseInt(process.env.RESTORE_DRILL_PORT || '5433', 10);
+const TEST_USER = process.env.RESTORE_DRILL_USER || 'magnus_test_user';
+const TEST_PASS = process.env.RESTORE_DRILL_PASSWORD || 'magnus_test_secret_pass';
+const DRILL_DB_NAME = process.env.RESTORE_DRILL_DB || 'magnus_restore_drill';
+const TEST_POSTGRES_CONTAINER = process.env.RESTORE_DRILL_CONTAINER || 'magnus_postgres_test';
 
 // Safety Guardrail: Refuse to run against production
-if (TEST_PORT === 5432 || TEST_HOST === 'postgres') {
-    console.error('[SAFETY GUARDRAIL] Fatal: Refusing to run restore drill against production port 5432 or host "postgres"!');
+if (TEST_PORT === 5432 || TEST_HOST === 'postgres' || !Number.isInteger(TEST_PORT) || !/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(DRILL_DB_NAME)) {
+    console.error('[SAFETY GUARDRAIL] Fatal: target must be an isolated PostgreSQL database, never production.');
     process.exit(1);
 }
 
@@ -95,7 +97,7 @@ export async function runRestoreDrill({ cleanup = true, json = false } = {}) {
             sizeFormatted: `${(stat.size / 1024 / 1024).toFixed(2)} MB`,
             modifiedAt: stat.mtime.toISOString(),
             sha256: backupSha256,
-            format: 'PostgreSQL plain text SQL dump'
+            format: BACKUP_PATH.endsWith('.sql.gz') ? 'PostgreSQL SQL dump compressed with gzip' : 'PostgreSQL plain text SQL dump'
         };
 
         // 2. Prepare Isolated Target Database
@@ -127,13 +129,16 @@ export async function runRestoreDrill({ cleanup = true, json = false } = {}) {
         // Use docker exec or psql client
         await new Promise((resolve, reject) => {
             const psql = spawn('docker', [
-                'exec', '-i', 'magnus_postgres_test',
+                'exec', '-i', TEST_POSTGRES_CONTAINER,
                 'psql', '-U', TEST_USER, '-d', DRILL_DB_NAME
             ]);
             const fileStream = fs.createReadStream(BACKUP_PATH);
-            fileStream.pipe(psql.stdin);
+            const input = BACKUP_PATH.endsWith('.gz') ? fileStream.pipe(zlib.createGunzip()) : fileStream;
+            input.pipe(psql.stdin);
 
             let stderr = '';
+            input.on('error', reject);
+            fileStream.on('error', reject);
             psql.stderr.on('data', d => stderr += d.toString());
             psql.on('close', code => {
                 // psql might output notices/warnings

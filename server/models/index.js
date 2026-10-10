@@ -17,6 +17,8 @@ import { MacroIndicator, MacroObservation, MacroSourceHealth } from './macroIndi
 import { MagnusEvent, MagnusNotification } from './magnusEvent.js';
 import { FuelCatalog, FuelPriceObservation, FuelPolicyWeek, FuelSourceHealth } from './fuelPrice.js';
 import { SbBankingMetric, SbSyncRun } from './sbBankingMetric.js';
+import { AdminAuditEvent } from './adminAuditEvent.js';
+import { AuthSession } from './authSession.js';
 
 // ========================================
 // Legacy Associations (to be deprecated)
@@ -180,6 +182,10 @@ export {
     // Superintendencia de Bancos (SB) Models
     SbBankingMetric,
     SbSyncRun,
+
+    // Administrative audit ledger
+    AdminAuditEvent,
+    AuthSession,
 
     // Helpers
     toMinorUnits,

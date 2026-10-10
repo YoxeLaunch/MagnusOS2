@@ -7,6 +7,7 @@
 
 import { CurrencyHistory } from '../models/index.js';
 import { fxService } from '../services/fx/fxService.js';
+import { writeAdminAudit } from '../services/adminAuditService.js';
 
 const YAHOO_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36';
 const CACHE_TTL_MS = 60 * 1000; // 60s
@@ -468,6 +469,10 @@ export const refreshFxRates = async (req, res) => {
       data = await fxService.getRates(pair, { forceRefresh: true });
     }
 
+    await writeAdminAudit(req, {
+      action: 'fx.refresh', resourceType: 'fx_pair', resourceId: pair.toUpperCase(),
+      metadata: { pair: pair.toUpperCase() }
+    });
     return res.json({
       success: true,
       refreshed: true,
@@ -475,6 +480,10 @@ export const refreshFxRates = async (req, res) => {
     });
   } catch (error) {
     console.error('[FX_API] Error en refresco forzado:', error.message);
+    await writeAdminAudit(req, {
+      action: 'fx.refresh', resourceType: 'fx_pair', resourceId: String(req.body?.pair || req.query?.pair || 'USD/DOP').toUpperCase(),
+      outcome: 'failed', metadata: { error: 'provider_refresh_failed' }
+    });
     return res.status(500).json({ success: false, error: 'Fallo al forzar refresco de proveedores' });
   }
 };
@@ -490,6 +499,5 @@ export const handleSyncRates = async (req, res) => {
     return res.status(500).json({ error: error.message });
   }
 };
-
 
 
