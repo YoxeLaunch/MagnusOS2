@@ -133,7 +133,79 @@ export const getBacktestDetail = async (req, res) => {
 };
 
 /**
- * POST /api/markets/fx/research/run
+ * GET /api/markets/fx/research/forecasts/:id
+ * Forward out-of-sample prediction trajectory with 95% uncertainty intervals
+ */
+export const getForwardForecast = async (req, res) => {
+    try {
+        const modelId = req.params.id;
+        const horizon = parseInt(req.query.horizon || '1', 10);
+        const currency = (req.query.currency || 'USD').toUpperCase();
+        const provider = (req.query.provider || 'bcrd').toLowerCase();
+
+        const forecast = await quantitativeResearchService.getForwardForecast({
+            modelId,
+            horizon,
+            currency,
+            provider
+        });
+
+        res.setHeader('Cache-Control', 'public, max-age=180');
+        return res.json({
+            success: true,
+            data: forecast
+        });
+    } catch (error) {
+        console.error('[FX_RESEARCH] Error al generar pronóstico experimental:', error.message);
+        return res.status(500).json({ success: false, error: error.message });
+    }
+};
+
+/**
+ * GET /api/markets/fx/research/risk/volatility
+ * Complete conditional and realized volatility analytics (GARCH, EWMA, returns distribution)
+ */
+export const getRiskAnalytics = async (req, res) => {
+    try {
+        const currency = (req.query.currency || 'USD').toUpperCase();
+        const provider = (req.query.provider || 'bcrd').toLowerCase();
+
+        const risk = await quantitativeResearchService.getRiskAnalytics({
+            currency,
+            provider
+        });
+
+        res.setHeader('Cache-Control', 'public, max-age=300');
+        return res.json({
+            success: true,
+            data: risk
+        });
+    } catch (error) {
+        console.error('[FX_RESEARCH] Error al calcular analítica de riesgo:', error.message);
+        return res.status(500).json({ success: false, error: error.message });
+    }
+};
+
+/**
+ * GET /api/markets/fx/research/quality
+ * Data quality, historical censuses, documented anomalies and provider status
+ */
+export const getDataQualityMetrics = async (req, res) => {
+    try {
+        const quality = await quantitativeResearchService.getDataQualityMetrics();
+        res.setHeader('Cache-Control', 'public, max-age=120');
+        return res.json({
+            success: true,
+            data: quality
+        });
+    } catch (error) {
+        console.error('[FX_RESEARCH] Error al consultar calidad de datos:', error.message);
+        return res.status(500).json({ success: false, error: error.message });
+    }
+};
+
+/**
+ * POST /api/markets/fx/research/run & POST /api/markets/fx/research/backtests/run
  * Trigger full benchmark suite across all models
  */
 export const runResearchBenchmark = async (req, res) => {
