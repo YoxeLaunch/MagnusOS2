@@ -570,42 +570,216 @@ export class FxService {
     }
 
     /**
-     * Retorna la serie histórica de una institución o del mercado general filtrando por moneda
+     * Retorna la serie histórica de tasas con soporte multi-año, agregaciones temporales y paginación
+     * Compatible con firmas heredadas: getHistory(institutionId, days, baseCurrency)
+     * Compatible con objeto de opciones: getHistory({ institutionId, from, to, days, currency, provider, rateType, frequency, limit, page })
      */
-    async getHistory(institutionId, days = 30, baseCurrency = 'USD') {
-        const sinceDate = new Date();
-        sinceDate.setDate(sinceDate.getDate() - days);
-        const base = (baseCurrency || 'USD').toUpperCase();
-
-        const where = {
-            observedAt: { [Op.gte]: sinceDate },
-            baseCurrency: base
-        };
-
-        if (institutionId && institutionId !== 'general') {
-            where.institutionId = institutionId;
+    async getHistory(param1 = 'general', param2 = 30, param3 = 'USD') {
+        let options = {};
+        if (typeof param1 === 'object' && param1 !== null) {
+            options = param1;
+        } else {
+            options = {
+                institutionId: param1,
+                days: param2,
+                currency: param3
+            };
         }
 
-        const rows = await FxRateObservation.findAll({
-            where,
-            order: [['observed_at', 'ASC']],
-            limit: 1000
-        });
+        const institutionId = options.institutionId || 'general';
+        const baseCurrency = (options.currency || options.baseCurrency || 'USD').toUpperCase();
+        const provider = options.provider || options.source || null;
+        const rateType = options.rateType || null;
+        const frequency = (options.frequency || 'daily').toLowerCase();
+        const limit = Math.min(Math.max(parseInt(options.limit || '1000', 10), 1), 15000);
+        const page = Math.max(parseInt(options.page || '1', 10), 1);
+        const offset = options.offset !== undefined ? parseInt(options.offset, 10) : (page - 1) * limit;
 
-        return rows.map(r => ({
-            id: r.id,
-            institutionId: r.institutionId,
-            institutionName: r.institutionName,
-            baseCurrency: r.baseCurrency,
-            quoteCurrency: r.quoteCurrency,
-            buy: r.buy,
-            sell: r.sell,
-            mid: r.mid,
-            spread: r.spread,
-            timestamp: r.observedAt,
-            provider: r.provider,
-            validationStatus: r.validationStatus
-        }));
+        const whereConditions = [];
+        const bindParams = [];
+        let pIdx = 1;
+
+        if (baseCurrency !== 'ALL') {
+            whereConditions.push(`base_currency = $${pIdx++}`);
+            bindParams.push(baseCurrency);
+        }
+
+        if (institutionId && institutionId !== 'general') {
+            whereConditions.push(`institution_id = $${pIdx++}`);
+            bindParams.push(institutionId);
+        }
+
+        if (provider && provider.toUpperCase() !== 'ALL') {
+            whereConditions.push(`provider = $${pIdx++}`);
+            bindParams.push(provider.toLowerCase());
+        }
+
+        if (rateType && rateType.toUpperCase() !== 'ALL') {
+            whereConditions.push(`rate_type = $${pIdx++}`);
+            bindParams.push(rateType.toUpperCase());
+        }
+
+        // Date range filtering
+        if (options.from || options.to) {
+            if (options.from) {
+                const fromDate = String(options.from).split('T')[0];
+                whereConditions.push(`economic_date >= $${pIdx++}`);
+                bindParams.push(fromDate);
+            }
+            if (options.to) {
+                const toDate = String(options.to).split('T')[0];
+                whereConditions.push(`economic_date <= $${pIdx++}`);
+                bindParams.push(toDate);
+            }
+        } else if (options.days) {
+            const daysNum = parseInt(options.days, 10);
+            if (!isNaN(daysNum) && daysNum > 0) {
+                const sinceDate = new Date();
+                sinceDate.setDate(sinceDate.getDate() - daysNum);
+                const sinceStr = sinceDate.toISOString().split('T')[0];
+                whereConditions.push(`economic_date >= $${pIdx++}`);
+                bindParams.push(sinceStr);
+            }
+        }
+
+        const whereSql = whereConditions.length ? `WHERE ${whereConditions.join(' AND ')}` : '';
+
+        // Agregación Mensual
+        if (frequency === 'monthly') {
+            const countSql = `
+                SELECT COUNT(DISTINCT TO_CHAR(economic_date, 'YYYY-MM')) as total
+                FROM public.fx_rate_observations
+                ${whereSql};
+            `;
+            const [countRes] = await FxRateObservation.sequelize.query(countSql, { bind: bindParams });
+            const totalCount = parseInt(countRes[0]?.total || 0, 10);
+
+            const isGeneral = !options.institutionId || options.institutionId === 'general';
+            const instSelect = isGeneral ? `'general' as "institutionId"` : `institution_id as "institutionId"`;
+            const instGroupBy = isGeneral ? '' : ', institution_id';
+
+            const sql = `
+                SELECT 
+                    TO_CHAR(economic_date, 'YYYY-MM') as period,
+                    base_currency as "baseCurrency",
+                    quote_currency as "quoteCurrency",
+                    ${instSelect},
+                    ROUND(AVG(COALESCE(buy_exact, buy::numeric)), 4) as "avgBuy",
+                    ROUND(AVG(COALESCE(sell_exact, sell::numeric)), 4) as "avgSell",
+                    ROUND(MIN(COALESCE(buy_exact, buy::numeric)), 4) as "minBuy",
+                    ROUND(MAX(COALESCE(sell_exact, sell::numeric)), 4) as "maxSell",
+                    ROUND(AVG(COALESCE(spread_exact, spread::numeric)), 4) as "avgSpread",
+                    COUNT(*) as "observationCount"
+                FROM public.fx_rate_observations
+                ${whereSql}
+                GROUP BY TO_CHAR(economic_date, 'YYYY-MM'), base_currency, quote_currency ${instGroupBy}
+                ORDER BY period ASC
+                LIMIT $${pIdx++} OFFSET $${pIdx++};
+            `;
+            bindParams.push(limit, offset);
+            const [rows] = await FxRateObservation.sequelize.query(sql, { bind: bindParams });
+
+            return {
+                points: rows,
+                pagination: {
+                    totalCount,
+                    limit,
+                    page,
+                    totalPages: Math.ceil(totalCount / limit),
+                    hasMore: offset + rows.length < totalCount
+                }
+            };
+        }
+
+        // Agregación Anual
+        if (frequency === 'yearly') {
+            const countSql = `
+                SELECT COUNT(DISTINCT EXTRACT(YEAR FROM economic_date)) as total
+                FROM public.fx_rate_observations
+                ${whereSql};
+            `;
+            const [countRes] = await FxRateObservation.sequelize.query(countSql, { bind: bindParams });
+            const totalCount = parseInt(countRes[0]?.total || 0, 10);
+
+            const sql = `
+                SELECT 
+                    EXTRACT(YEAR FROM economic_date)::integer as year,
+                    base_currency as "baseCurrency",
+                    quote_currency as "quoteCurrency",
+                    ROUND(AVG(COALESCE(buy_exact, buy::numeric)), 4) as "avgBuy",
+                    ROUND(AVG(COALESCE(sell_exact, sell::numeric)), 4) as "avgSell",
+                    ROUND(MIN(COALESCE(buy_exact, buy::numeric)), 4) as "minBuy",
+                    ROUND(MAX(COALESCE(sell_exact, sell::numeric)), 4) as "maxSell",
+                    COUNT(*) as "observationCount"
+                FROM public.fx_rate_observations
+                ${whereSql}
+                GROUP BY EXTRACT(YEAR FROM economic_date), base_currency, quote_currency
+                ORDER BY year ASC
+                LIMIT $${pIdx++} OFFSET $${pIdx++};
+            `;
+            bindParams.push(limit, offset);
+            const [rows] = await FxRateObservation.sequelize.query(sql, { bind: bindParams });
+
+            return {
+                points: rows,
+                pagination: {
+                    totalCount,
+                    limit,
+                    page,
+                    totalPages: Math.ceil(totalCount / limit),
+                    hasMore: offset + rows.length < totalCount
+                }
+            };
+        }
+
+        // Frecuencia Diaria (Detalle transaccional normalizado)
+        const countSql = `
+            SELECT COUNT(*) as total
+            FROM public.fx_rate_observations
+            ${whereSql};
+        `;
+        const [countRes] = await FxRateObservation.sequelize.query(countSql, { bind: bindParams });
+        const totalCount = parseInt(countRes[0]?.total || 0, 10);
+
+        const sql = `
+            SELECT 
+                id,
+                observed_at as "observedAt",
+                economic_date as "economicDate",
+                provider,
+                institution_id as "institutionId",
+                institution_name as "institutionName",
+                rate_type as "rateType",
+                base_currency as "baseCurrency",
+                quote_currency as "quoteCurrency",
+                buy,
+                sell,
+                mid,
+                spread,
+                buy_exact as "buyExact",
+                sell_exact as "sellExact",
+                confidence,
+                validation_status as "validationStatus",
+                provenance_hash as "provenanceHash",
+                observed_at as timestamp
+            FROM public.fx_rate_observations
+            ${whereSql}
+            ORDER BY economic_date ASC, id ASC
+            LIMIT $${pIdx++} OFFSET $${pIdx++};
+        `;
+        bindParams.push(limit, offset);
+        const [rows] = await FxRateObservation.sequelize.query(sql, { bind: bindParams });
+
+        return {
+            points: rows,
+            pagination: {
+                totalCount,
+                limit,
+                page,
+                totalPages: Math.ceil(totalCount / limit),
+                hasMore: offset + rows.length < totalCount
+            }
+        };
     }
 
     /**
