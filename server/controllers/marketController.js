@@ -423,16 +423,44 @@ export const getFxRatesByPair = async (req, res) => {
 
 export const getFxHistory = async (req, res) => {
   try {
-    const institutionId = req.params.institution || 'general';
-    const days = parseInt(req.query.days || '30', 10);
+    const institutionId = req.params.institution || req.query.institution || 'general';
     const currency = (req.query.currency || 'USD').toUpperCase();
-    const history = await fxService.getHistory(institutionId, Math.min(days, 365), currency);
+    const from = req.query.from || null;
+    const to = req.query.to || null;
+    const days = req.query.days ? parseInt(req.query.days, 10) : (from || to ? null : 30);
+    const provider = req.query.provider || req.query.source || null;
+    const rateType = req.query.rateType || null;
+    const frequency = req.query.frequency || 'daily';
+    const defaultLimit = (frequency === 'monthly' || frequency === 'yearly' || (days && days > 730) || from) ? 15000 : 1000;
+    const limit = req.query.limit ? parseInt(req.query.limit, 10) : defaultLimit;
+    const page = req.query.page ? parseInt(req.query.page, 10) : 1;
+    const offset = req.query.offset ? parseInt(req.query.offset, 10) : undefined;
+
+    const result = await fxService.getHistory({
+      institutionId,
+      currency,
+      from,
+      to,
+      days,
+      provider,
+      rateType,
+      frequency,
+      limit,
+      page,
+      offset
+    });
+
+    res.setHeader('Cache-Control', 'public, max-age=60');
     return res.json({
       success: true,
       institutionId,
       currency,
-      days,
-      points: history
+      frequency,
+      days: days || undefined,
+      from: from || undefined,
+      to: to || undefined,
+      points: result.points,
+      pagination: result.pagination
     });
   } catch (error) {
     console.error('[FX_API] Error al obtener histórico FX:', error.message);
