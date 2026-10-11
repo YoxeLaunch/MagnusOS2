@@ -119,6 +119,7 @@ export const MarketIntel: React.FC<MarketIntelProps> = ({ embedded = false, vari
   const [calcAmount, setCalcAmount] = useState<number>(100);
   const [isFxModalOpen, setIsFxModalOpen] = useState(false);
   const [fxModalCurrency, setFxModalCurrency] = useState<'USD' | 'EUR'>('USD');
+  const [fxModalInitialTab, setFxModalInitialTab] = useState<'mercado' | 'pronosticos' | 'riesgo' | 'laboratorio' | 'macro' | 'calidad'>('mercado');
 
   // Extraer saldos reales de cuentas en USD y EUR de las cuentas de Magnus
   const { usdBalance, eurBalance } = useMemo(() => {
@@ -454,6 +455,19 @@ export const MarketIntel: React.FC<MarketIntelProps> = ({ embedded = false, vari
           </div>
 
           <div className="flex items-center gap-2.5 text-xs text-slate-500 dark:text-slate-400">
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setFxModalCurrency('USD');
+                setFxModalInitialTab('pronosticos');
+                setIsFxModalOpen(true);
+              }}
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-700 dark:text-cyan-300 border border-cyan-500/30 font-semibold text-[11px] transition-all cursor-pointer"
+            >
+              <Sparkles size={12} className="text-cyan-400" />
+              <span>Pronósticos Nivel 3</span>
+            </button>
             <span className="hidden sm:inline">Multifuente: BCRD • TasaReal • InfoDolar</span>
             <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/40 font-semibold text-[11px]">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
@@ -468,6 +482,7 @@ export const MarketIntel: React.FC<MarketIntelProps> = ({ embedded = false, vari
           <div
             onClick={() => {
               setFxModalCurrency('USD');
+              setFxModalInitialTab('mercado');
               setIsFxModalOpen(true);
             }}
             className="p-6 hover:bg-slate-50/60 dark:hover:bg-white/[0.02] transition-all cursor-pointer group flex flex-col justify-between"
@@ -542,6 +557,7 @@ export const MarketIntel: React.FC<MarketIntelProps> = ({ embedded = false, vari
           <div
             onClick={() => {
               setFxModalCurrency('EUR');
+              setFxModalInitialTab('mercado');
               setIsFxModalOpen(true);
             }}
             className="p-6 hover:bg-slate-50/60 dark:hover:bg-white/[0.02] transition-all cursor-pointer group flex flex-col justify-between"
@@ -1133,6 +1149,7 @@ export const MarketIntel: React.FC<MarketIntelProps> = ({ embedded = false, vari
         isOpen={isFxModalOpen}
         onClose={() => setIsFxModalOpen(false)}
         initialCurrency={fxModalCurrency}
+        initialTab={fxModalInitialTab}
       />
 
     </section>
