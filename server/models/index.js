@@ -13,6 +13,7 @@ import { MonthlySnapshot } from './monthlySnapshot.js';
 import { FinancialAnomaly } from './anomaly.js';
 import { FxRateObservation } from './fxObservation.js';
 import { FxProviderHealth } from './fxProviderHealth.js';
+import { FxResearchExperiment, FxResearchForecast } from './fxResearch.js';
 import { MacroIndicator, MacroObservation, MacroSourceHealth } from './macroIndicator.js';
 import { MagnusEvent, MagnusNotification } from './magnusEvent.js';
 import { FuelCatalog, FuelPriceObservation, FuelPolicyWeek, FuelSourceHealth } from './fuelPrice.js';
@@ -163,6 +164,8 @@ export {
     // FX Market Service Models (Providence FX)
     FxRateObservation,
     FxProviderHealth,
+    FxResearchExperiment,
+    FxResearchForecast,
 
     // Macro RD Models
     MacroIndicator,

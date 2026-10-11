@@ -11,6 +11,7 @@ import {
     handleSyncRates
 } from '../controllers/marketController.js';
 import { requireAuthenticated, requireAdmin } from '../middleware/auth.js';
+import fxResearchRoutes from './fxResearch.routes.js';
 
 const router = Router();
 
@@ -30,5 +31,8 @@ router.get('/fx/history/:institution', getFxHistory);
 router.get('/fx/evaluation/tasareal', getTasaRealEvaluation);
 // A forced refresh consumes external-provider capacity; restrict it server-side.
 router.post('/fx/refresh', requireAuthenticated, requireAdmin, refreshFxRates);
+
+// Laboratorio Econométrico Experimental de Nivel 3 (Decoupled Research Engine)
+router.use('/fx/research', fxResearchRoutes);
 
 export default router;
