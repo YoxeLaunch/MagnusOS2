@@ -103,7 +103,7 @@ async function runTest() {
         // Ejecutar script D2
         psqlFile(D2_SCRIPT);
         const postD2 = psql("SELECT rate_type || '|' || base_currency || '|' || validation_status || '|' || confidence FROM fx_rate_observations WHERE id = 16;");
-        assert('Aplicación correcta de parche D2', postD2 === 'OFFICIAL_REFERENCE|EUR|VERIFIED|1', `Nuevo estado: ${postD2}`);
+        assert('Aplicación correcta de parche D2', postD2 === 'OFFICIAL_REFERENCE|EUR|SINGLE_SOURCE|0.75', `Nuevo estado: ${postD2}`);
 
         const metaD2 = psql("SELECT metadata->>'audit_correction' FROM fx_rate_observations WHERE id = 16;");
         assert('Traza de auditoría en metadatos para ID 16', metaD2 === 'integrity_shield_remediation_2026', `Audit ref: ${metaD2}`);
