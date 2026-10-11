@@ -12,7 +12,9 @@ import {
   Euro,
   X,
   ExternalLink,
-  Info
+  Info,
+  Maximize2,
+  Minimize2
 } from 'lucide-react';
 import { FxCurrency, FxIntelligenceTab } from './types';
 import { useFxIntelligence } from './hooks/useFxIntelligence';
@@ -22,6 +24,7 @@ import { FxRiskPanel } from './components/FxRiskPanel';
 import { FxResearchLab } from './components/FxResearchLab';
 import { FxMacroPanel } from './components/FxMacroPanel';
 import { FxDataQualityPanel } from './components/FxDataQualityPanel';
+import { ProvidenceErrorBoundary } from './components/ProvidenceErrorBoundary';
 import { FxRatesResponse } from '../../types';
 import { apiFetch } from '../../../../shared/utils/apiFetch';
 
@@ -38,6 +41,7 @@ export const ProvidenceFxIntelligence: React.FC<ProvidenceFxIntelligenceProps> =
   onClose,
   isModal = false
 }) => {
+  const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
   const {
     activeCurrency,
     setActiveCurrency,
@@ -59,6 +63,7 @@ export const ProvidenceFxIntelligence: React.FC<ProvidenceFxIntelligenceProps> =
     fetchRisk,
     experiments,
     experimentsLoading,
+    experimentsError,
     fetchExperiments,
     dataQuality,
     qualityLoading,
@@ -121,8 +126,12 @@ export const ProvidenceFxIntelligence: React.FC<ProvidenceFxIntelligenceProps> =
     { id: 'calidad', label: 'Calidad de Datos', icon: <ShieldCheck size={15} /> }
   ];
 
+  const containerClasses = isFullscreen
+    ? 'fixed inset-0 z-50 bg-neutral-950 text-slate-100 flex flex-col p-2 sm:p-4'
+    : `w-full text-slate-100 flex flex-col ${isModal ? 'max-h-[92vh]' : 'min-h-[700px]'}`;
+
   return (
-    <div className={`w-full text-slate-100 flex flex-col ${isModal ? 'max-h-[92vh]' : 'min-h-[700px]'}`}>
+    <div className={containerClasses}>
       {/* Header Institucional de Providence FX Intelligence */}
       <div className="bg-neutral-950/90 border-b border-neutral-800 p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shrink-0">
         <div className="flex items-center gap-3.5">
@@ -146,8 +155,8 @@ export const ProvidenceFxIntelligence: React.FC<ProvidenceFxIntelligenceProps> =
           </div>
         </div>
 
-        {/* Controles de Divisa y Cierre */}
-        <div className="flex items-center gap-3 shrink-0">
+        {/* Controles de Divisa, Pantalla Completa y Cierre */}
+        <div className="flex items-center gap-2 sm:gap-3 shrink-0 flex-wrap">
           {/* Selector de Divisa */}
           <div className="flex rounded-xl bg-neutral-900 p-1 border border-neutral-800 text-xs font-mono font-bold">
             <button
@@ -186,6 +195,16 @@ export const ProvidenceFxIntelligence: React.FC<ProvidenceFxIntelligenceProps> =
             <RefreshCw size={16} className={marketLoading || forecastLoading || riskLoading ? 'animate-spin text-cyan-400' : ''} />
           </button>
 
+          {/* Botón Pantalla Completa (Full Screen) */}
+          <button
+            type="button"
+            onClick={() => setIsFullscreen(!isFullscreen)}
+            title={isFullscreen ? 'Salir de pantalla completa' : 'Modo pantalla completa'}
+            className="p-2 rounded-xl bg-neutral-900 hover:bg-neutral-800 text-slate-400 hover:text-white border border-neutral-800 transition-colors cursor-pointer"
+          >
+            {isFullscreen ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
+          </button>
+
           {/* Botón Cerrar (en caso de Modal) */}
           {isModal && onClose && (
             <button
@@ -200,8 +219,8 @@ export const ProvidenceFxIntelligence: React.FC<ProvidenceFxIntelligenceProps> =
         </div>
       </div>
 
-      {/* Barra de Pestañas de Navegación Interna */}
-      <div className="bg-neutral-950/60 border-b border-neutral-800/80 px-4 sm:px-6 py-2.5 flex items-center gap-2 overflow-x-auto shrink-0 scrollbar-none">
+      {/* Barra de Pestañas de Navegación Interna Adaptable */}
+      <div className="bg-neutral-950/60 border-b border-neutral-800/80 px-4 sm:px-6 py-2 flex items-center gap-2 overflow-x-auto shrink-0 scroll-smooth scrollbar-thin scrollbar-thumb-neutral-800">
         {tabs.map(tab => {
           const isActive = activeTab === tab.id;
           return (
@@ -209,7 +228,7 @@ export const ProvidenceFxIntelligence: React.FC<ProvidenceFxIntelligenceProps> =
               key={tab.id}
               type="button"
               onClick={() => setActiveTab(tab.id)}
-              className={`px-3.5 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 whitespace-nowrap transition-all cursor-pointer ${
+              className={`px-3 py-1.5 sm:px-3.5 sm:py-2 rounded-xl text-xs font-semibold flex items-center gap-2 whitespace-nowrap transition-all cursor-pointer ${
                 isActive
                   ? 'bg-neutral-800 text-white shadow-sm border border-neutral-700/80'
                   : 'text-slate-400 hover:text-slate-200 hover:bg-neutral-900/60'
@@ -231,64 +250,79 @@ export const ProvidenceFxIntelligence: React.FC<ProvidenceFxIntelligenceProps> =
         })}
       </div>
 
-      {/* Área de Contenido Principal (Scrollable) */}
+      {/* Área de Contenido Principal (Scrollable y Aislada con Error Boundaries) */}
       <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6">
         {activeTab === 'mercado' && (
-          <FxMarketPanel
-            activeCurrency={activeCurrency}
-            data={marketData}
-            loading={marketLoading}
-            onNavigateToForecast={() => setActiveTab('pronosticos')}
-            onNavigateToRisk={() => setActiveTab('riesgo')}
-          />
+          <ProvidenceErrorBoundary section="Mercado y Cotizaciones">
+            <FxMarketPanel
+              activeCurrency={activeCurrency}
+              data={marketData}
+              loading={marketLoading}
+              onNavigateToForecast={() => setActiveTab('pronosticos')}
+              onNavigateToRisk={() => setActiveTab('riesgo')}
+            />
+          </ProvidenceErrorBoundary>
         )}
 
         {activeTab === 'pronosticos' && (
-          <FxForecastPanel
-            activeCurrency={activeCurrency}
-            models={models}
-            modelsLoading={modelsLoading}
-            selectedModelId={selectedModelId}
-            setSelectedModelId={setSelectedModelId}
-            selectedHorizon={selectedHorizon}
-            setSelectedHorizon={setSelectedHorizon}
-            forecast={forecast}
-            forecastLoading={forecastLoading}
-            forecastError={forecastError}
-            onRefresh={() => fetchForecast(activeCurrency, selectedModelId, selectedHorizon)}
-          />
+          <ProvidenceErrorBoundary section="Pronósticos Econométricos">
+            <FxForecastPanel
+              activeCurrency={activeCurrency}
+              models={models}
+              modelsLoading={modelsLoading}
+              selectedModelId={selectedModelId}
+              setSelectedModelId={setSelectedModelId}
+              selectedHorizon={selectedHorizon}
+              setSelectedHorizon={setSelectedHorizon}
+              forecast={forecast}
+              forecastLoading={forecastLoading}
+              forecastError={forecastError}
+              onRefresh={() => fetchForecast(activeCurrency, selectedModelId, selectedHorizon)}
+            />
+          </ProvidenceErrorBoundary>
         )}
 
         {activeTab === 'riesgo' && (
-          <FxRiskPanel
-            activeCurrency={activeCurrency}
-            riskData={riskData}
-            loading={riskLoading}
-            error={riskError}
-          />
+          <ProvidenceErrorBoundary section="Riesgo & Volatilidad GARCH">
+            <FxRiskPanel
+              activeCurrency={activeCurrency}
+              riskData={riskData}
+              loading={riskLoading}
+              error={riskError}
+              onRetry={() => fetchRisk(activeCurrency)}
+            />
+          </ProvidenceErrorBoundary>
         )}
 
         {activeTab === 'laboratorio' && (
-          <FxResearchLab
-            activeCurrency={activeCurrency}
-            models={models}
-            experiments={experiments}
-            experimentsLoading={experimentsLoading}
-            benchmarkRunning={benchmarkRunning}
-            onRunBenchmark={triggerBenchmarkRun}
-          />
+          <ProvidenceErrorBoundary section="Laboratorio Cuantitativo">
+            <FxResearchLab
+              activeCurrency={activeCurrency}
+              models={models}
+              experiments={experiments}
+              experimentsLoading={experimentsLoading}
+              experimentsError={experimentsError}
+              onRetryExperiments={() => fetchExperiments(activeCurrency)}
+              benchmarkRunning={benchmarkRunning}
+              onRunBenchmark={triggerBenchmarkRun}
+            />
+          </ProvidenceErrorBoundary>
         )}
 
         {activeTab === 'macro' && (
-          <FxMacroPanel />
+          <ProvidenceErrorBoundary section="Inteligencia Macroeconómica">
+            <FxMacroPanel />
+          </ProvidenceErrorBoundary>
         )}
 
         {activeTab === 'calidad' && (
-          <FxDataQualityPanel
-            dataQuality={dataQuality}
-            loading={qualityLoading}
-            error={qualityError}
-          />
+          <ProvidenceErrorBoundary section="Calidad de Datos y Censos">
+            <FxDataQualityPanel
+              dataQuality={dataQuality}
+              loading={qualityLoading}
+              error={qualityError}
+            />
+          </ProvidenceErrorBoundary>
         )}
       </div>
 

@@ -54,41 +54,42 @@ export const getSeriesStats = async (req, res) => {
 
 /**
  * GET /api/markets/fx/research/experiments
- * List of registered experiments with metrics
+ * List of registered experiments with metrics strictly adhering to the canonical contract
  */
 export const getResearchExperiments = async (req, res) => {
     try {
         const currency = (req.query.currency || 'USD').toUpperCase();
-
-        if (FxResearchExperiment) {
-            const experiments = await FxResearchExperiment.findAll({
-                where: { baseCurrency: currency },
-                order: [['created_at', 'DESC']],
-                limit: 50
-            });
-            if (experiments && experiments.length > 0) {
-                return res.json({
-                    success: true,
-                    count: experiments.length,
-                    experiments
-                });
-            }
+        if (!['USD', 'EUR'].includes(currency)) {
+            return res.status(400).json({ success: false, error: 'Moneda no soportada. Permitidas: USD, EUR' });
         }
 
-        // If no DB experiments yet, execute benchmark on the fly with fast step
-        const suite = await quantitativeResearchService.runBenchmarkSuite({
-            currency,
-            stepSize: 5
-        });
+        const experiments = await quantitativeResearchService.getPersistedExperiments({ currency });
 
         return res.json({
             success: true,
-            count: suite.benchmarkLeaderboard.length,
-            experiments: suite.benchmarkLeaderboard
+            count: experiments.length,
+            experiments
         });
     } catch (error) {
         console.error('[FX_RESEARCH] Error al consultar experimentos:', error.message);
         return res.status(500).json({ success: false, error: 'Error al consultar experimentos registrados' });
+    }
+};
+
+/**
+ * GET /api/markets/fx/research/backtests/status
+ * Check current execution status of quantitative benchmark suite
+ */
+export const getBenchmarkStatus = async (req, res) => {
+    try {
+        const status = quantitativeResearchService.getBenchmarkStatus();
+        return res.json({
+            success: true,
+            status
+        });
+    } catch (error) {
+        console.error('[FX_RESEARCH] Error al consultar estado de benchmark:', error.message);
+        return res.status(500).json({ success: false, error: error.message });
     }
 };
 
@@ -212,7 +213,27 @@ export const runResearchBenchmark = async (req, res) => {
     try {
         const horizon = parseInt(req.body?.horizon || req.query?.horizon || '1', 10);
         const currency = (req.body?.currency || req.query?.currency || 'USD').toUpperCase();
-        const stepSize = parseInt(req.body?.stepSize || '3', 10); // Resource-safe step
+        let stepSize = parseInt(req.body?.stepSize || req.query?.stepSize || '3', 10);
+
+        if (!['USD', 'EUR'].includes(currency)) {
+            return res.status(400).json({
+                success: false,
+                error: 'Parámetro de moneda inválido. Opciones válidas: USD, EUR'
+            });
+        }
+
+        if (![1, 5, 20, 60].includes(horizon)) {
+            return res.status(400).json({
+                success: false,
+                error: 'Horizonte no admitido. Opciones válidas: 1, 5, 20, 60 días hábiles'
+            });
+        }
+
+        if (isNaN(stepSize) || stepSize < 2) {
+            stepSize = 3;
+        } else if (stepSize > 10) {
+            stepSize = 10;
+        }
 
         const benchmark = await quantitativeResearchService.runBenchmarkSuite({
             horizon,
@@ -226,6 +247,21 @@ export const runResearchBenchmark = async (req, res) => {
         });
     } catch (error) {
         console.error('[FX_RESEARCH] Error al ejecutar suite de benchmark:', error.message);
-        return res.status(500).json({ success: false, error: 'Fallo al ejecutar benchmark cuantitativo' });
+        if (error.code === 'BENCHMARK_CONCURRENT_BLOCKED') {
+            return res.status(409).json({
+                success: false,
+                error: error.message || 'Ya existe un benchmark en curso en este momento'
+            });
+        }
+        if (error.code === 'BENCHMARK_TIMED_OUT') {
+            return res.status(504).json({
+                success: false,
+                error: error.message || 'El benchmark excedió el tiempo límite permitido'
+            });
+        }
+        return res.status(500).json({
+            success: false,
+            error: error.message || 'Fallo al ejecutar benchmark cuantitativo'
+        });
     }
 };

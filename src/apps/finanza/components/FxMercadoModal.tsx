@@ -42,6 +42,8 @@ import { FxRiskPanel } from './providence-fx-intelligence/components/FxRiskPanel
 import { FxResearchLab } from './providence-fx-intelligence/components/FxResearchLab';
 import { FxMacroPanel } from './providence-fx-intelligence/components/FxMacroPanel';
 import { FxDataQualityPanel } from './providence-fx-intelligence/components/FxDataQualityPanel';
+import { ProvidenceErrorBoundary } from './providence-fx-intelligence';
+import { apiFetch } from '../../../shared/utils/apiFetch';
 
 interface FxMercadoModalProps {
   isOpen: boolean;
@@ -108,20 +110,22 @@ export const FxMercadoModal: React.FC<FxMercadoModalProps> = ({ isOpen, onClose,
       const options: RequestInit = { method };
 
       if (force) {
-        options.headers = { 'Content-Type': 'application/json' };
         options.body = JSON.stringify({ pair: `${currencyToFetch}/DOP` });
       }
 
-      const res = await fetch(url, options);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const res = await apiFetch(url, options);
+      if (!res.ok) {
+        const errorJson = await res.json().catch(() => null);
+        throw new Error(errorJson?.error || `HTTP ${res.status}`);
+      }
 
       const json = await res.json();
       const payload = force ? json.data : json;
       if (payload && payload.banks) {
         setData(payload);
       }
-    } catch (err) {
-      console.error(`[FxMercadoModal] Error cargando tasas FX (${currencyToFetch}):`, err);
+    } catch (err: any) {
+      console.error(`[FxMercadoModal] Error cargando tasas FX (${currencyToFetch}):`, err.message || err);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -146,7 +150,7 @@ export const FxMercadoModal: React.FC<FxMercadoModalProps> = ({ isOpen, onClose,
       const isMultiYear = range === '5Y' || range === '10Y' || range === 'MAX';
       const freqParam = isMultiYear ? '&frequency=monthly' : '';
 
-      const res = await fetch(`/api/markets/fx/history/${encodeURIComponent(instId)}?days=${days}&currency=${currencyToFetch}${freqParam}`);
+      const res = await apiFetch(`/api/markets/fx/history/${encodeURIComponent(instId)}?days=${days}&currency=${currencyToFetch}${freqParam}`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
       const json = await res.json();
@@ -163,7 +167,7 @@ export const FxMercadoModal: React.FC<FxMercadoModalProps> = ({ isOpen, onClose,
   // 3. Cargar evaluación TasaReal
   const fetchEvaluation = useCallback(async (currencyToFetch = activeCurrency) => {
     try {
-      const res = await fetch(`/api/markets/fx/evaluation/tasareal?days=29&currency=${currencyToFetch}`);
+      const res = await apiFetch(`/api/markets/fx/evaluation/tasareal?days=29&currency=${currencyToFetch}`);
       if (res.ok) {
         const json = await res.json();
         setEvaluationData(json.evaluation);
@@ -1239,19 +1243,21 @@ export const FxMercadoModal: React.FC<FxMercadoModalProps> = ({ isOpen, onClose,
       {/* ========================================================================= */}
       {activeTab === 'pronosticos' && (
         <div className="flex-1 overflow-y-auto px-6 py-5 space-y-6 custom-scrollbar">
-          <FxForecastPanel
-            activeCurrency={activeCurrency}
-            models={intel.models}
-            modelsLoading={intel.modelsLoading}
-            selectedModelId={intel.selectedModelId}
-            setSelectedModelId={intel.setSelectedModelId}
-            selectedHorizon={intel.selectedHorizon}
-            setSelectedHorizon={intel.setSelectedHorizon}
-            forecast={intel.forecast}
-            forecastLoading={intel.forecastLoading}
-            forecastError={intel.forecastError}
-            onRefresh={() => intel.fetchForecast(activeCurrency, intel.selectedModelId, intel.selectedHorizon)}
-          />
+          <ProvidenceErrorBoundary section="Pronósticos Econométricos">
+            <FxForecastPanel
+              activeCurrency={activeCurrency}
+              models={intel.models}
+              modelsLoading={intel.modelsLoading}
+              selectedModelId={intel.selectedModelId}
+              setSelectedModelId={intel.setSelectedModelId}
+              selectedHorizon={intel.selectedHorizon}
+              setSelectedHorizon={intel.setSelectedHorizon}
+              forecast={intel.forecast}
+              forecastLoading={intel.forecastLoading}
+              forecastError={intel.forecastError}
+              onRefresh={() => intel.fetchForecast(activeCurrency, intel.selectedModelId, intel.selectedHorizon)}
+            />
+          </ProvidenceErrorBoundary>
         </div>
       )}
 
@@ -1260,12 +1266,15 @@ export const FxMercadoModal: React.FC<FxMercadoModalProps> = ({ isOpen, onClose,
       {/* ========================================================================= */}
       {activeTab === 'riesgo' && (
         <div className="flex-1 overflow-y-auto px-6 py-5 space-y-6 custom-scrollbar">
-          <FxRiskPanel
-            activeCurrency={activeCurrency}
-            riskData={intel.riskData}
-            loading={intel.riskLoading}
-            error={intel.riskError}
-          />
+          <ProvidenceErrorBoundary section="Riesgo & Volatilidad GARCH">
+            <FxRiskPanel
+              activeCurrency={activeCurrency}
+              riskData={intel.riskData}
+              loading={intel.riskLoading}
+              error={intel.riskError}
+              onRetry={() => intel.fetchRisk(activeCurrency)}
+            />
+          </ProvidenceErrorBoundary>
         </div>
       )}
 
@@ -1274,14 +1283,18 @@ export const FxMercadoModal: React.FC<FxMercadoModalProps> = ({ isOpen, onClose,
       {/* ========================================================================= */}
       {activeTab === 'laboratorio' && (
         <div className="flex-1 overflow-y-auto px-6 py-5 space-y-6 custom-scrollbar">
-          <FxResearchLab
-            activeCurrency={activeCurrency}
-            models={intel.models}
-            experiments={intel.experiments}
-            experimentsLoading={intel.experimentsLoading}
-            benchmarkRunning={intel.benchmarkRunning}
-            onRunBenchmark={intel.triggerBenchmarkRun}
-          />
+          <ProvidenceErrorBoundary section="Laboratorio Cuantitativo">
+            <FxResearchLab
+              activeCurrency={activeCurrency}
+              models={intel.models}
+              experiments={intel.experiments}
+              experimentsLoading={intel.experimentsLoading}
+              experimentsError={intel.experimentsError}
+              onRetryExperiments={() => intel.fetchExperiments(activeCurrency)}
+              benchmarkRunning={intel.benchmarkRunning}
+              onRunBenchmark={intel.triggerBenchmarkRun}
+            />
+          </ProvidenceErrorBoundary>
         </div>
       )}
 
@@ -1290,7 +1303,9 @@ export const FxMercadoModal: React.FC<FxMercadoModalProps> = ({ isOpen, onClose,
       {/* ========================================================================= */}
       {activeTab === 'macro' && (
         <div className="flex-1 overflow-y-auto px-6 py-5 space-y-6 custom-scrollbar">
-          <FxMacroPanel />
+          <ProvidenceErrorBoundary section="Inteligencia Macroeconómica">
+            <FxMacroPanel />
+          </ProvidenceErrorBoundary>
         </div>
       )}
 
@@ -1299,11 +1314,13 @@ export const FxMercadoModal: React.FC<FxMercadoModalProps> = ({ isOpen, onClose,
       {/* ========================================================================= */}
       {activeTab === 'calidad' && (
         <div className="flex-1 overflow-y-auto px-6 py-5 space-y-6 custom-scrollbar">
-          <FxDataQualityPanel
-            dataQuality={intel.dataQuality}
-            loading={intel.qualityLoading}
-            error={intel.qualityError}
-          />
+          <ProvidenceErrorBoundary section="Calidad de Datos y Censos">
+            <FxDataQualityPanel
+              dataQuality={intel.dataQuality}
+              loading={intel.qualityLoading}
+              error={intel.qualityError}
+            />
+          </ProvidenceErrorBoundary>
         </div>
       )}
 

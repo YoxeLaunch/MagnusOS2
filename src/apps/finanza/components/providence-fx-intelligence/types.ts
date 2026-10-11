@@ -38,16 +38,23 @@ export interface FxBenchmarkMetrics {
 }
 
 export interface FxBenchmarkExperiment {
+  id?: string;
   experimentId: string;
   modelId: string;
   modelName: string;
   category: string;
+  currency?: string;
+  baseCurrency?: string;
+  quoteCurrency?: string;
   horizon: number;
+  horizonDays?: number;
   metrics: FxBenchmarkMetrics;
   runtimeMs: number;
   forecastCount: number;
+  observationsCount?: number;
   testRange?: string;
   datasetHash?: string;
+  createdAt?: string;
 }
 
 export interface FxForecastTrajectoryPoint {

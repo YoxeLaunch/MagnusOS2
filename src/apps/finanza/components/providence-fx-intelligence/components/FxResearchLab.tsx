@@ -23,6 +23,8 @@ interface FxResearchLabProps {
   models: FxModelCatalogItem[];
   experiments: FxBenchmarkExperiment[];
   experimentsLoading: boolean;
+  experimentsError?: string | null;
+  onRetryExperiments?: () => void;
   benchmarkRunning: boolean;
   onRunBenchmark: (horizon: number, stepSize: number) => Promise<any>;
 }
@@ -32,6 +34,8 @@ export const FxResearchLab: React.FC<FxResearchLabProps> = ({
   models,
   experiments,
   experimentsLoading,
+  experimentsError,
+  onRetryExperiments,
   benchmarkRunning,
   onRunBenchmark
 }) => {
@@ -272,33 +276,80 @@ export const FxResearchLab: React.FC<FxResearchLabProps> = ({
               <Database size={16} className="text-purple-400" />
               <span>Registro de Experimentos Persistidos</span>
             </h4>
-            <span className="text-xs text-slate-400 font-mono">{experiments.length} experimentos</span>
+            <span className="text-xs text-slate-400 font-mono">
+              {experimentsLoading ? 'Consultando...' : `${experiments.length} experimentos`}
+            </span>
           </div>
 
-          <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
-            {experiments.map(exp => (
-              <div
-                key={exp.experimentId}
-                onClick={() => setSelectedExperiment(exp)}
-                className="p-3 rounded-xl bg-neutral-950 border border-neutral-800/80 hover:border-neutral-700 transition-colors cursor-pointer text-xs space-y-1.5"
-              >
-                <div className="flex items-center justify-between font-mono">
-                  <span className="text-white font-bold truncate max-w-[200px]">{exp.modelName}</span>
-                  <span className="text-cyan-400">h={exp.horizon}d</span>
-                </div>
-                <div className="flex items-center justify-between text-[11px] text-slate-400 font-mono">
-                  <span>ID: {exp.experimentId.slice(0, 18)}...</span>
-                  <span>RMSE: {exp.metrics?.rmse?.toFixed(4)}</span>
-                </div>
-                {exp.datasetHash && (
-                  <div className="text-[10px] text-slate-500 font-mono flex items-center gap-1">
-                    <Hash size={10} />
-                    <span>Hash SHA-256: {exp.datasetHash.slice(0, 16)}...</span>
-                  </div>
-                )}
+          {experimentsLoading && (
+            <div className="py-8 flex flex-col items-center justify-center gap-2 text-xs text-slate-400 bg-neutral-950 rounded-xl border border-neutral-800">
+              <RotateCcw size={16} className="animate-spin text-purple-400" />
+              <span>Consultando historial de experimentos en PostgreSQL...</span>
+            </div>
+          )}
+
+          {!experimentsLoading && experimentsError && (
+            <div className="p-4 bg-rose-950/40 border border-rose-900/60 rounded-xl space-y-2 text-xs">
+              <div className="flex items-center gap-2 text-rose-300 font-semibold">
+                <AlertTriangle size={15} />
+                <span>Error al consultar experimentos registrados</span>
               </div>
-            ))}
-          </div>
+              <p className="text-slate-400 text-[11px]">{experimentsError}</p>
+              {onRetryExperiments && (
+                <button
+                  type="button"
+                  onClick={onRetryExperiments}
+                  className="px-3 py-1 bg-neutral-800 hover:bg-neutral-700 text-slate-200 rounded-lg text-[11px] font-medium cursor-pointer"
+                >
+                  Reintentar consulta
+                </button>
+              )}
+            </div>
+          )}
+
+          {!experimentsLoading && !experimentsError && experiments.length === 0 && (
+            <div className="p-6 bg-neutral-950 rounded-xl border border-neutral-800 text-center space-y-2 text-xs text-slate-400">
+              <Database size={20} className="mx-auto text-slate-600" />
+              <p className="text-slate-300 font-medium">No hay experimentos registrados para {activeCurrency}</p>
+              <p className="text-[11px] text-slate-500">
+                Inicia una ejecución experimental mediante la consola de la derecha para registrar el primer benchmark out-of-sample.
+              </p>
+            </div>
+          )}
+
+          {!experimentsLoading && !experimentsError && experiments.length > 0 && (
+            <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+              {experiments.map(exp => {
+                const expId = exp.experimentId || exp.id || '';
+                const hash = exp.datasetHash || '';
+                const horizonDays = exp.horizon ?? exp.horizonDays ?? 1;
+                const rmseVal = exp.metrics?.rmse != null ? exp.metrics.rmse.toFixed(4) : '--';
+
+                return (
+                  <div
+                    key={expId || `${exp.modelId}_${horizonDays}`}
+                    onClick={() => setSelectedExperiment(exp)}
+                    className="p-3 rounded-xl bg-neutral-950 border border-neutral-800/80 hover:border-neutral-700 transition-colors cursor-pointer text-xs space-y-1.5"
+                  >
+                    <div className="flex items-center justify-between font-mono">
+                      <span className="text-white font-bold truncate max-w-[200px]">{exp.modelName || exp.modelId}</span>
+                      <span className="text-cyan-400">h={horizonDays}d</span>
+                    </div>
+                    <div className="flex items-center justify-between text-[11px] text-slate-400 font-mono">
+                      <span>ID: {expId ? `${expId.slice(0, 18)}...` : 'ID: N/A'}</span>
+                      <span>RMSE: {rmseVal}</span>
+                    </div>
+                    {hash && (
+                      <div className="text-[10px] text-slate-500 font-mono flex items-center gap-1">
+                        <Hash size={10} />
+                        <span>Hash SHA-256: {hash.slice(0, 16)}...</span>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
 
         {/* Consola Administrativa de Ejecución Controlada */}
@@ -453,9 +504,9 @@ export const FxResearchLab: React.FC<FxResearchLabProps> = ({
             </div>
 
             <div className="p-3 bg-neutral-950 rounded-xl border border-neutral-800 text-[11px] font-mono text-slate-400 space-y-1">
-              <p>ID: {selectedExperiment.experimentId}</p>
-              <p>Tiempo de ejecución: {selectedExperiment.runtimeMs} ms</p>
-              <p>Pronósticos evaluados: {selectedExperiment.forecastCount}</p>
+              <p>ID: {selectedExperiment.experimentId || selectedExperiment.id || 'N/A'}</p>
+              <p>Tiempo de ejecución: {selectedExperiment.runtimeMs ?? 0} ms</p>
+              <p>Pronósticos evaluados: {selectedExperiment.forecastCount ?? selectedExperiment.observationsCount ?? 0}</p>
             </div>
 
             <div className="flex justify-end">

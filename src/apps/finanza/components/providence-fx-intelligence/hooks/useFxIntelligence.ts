@@ -108,21 +108,28 @@ export function useFxIntelligence(initialCurrency: FxCurrency = 'USD') {
       const url = `/api/markets/fx/research/risk/volatility?currency=${currency}&provider=bcrd`;
       const res = await apiFetch(url, { signal: abortController.signal });
       if (!res.ok) {
-        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+        const errorJson = await res.json().catch(() => null);
+        throw new Error(errorJson?.error || `HTTP ${res.status}: ${res.statusText}`);
       }
       const json = await res.json();
       if (json.success && json.data) {
-        setRiskData(json.data);
+        if (riskAbortRef.current === abortController) {
+          setRiskData(json.data);
+        }
       } else {
         throw new Error(json.error || 'Respuesta vacía de volatilidad');
       }
     } catch (err: any) {
       if (err.name !== 'AbortError') {
         console.warn('[FxIntelligence] Risk fetch warning:', err.message);
-        setRiskError(err.message || 'No fue posible cargar métricas de riesgo');
+        if (riskAbortRef.current === abortController) {
+          setRiskError(err.message || 'No fue posible cargar métricas de riesgo');
+        }
       }
     } finally {
-      setRiskLoading(false);
+      if (riskAbortRef.current === abortController) {
+        setRiskLoading(false);
+      }
     }
   }, [activeCurrency]);
 
@@ -132,10 +139,21 @@ export function useFxIntelligence(initialCurrency: FxCurrency = 'USD') {
       setExperimentsLoading(true);
       setExperimentsError(null);
       const res = await apiFetch(`/api/markets/fx/research/experiments?currency=${currency}`);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => null);
+        throw new Error(errJson?.error || `HTTP ${res.status}`);
+      }
       const json = await res.json();
       if (json.success && Array.isArray(json.experiments)) {
-        setExperiments(json.experiments);
+        const normalized = json.experiments.map((exp: any) => ({
+          ...exp,
+          id: exp.id || exp.experimentId || `exp_${exp.modelId}`,
+          experimentId: exp.experimentId || exp.id || `exp_${exp.modelId}`,
+          horizon: exp.horizon ?? exp.horizonDays ?? 1,
+          forecastCount: exp.forecastCount ?? exp.observationsCount ?? 0,
+          datasetHash: typeof exp.datasetHash === 'string' ? exp.datasetHash : ''
+        }));
+        setExperiments(normalized);
       }
     } catch (err: any) {
       console.warn('[FxIntelligence] Experiments fetch warning:', err.message);
@@ -176,14 +194,17 @@ export function useFxIntelligence(initialCurrency: FxCurrency = 'USD') {
           stepSize
         })
       });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const json = await res.json();
-      if (json.success) {
+      const json = await res.json().catch(() => null);
+      if (!res.ok) {
+        throw new Error(json?.error || `HTTP ${res.status}: Fallo al ejecutar benchmark`);
+      }
+      if (json && json.success) {
         setBenchmarkResult(json.benchmark);
         // Refresh experiments list
         await fetchExperiments(activeCurrency);
         return json.benchmark;
       }
+      throw new Error(json?.error || 'Respuesta inesperada al ejecutar benchmark');
     } catch (err: any) {
       console.error('[FxIntelligence] Error executing benchmark:', err.message);
       throw err;
@@ -197,18 +218,30 @@ export function useFxIntelligence(initialCurrency: FxCurrency = 'USD') {
     fetchModels();
   }, [fetchModels]);
 
-  // Tab-driven data loading
+  // Tab-driven data loading (decoupled to prevent cascading aborts)
   useEffect(() => {
     if (activeTab === 'pronosticos') {
       fetchForecast(activeCurrency, selectedModelId, selectedHorizon);
-    } else if (activeTab === 'riesgo') {
+    }
+  }, [activeTab, activeCurrency, selectedModelId, selectedHorizon, fetchForecast]);
+
+  useEffect(() => {
+    if (activeTab === 'riesgo') {
       fetchRisk(activeCurrency);
-    } else if (activeTab === 'laboratorio') {
+    }
+  }, [activeTab, activeCurrency, fetchRisk]);
+
+  useEffect(() => {
+    if (activeTab === 'laboratorio') {
       fetchExperiments(activeCurrency);
-    } else if (activeTab === 'calidad') {
+    }
+  }, [activeTab, activeCurrency, fetchExperiments]);
+
+  useEffect(() => {
+    if (activeTab === 'calidad') {
       fetchQuality();
     }
-  }, [activeTab, activeCurrency, selectedModelId, selectedHorizon, fetchForecast, fetchRisk, fetchExperiments, fetchQuality]);
+  }, [activeTab, fetchQuality]);
 
   return {
     activeCurrency,

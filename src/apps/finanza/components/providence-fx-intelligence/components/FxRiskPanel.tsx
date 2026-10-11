@@ -20,29 +20,48 @@ interface FxRiskPanelProps {
   riskData: FxRiskAnalyticsData | null;
   loading: boolean;
   error: string | null;
+  onRetry?: () => void;
 }
 
 export const FxRiskPanel: React.FC<FxRiskPanelProps> = ({
   activeCurrency,
   riskData,
   loading,
-  error
+  error,
+  onRetry
 }) => {
   if (loading) {
     return (
       <div className="h-96 flex flex-col items-center justify-center text-xs text-slate-400 bg-neutral-900/40 rounded-2xl border border-neutral-800 gap-3">
         <Activity size={24} className="animate-spin text-purple-400" />
-        <span>Calculando estimación QMLE de GARCH(1,1) y distribución de retornos...</span>
+        <span>Calculando estimación QMLE de GARCH(1,1) y distribución de retornos ({activeCurrency}/DOP)...</span>
       </div>
     );
   }
 
   if (error || !riskData) {
     return (
-      <div className="p-6 bg-neutral-900/70 border border-neutral-800 rounded-2xl text-center space-y-2">
-        <AlertTriangle size={24} className="text-amber-400 mx-auto" />
-        <p className="text-sm text-white font-bold">No fue posible cargar el análisis de riesgo</p>
-        <p className="text-xs text-slate-400">{error || 'Consulte los registros del servidor'}</p>
+      <div className="p-8 bg-neutral-900/70 border border-neutral-800 rounded-2xl text-center space-y-3 max-w-lg mx-auto my-6">
+        <div className="p-3 rounded-2xl bg-amber-500/10 text-amber-400 w-fit mx-auto border border-amber-500/20">
+          <AlertTriangle size={24} />
+        </div>
+        <div className="space-y-1">
+          <p className="text-sm text-white font-bold">No fue posible cargar el análisis de riesgo</p>
+          <p className="text-xs text-slate-400 leading-relaxed">
+            {error || 'El cálculo econométrico de volatilidad no devolvió datos para la divisa seleccionada.'}
+          </p>
+        </div>
+        {onRetry && (
+          <div className="pt-2">
+            <button
+              type="button"
+              onClick={onRetry}
+              className="px-4 py-2 bg-neutral-800 hover:bg-neutral-700 text-slate-200 text-xs font-semibold rounded-xl transition-colors cursor-pointer border border-neutral-700 inline-flex items-center gap-2"
+            >
+              <span>Reintentar Análisis</span>
+            </button>
+          </div>
+        )}
       </div>
     );
   }

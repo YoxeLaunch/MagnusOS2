@@ -5,5 +5,6 @@ export { FxRiskPanel } from './components/FxRiskPanel';
 export { FxResearchLab } from './components/FxResearchLab';
 export { FxMacroPanel } from './components/FxMacroPanel';
 export { FxDataQualityPanel } from './components/FxDataQualityPanel';
+export { ProvidenceErrorBoundary } from './components/ProvidenceErrorBoundary';
 export * from './types';
 export * from './hooks/useFxIntelligence';

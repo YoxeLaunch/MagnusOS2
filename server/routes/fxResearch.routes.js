@@ -7,6 +7,7 @@ import {
     getForwardForecast,
     getRiskAnalytics,
     getDataQualityMetrics,
+    getBenchmarkStatus,
     runResearchBenchmark
 } from '../controllers/fxResearchController.js';
 import { optionalJWT, requireAuthenticated, requireAdmin } from '../middleware/auth.js';
@@ -17,6 +18,7 @@ const router = Router();
 router.get('/models', optionalJWT, getResearchModels);
 router.get('/series/stats', optionalJWT, getSeriesStats);
 router.get('/experiments', optionalJWT, getResearchExperiments);
+router.get('/backtests/status', optionalJWT, getBenchmarkStatus);
 router.get('/backtests/:id', optionalJWT, getBacktestDetail);
 router.get('/forecasts/:id', optionalJWT, getForwardForecast);
 router.get('/risk/volatility', optionalJWT, getRiskAnalytics);

@@ -15,6 +15,32 @@ export class QuantitativeResearchService {
     constructor() {
         this.cache = new Map();
         this.cacheTtlMs = 10 * 60 * 1000; // 10 minutes
+        this.benchmarkState = {
+            status: 'IDLE', // 'IDLE' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'TIMED_OUT'
+            startedAt: null,
+            completedAt: null,
+            currentHorizon: null,
+            currentCurrency: null,
+            stepSize: null,
+            error: null,
+            lastResultSummary: null
+        };
+    }
+
+    /**
+     * Get current status of quantitative benchmark execution
+     */
+    getBenchmarkStatus() {
+        const isRunning = this.benchmarkState.status === 'RUNNING';
+        const elapsedMs = (isRunning && this.benchmarkState.startedAt)
+            ? (Date.now() - new Date(this.benchmarkState.startedAt).getTime())
+            : 0;
+
+        return {
+            ...this.benchmarkState,
+            isRunning,
+            elapsedMs
+        };
     }
 
     /**
@@ -112,84 +138,158 @@ export class QuantitativeResearchService {
      * Run comparative benchmark across all models for a specific horizon
      */
     async runBenchmarkSuite(options = {}) {
+        if (this.benchmarkState.status === 'RUNNING') {
+            const err = new Error('Una ejecución de benchmark ya está en progreso. Por favor espere.');
+            err.code = 'BENCHMARK_CONCURRENT_BLOCKED';
+            throw err;
+        }
+
         const horizon = parseInt(options.horizon || '1', 10);
         const currency = (options.currency || 'USD').toUpperCase();
         const provider = (options.provider || 'bcrd').toLowerCase();
-        const stepSize = parseInt(options.stepSize || '1', 10); // 1 = exhaustive, 5 = fast
+        let stepSize = parseInt(options.stepSize || '3', 10);
+        if (stepSize < 2) stepSize = 2; // Resource protection
+        if (stepSize > 10) stepSize = 10;
 
-        const seriesData = await this.getCleanHistoricalSeries({ currency, provider });
-        const modelsToTest = [
-            'random_walk',
-            'random_walk_drift',
-            'moving_average',
-            'ses_exponential_smoothing',
-            'arima_experimental',
-            'garch_1_1'
-        ];
-
-        const results = [];
-        for (const modelId of modelsToTest) {
-            const bt = BacktestEngine.runWalkForward({
-                modelId,
-                points: seriesData.points,
-                horizon,
-                trainRatio: 0.80,
-                stepSize,
-                windowType: 'expanding'
-            });
-
-            // Experiment ID deterministic hash
-            const expId = `exp_${modelId}_${currency}_h${horizon}_${seriesData.datasetHash.slice(0, 8)}`;
-            results.push({
-                experimentId: expId,
-                modelId,
-                modelName: MODEL_REGISTRY[modelId].name,
-                category: MODEL_REGISTRY[modelId].category,
-                horizon,
-                metrics: bt.metrics,
-                runtimeMs: bt.runtimeMs,
-                forecastCount: bt.forecastCount,
-                testRange: `${bt.testStartDate} a ${bt.testEndDate}`
-            });
-
-            // Attempt persistence if table is available
-            try {
-                if (FxResearchExperiment) {
-                    await FxResearchExperiment.upsert({
-                        id: expId,
-                        modelId,
-                        modelName: MODEL_REGISTRY[modelId].name,
-                        baseCurrency: currency,
-                        quoteCurrency: 'DOP',
-                        sourceProvider: provider,
-                        horizonDays: horizon,
-                        trainStartDate: bt.trainStartDate,
-                        trainEndDate: bt.trainEndDate,
-                        testStartDate: bt.testStartDate,
-                        testEndDate: bt.testEndDate,
-                        observationsCount: bt.forecastCount,
-                        datasetHash: seriesData.datasetHash,
-                        parameters: {},
-                        metrics: bt.metrics,
-                        runtimeMs: bt.runtimeMs
-                    });
-                }
-            } catch (err) {
-                // Table might not be migrated in certain environments, continue gracefully
-            }
-        }
-
-        // Sort by RMSE ascending (best model first)
-        results.sort((a, b) => a.metrics.rmse - b.metrics.rmse);
-
-        return {
-            currency,
-            provider,
-            horizon,
-            evaluatedAt: new Date().toISOString(),
-            datasetHash: seriesData.datasetHash,
-            benchmarkLeaderboard: results
+        this.benchmarkState = {
+            status: 'RUNNING',
+            startedAt: new Date().toISOString(),
+            completedAt: null,
+            currentHorizon: horizon,
+            currentCurrency: currency,
+            stepSize,
+            error: null,
+            lastResultSummary: null
         };
+
+        const timeoutMs = 60000; // 60s hard ceiling
+        let timer = null;
+        const timeoutPromise = new Promise((_, reject) => {
+            timer = setTimeout(() => {
+                const err = new Error('El benchmark superó el límite de tiempo de 60 segundos.');
+                err.code = 'BENCHMARK_TIMED_OUT';
+                reject(err);
+            }, timeoutMs);
+        });
+
+        const executionPromise = (async () => {
+            const seriesData = await this.getCleanHistoricalSeries({ currency, provider });
+            const modelsToTest = [
+                'random_walk',
+                'random_walk_drift',
+                'moving_average',
+                'ses_exponential_smoothing',
+                'arima_experimental',
+                'garch_1_1'
+            ];
+
+            const results = [];
+            for (const modelId of modelsToTest) {
+                // Yield to event loop between models so live FX rates and WebSocket remain responsive
+                await new Promise(resolve => setImmediate(resolve));
+
+                const bt = BacktestEngine.runWalkForward({
+                    modelId,
+                    points: seriesData.points,
+                    horizon,
+                    trainRatio: 0.80,
+                    stepSize,
+                    windowType: 'expanding'
+                });
+
+                // Canonical experiment contract
+                const expId = `exp_${modelId}_${currency}_h${horizon}_${seriesData.datasetHash.slice(0, 8)}`;
+                const modelEntry = MODEL_REGISTRY[modelId] || {};
+                const expObj = {
+                    id: expId,
+                    experimentId: expId,
+                    modelId,
+                    modelName: modelEntry.name || modelId,
+                    category: modelEntry.category || 'ECONOMETRIC',
+                    currency,
+                    baseCurrency: currency,
+                    quoteCurrency: 'DOP',
+                    sourceProvider: provider,
+                    horizon,
+                    horizonDays: horizon,
+                    metrics: bt.metrics,
+                    runtimeMs: bt.runtimeMs,
+                    forecastCount: bt.forecastCount,
+                    observationsCount: bt.forecastCount,
+                    testRange: `${bt.testStartDate} a ${bt.testEndDate}`,
+                    datasetHash: seriesData.datasetHash
+                };
+                results.push(expObj);
+
+                // Attempt persistence if table is available
+                try {
+                    if (FxResearchExperiment) {
+                        await FxResearchExperiment.upsert({
+                            id: expId,
+                            modelId,
+                            modelName: modelEntry.name || modelId,
+                            baseCurrency: currency,
+                            quoteCurrency: 'DOP',
+                            sourceProvider: provider,
+                            horizonDays: horizon,
+                            trainStartDate: bt.trainStartDate,
+                            trainEndDate: bt.trainEndDate,
+                            testStartDate: bt.testStartDate,
+                            testEndDate: bt.testEndDate,
+                            observationsCount: bt.forecastCount,
+                            datasetHash: seriesData.datasetHash,
+                            parameters: {},
+                            metrics: bt.metrics,
+                            runtimeMs: bt.runtimeMs
+                        });
+                    }
+                } catch (err) {
+                    // Continue gracefully if migration not present
+                }
+            }
+
+            // Sort by RMSE ascending (best model first)
+            results.sort((a, b) => a.metrics.rmse - b.metrics.rmse);
+
+            return {
+                currency,
+                provider,
+                horizon,
+                stepSize,
+                evaluatedAt: new Date().toISOString(),
+                datasetHash: seriesData.datasetHash,
+                benchmarkLeaderboard: results
+            };
+        })();
+
+        try {
+            const suite = await Promise.race([executionPromise, timeoutPromise]);
+            clearTimeout(timer);
+            this.benchmarkState = {
+                status: 'COMPLETED',
+                startedAt: this.benchmarkState.startedAt,
+                completedAt: new Date().toISOString(),
+                currentHorizon: horizon,
+                currentCurrency: currency,
+                stepSize,
+                error: null,
+                lastResultSummary: `${suite.benchmarkLeaderboard.length} modelos evaluados exitosamente`
+            };
+            return suite;
+        } catch (err) {
+            clearTimeout(timer);
+            this.benchmarkState = {
+                status: err.code === 'BENCHMARK_TIMED_OUT' ? 'TIMED_OUT' : 'FAILED',
+                startedAt: this.benchmarkState.startedAt,
+                completedAt: new Date().toISOString(),
+                currentHorizon: horizon,
+                currentCurrency: currency,
+                stepSize,
+                error: err.message,
+                lastResultSummary: null
+            };
+            throw err;
+        }
     }
 
     /**
@@ -322,6 +422,13 @@ export class QuantitativeResearchService {
         const provider = (options.provider || 'bcrd').toLowerCase();
 
         const seriesData = await this.getCleanHistoricalSeries({ currency, provider });
+        
+        const cacheKey = `risk_${provider}_${currency}_${seriesData.datasetHash}`;
+        const cached = this.cache.get(cacheKey);
+        if (cached && (Date.now() - cached.timestamp < this.cacheTtlMs)) {
+            return cached.data;
+        }
+
         const stats = SeriesPreparation.computeDescriptiveStatistics(seriesData.returns);
 
         // Fit GARCH(1,1) model
@@ -414,7 +521,7 @@ export class QuantitativeResearchService {
             }
         ];
 
-        return {
+        const riskProfile = {
             currency,
             provider,
             datasetHash: seriesData.datasetHash,
@@ -455,6 +562,9 @@ export class QuantitativeResearchService {
             stationarity: stats.stationarity,
             extremeEpisodes
         };
+
+        this.cache.set(cacheKey, { data: riskProfile, timestamp: Date.now() });
+        return riskProfile;
     }
 
     /**
@@ -566,15 +676,45 @@ export class QuantitativeResearchService {
     }
 
     /**
-     * Get persisted experiments from database
+     * Get persisted experiments from database normalized to canonical contract
      */
     async getPersistedExperiments(options = {}) {
         const currency = (options.currency || 'USD').toUpperCase();
         if (FxResearchExperiment) {
-            return await FxResearchExperiment.findAll({
+            const rows = await FxResearchExperiment.findAll({
                 where: { baseCurrency: currency },
                 order: [['created_at', 'DESC']],
                 limit: 50
+            });
+            return (rows || []).map(r => {
+                const data = r.toJSON ? r.toJSON() : r;
+                const modelEntry = MODEL_REGISTRY[data.modelId] || {};
+                const expId = data.id || `exp_${data.modelId}_${currency}_h${data.horizonDays || 1}`;
+                return {
+                    id: expId,
+                    experimentId: expId,
+                    modelId: data.modelId,
+                    modelName: data.modelName || modelEntry.name || data.modelId,
+                    category: modelEntry.category || 'ECONOMETRIC',
+                    currency: data.baseCurrency || currency,
+                    baseCurrency: data.baseCurrency || currency,
+                    quoteCurrency: data.quoteCurrency || 'DOP',
+                    sourceProvider: data.sourceProvider || 'bcrd',
+                    horizon: data.horizonDays != null ? Number(data.horizonDays) : 1,
+                    horizonDays: data.horizonDays != null ? Number(data.horizonDays) : 1,
+                    trainStartDate: data.trainStartDate || null,
+                    trainEndDate: data.trainEndDate || null,
+                    testStartDate: data.testStartDate || null,
+                    testEndDate: data.testEndDate || null,
+                    testRange: (data.testStartDate && data.testEndDate) ? `${data.testStartDate} a ${data.testEndDate}` : 'N/A',
+                    observationsCount: data.observationsCount != null ? Number(data.observationsCount) : 0,
+                    forecastCount: data.observationsCount != null ? Number(data.observationsCount) : 0,
+                    datasetHash: data.datasetHash || '',
+                    parameters: data.parameters || {},
+                    metrics: data.metrics || {},
+                    runtimeMs: data.runtimeMs != null ? Number(data.runtimeMs) : 0,
+                    createdAt: data.createdAt || data.created_at || null
+                };
             });
         }
         return [];
