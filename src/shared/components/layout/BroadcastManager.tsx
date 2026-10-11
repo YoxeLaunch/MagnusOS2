@@ -28,7 +28,10 @@ export const BroadcastManager: React.FC = () => {
 
     useEffect(() => {
         console.log("Inicializando BroadcastManager...", `Using relative path`);
-        const socket = io();
+        const token = localStorage.getItem('sistemam_token');
+        const socket = io({
+            auth: { token }
+        });
 
         socket.on('connect', () => {
             console.log("BroadcastManager: Socket Conectado!", socket.id);

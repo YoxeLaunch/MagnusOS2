@@ -3,6 +3,8 @@ node_modules
 .env.local
 .env.production
 server/data/*.db
+server/data/fx_backups/
+server/data/fx_backfill_checkpoint.json
 dist
 *.log
 *.backup

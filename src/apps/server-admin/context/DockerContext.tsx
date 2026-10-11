@@ -18,7 +18,9 @@ export const DockerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         // Connect to the /docker namespace
         // Use relative path to avoid CORS/Port issues in production
         // The socket is served by the same express instance
+        const token = localStorage.getItem('sistemam_token');
         const socketInstance = io(`${window.location.protocol}//${window.location.hostname}:${window.location.port}/docker`, {
+            auth: { token },
             withCredentials: true,
             transports: ['websocket', 'polling']
         });

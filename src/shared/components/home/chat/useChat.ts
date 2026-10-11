@@ -12,8 +12,15 @@ export const useChat = (user: { username: string; name: string }) => {
 
     useEffect(() => {
         // Use relative path for socket connection (handled by Vite proxy)
-        const newSocket = io();
+        const token = localStorage.getItem('sistemam_token');
+        const newSocket = io({
+            auth: { token }
+        });
         setSocket(newSocket);
+
+        newSocket.on('connect_error', (err) => {
+            console.error('[SOCKET:CHAT] Error de conexión:', err.message);
+        });
 
         newSocket.on('connect', () => {
             console.log('Connected to Chat Server');
