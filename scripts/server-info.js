@@ -146,9 +146,9 @@ const printSystemHUD = () => {
 
     const svcRow1 = `  ${cYellow('•')} ${chalk.white('Portal:')}    ${cYellow(':80, :8000')}  ${cDim('|')}  ${cYellow('•')} ${chalk.white('God\'s Eye:')} ${cYellow(':4173')}  ${cDim('|')}  ${cYellow('•')} ${chalk.white('Search:')}    ${cYellow(':8082')}`;
     const svcRow2 = `  ${cYellow('•')} ${chalk.white('AI Studio:')} ${cYellow(':8081')}      ${cDim('|')}  ${cYellow('•')} ${chalk.white('Kiwix:')}      ${cYellow(':8080')}  ${cDim('|')}  ${cYellow('•')} ${chalk.white('Dokploy:')}   ${cYellow(':3000')}`;
-    const svcRow3 = `  ${cYellow('•')} ${chalk.white('Dockge:')}    ${cYellow(':5001')}      ${cDim('|')}  ${cYellow('•')} ${chalk.white('Port:')}       ${cYellow(':9443')}  ${cDim('|')}  ${cYellow('•')} ${chalk.white('n8n:')}       ${cYellow(':5678')}`;
-    const svcRow4 = `  ${cYellow('•')} ${chalk.white('Pi-hole:')}   ${cYellow(':443')}       ${cDim('|')}  ${cYellow('•')} ${chalk.white('OS2:')}        ${cYellow(':4000')}  ${cDim('|')}  ${cYellow('•')} ${chalk.white('Gateway:')}   ${cYellow(':8083')}`;
-    const svcRow5 = `  ${cYellow('•')} ${chalk.white('OSIRIS:')}    ${cYellow(':3333')}       ${cDim('|')}  ${cYellow('•')} ${chalk.white('OSIRIS-Int:')} ${cYellow(':4440')}  ${cDim('|')}  ${cYellow('•')} ${chalk.white('OSIRIS-Cch:')}${cYellow(':8088')}`;
+    const svcRow3 = `  ${cYellow('•')} ${chalk.white('Dockge:')}    ${cYellow(':5001')}      ${cDim('|')}  ${cYellow('•')} ${chalk.white('Portainer:')}  ${cYellow(':9443')}  ${cDim('|')}  ${cYellow('•')} ${chalk.white('n8n:')}       ${cYellow(':5678')}`;
+    const svcRow4 = `  ${cYellow('•')} ${chalk.white('Pi-hole:')}   ${cYellow(':81, :8443')}  ${cDim('|')}  ${cYellow('•')} ${chalk.white('OS2:')}        ${cYellow(':4000')}  ${cDim('|')}  ${cYellow('•')} ${chalk.white('Gateway:')}   ${cYellow(':8083')}`;
+    const svcRow5 = `  ${cYellow('•')} ${chalk.white('OSIRIS:')}    ${cYellow(':3333')}       ${cDim('|')}  ${cYellow('•')} ${chalk.white('OSIRIS-Int:')} ${cYellow(':4440')}`;
 
     const content = `
 ${chalk.bold.white('--- [ TELEMETRÍA DE HARDWARE ] ---')}
@@ -209,6 +209,26 @@ const cleanContainerName = (raw) => {
     return swarmMatch ? `${swarmMatch[1]} #${swarmMatch[2]}` : name;
 };
 
+const isLegacyContainer = (container) => {
+    const raw = getContainerRawName(container);
+    return /_legacy(?:_[a-z]+)?_20261017$/i.test(raw) || /_legacy_final_20261017$/i.test(raw);
+};
+
+const DISPLAY_NAMES = {
+    kiwix_biblioteca_new_rollback_20261017: 'kiwix_biblioteca',
+    portainer_panel: 'portainer_panel',
+    sistema_m_app: 'magnus_app_legacy',
+    magnus_portal: 'magnus_portal',
+    magnus_portal_telemetry: 'portal_telemetry',
+    magnus_panel_web: 'magnus_panel_web',
+    sede_virtual_magnus: 'sede_virtual_magnus',
+};
+
+const displayContainerName = (container) => {
+    const raw = getContainerRawName(container).replace(/^\//, '');
+    return DISPLAY_NAMES[raw] || cleanContainerName(raw);
+};
+
 const cleanStatus = (s) => {
     if (!s || typeof s !== 'string') return 'desconocido';
     return s
@@ -256,26 +276,17 @@ const printDockerSurveillance = async () => {
         return;
     }
 
-    // Filtrar réplicas muertas de servicios que ya están activos para evitar saturar la matriz
-    const activeNames = new Set(
-        containers
-            .filter(c => c.State === 'running')
-            .map(c => cleanContainerName(getContainerRawName(c)))
-    );
-    const uniqueContainers = containers.filter(c => {
-        if (c.State === 'running') return true;
-        const name = cleanContainerName(getContainerRawName(c));
-        return !activeNames.has(name);
-    });
+    // La matriz SSH representa solo la operación actual. Los contenedores
+    // legacy se conservan detenidos para reversión y no deben parecer fallas.
+    const legacyContainers = containers.filter(isLegacyContainer);
+    const operationalContainers = containers.filter(c => !isLegacyContainer(c) && c.State === 'running');
+    operationalContainers.sort((a, b) => displayContainerName(a).localeCompare(displayContainerName(b)));
 
-    // Ordenar: primero los en ejecución
-    uniqueContainers.sort((a, b) => (a.State === 'running' ? 0 : 1) - (b.State === 'running' ? 0 : 1));
-
-    const runningCount = uniqueContainers.filter(c => c.State === 'running').length;
+    const runningCount = operationalContainers.length;
     const nameWidth = 24;
 
-    const lines = uniqueContainers.map((c) => {
-        const name = cleanContainerName(getContainerRawName(c)).padEnd(nameWidth).slice(0, nameWidth);
+    const lines = operationalContainers.map((c) => {
+        const name = displayContainerName(c).padEnd(nameWidth).slice(0, nameWidth);
         const { badge, text } = statusStyle(c.State, c.Status);
         const ports = (c.Ports || [])
             .filter(p => p && p.PublicPort)
@@ -290,8 +301,8 @@ const printDockerSurveillance = async () => {
     const summary = chalk.bold.white(`[VIGILANCIA: `) +
         cGreen.bold(`${runningCount} ACTIVOS`) +
         chalk.bold.white(` // `) +
-        cDim(`${uniqueContainers.length - runningCount} EN ESPERA`) +
-        chalk.bold.white(` // TOTAL: ${uniqueContainers.length} NODOS]`);
+        cDim(`${legacyContainers.length} LEGACY EN REVERSIÓN (DETENIDOS)`) +
+        chalk.bold.white(` // TOTAL: ${runningCount} NODOS OPERATIVOS]`);
 
     console.log(boxen(`${lines.join('\n')}\n\n${summary}`, {
         padding: 1,
@@ -318,4 +329,3 @@ const callout = boxen(
     }
 );
 console.log(callout);
-

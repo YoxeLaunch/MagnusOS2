@@ -16,7 +16,9 @@ umask 077
 
 # Configuration
 BACKUP_DIR="${BACKUP_DIR:-/home/osvaldo/backups/magnus-os2}"
-RETENTION_DAYS="${RETENTION_DAYS:-14}"
+# Historical backups are recovery artifacts. Retention is opt-in via
+# RETENTION_DAYS; the default deliberately prevents automatic deletion.
+RETENTION_DAYS="${RETENTION_DAYS:-36500}"
 POSTGRES_CONTAINER="${POSTGRES_CONTAINER:-magnus_postgres}"
 POSTGRES_DB="${POSTGRES_DB:-magnus}"
 POSTGRES_USER="${POSTGRES_USER:-magnus}"
