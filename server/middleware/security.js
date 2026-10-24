@@ -22,9 +22,10 @@ export const securityHeaders = helmet({
 });
 
 // 2. Rate Limiting global (ajustado: 300 req / 15 min por IP, skips health probes)
+// Overridable via env for load-testing replicas; production defaults unchanged.
 export const apiLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000,
-    max: 300,
+    windowMs: Number(process.env.RATE_LIMIT_WINDOW_MS) || 15 * 60 * 1000,
+    max: Number(process.env.RATE_LIMIT_MAX) || 300,
     standardHeaders: true,
     legacyHeaders: false,
     skip: (req) => req.path.includes('/health'),
@@ -36,7 +37,7 @@ export const apiLimiter = rateLimit({
 
 // Stricter limiter for sensitive routes (if needed later)
 export const authLimiter = rateLimit({
-    windowMs: 60 * 60 * 1000, // 1 hour
-    max: 20, // Limit each IP to 20 failed login attempts per hour
+    windowMs: Number(process.env.AUTH_RATE_LIMIT_WINDOW_MS) || 60 * 60 * 1000, // 1 hour
+    max: Number(process.env.AUTH_RATE_LIMIT_MAX) || 20, // Limit each IP to 20 failed login attempts per hour
     message: "Demasiados intentos de inicio de sesión. Cuenta bloqueada temporalmente."
 });
