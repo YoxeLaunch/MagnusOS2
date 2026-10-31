@@ -25,6 +25,7 @@ router.use('/markets/macro', macroRoutes);
 router.use('/notifications', notificationRoutes);
 router.use('/markets', marketRoutes);
 router.use('/telemetry/markets', marketRoutes);
+router.use('/mece', meceRoutes);
 router.use('/health', healthRoutes);
 router.use('/', healthRoutes);
 router.use('/', authRoutes);
@@ -37,6 +38,5 @@ router.use('/ai', aiRoutes);
 router.use('/centro-comando', centroComandoRoutes);
 router.use('/econometrics', econometricsRoutes);
 router.use('/admin', adminRoutes);
-router.use('/mece', meceRoutes);
 
 export default router;

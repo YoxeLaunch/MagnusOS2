@@ -397,10 +397,11 @@ class EconomicCatalogService {
 }
 
 const economicCatalog = new EconomicCatalogService();
+const getUniversalCatalog = () => economicCatalog;
 
 export {
     economicCatalog,
-    getUniversalCatalog: () => economicCatalog,
+    getUniversalCatalog,
     IMPACT_FAMILIES,
     DATA_TYPES,
     FREQUENCIES,

@@ -17,8 +17,12 @@
 
 import fs from 'fs';
 import path from 'path';
+import { fileURLToPath } from 'url';
 import { round, percentageChange, isValidNumber } from '../../services/mece/meceMathUtils.js';
 import { parseCanonicalPeriod, isAvailableAtCutoff } from '../../services/mece/temporalGovernance.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const MACRO_INDICATORS = {
     CPI_GENERAL_LEVEL: 'CPI_GENERAL_LEVEL',

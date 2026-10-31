@@ -73,6 +73,14 @@ class MeceController {
     }
 
     /**
+     * Updates the runtime feature flag state dynamically.
+     * @param {boolean} enabled
+     */
+    setFeatureFlag(enabled) {
+        this.featureEnabled = Boolean(enabled);
+    }
+
+    /**
      * Checks if the MECE feature flag is enabled.
      */
     _checkFeatureFlag() {
@@ -400,6 +408,35 @@ class MeceController {
                     zeroDoubleCountingVerified: true,
                     hashChainedAuditLoggingActive: true
                 }
+            }
+        };
+    }
+
+    /**
+     * GET /api/mece/audit-logs
+     * Returns cryptographic Merkle-chained audit log entries for administrative oversight.
+     */
+    handleGetAuditLogs(req, res) {
+        this._checkFeatureFlag();
+        this._validateSessionContext(req);
+
+        const actor = req.user ? req.user.username : null;
+        const role = req.user ? req.user.role : null;
+
+        if (role !== 'admin' && actor !== 'soberano') {
+            throw new MeceSecurityException(
+                `Access Denied: User "${actor}" is not authorized to inspect administrative audit logs.`,
+                403
+            );
+        }
+
+        const entries = this.auditLogService.getEntries();
+        return {
+            status: 200,
+            body: {
+                success: true,
+                count: entries.length,
+                entries
             }
         };
     }

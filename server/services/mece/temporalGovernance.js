@@ -228,6 +228,7 @@ function getMonthlyIndicatorPublicationStatus(period, referenceDate = '2026-10-3
 export {
     parseCanonicalPeriod,
     isObservationAvailableAt,
+    isObservationAvailableAt as isAvailableAtCutoff,
     resolvePrevailingObservation,
     getMonthlyIndicatorPublicationStatus
 };
