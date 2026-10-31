@@ -166,13 +166,13 @@ export const BankingContextCard: React.FC<BankingContextCardProps> = ({ onNaviga
           </div>
         </div>
 
-        {/* Lado derecho: Botón discreto que navega a Sistema Bancario */}
+        {/* Lado derecho: Botón discreto que navega a Análisis Bancario */}
         {onNavigateToBanking && (
           <button
             onClick={onNavigateToBanking}
             className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-white dark:bg-neutral-800 hover:bg-blue-50 dark:hover:bg-blue-900/30 text-blue-600 dark:text-blue-400 border border-slate-200 dark:border-white/10 shadow-xs hover:border-blue-300 dark:hover:border-blue-700 transition-all cursor-pointer whitespace-nowrap self-start md:self-center"
           >
-            <span>Ver Sistema Bancario</span>
+            <span>Ver Análisis Bancario</span>
             <ArrowRight size={13} />
           </button>
         )}

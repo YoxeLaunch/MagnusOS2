@@ -2,13 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard,
-  TrendingUp,
   Receipt,
   PiggyBank,
   CircleDollarSign,
   ArrowLeft,
   Wallet,
-  LineChart,
   Home,
   Brain,
   Sun,
@@ -20,7 +18,9 @@ import {
   ShieldCheck,
   PieChart,
   Target,
-  Landmark
+  Landmark,
+  Radar,
+  FlaskConical
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { MasterLayout } from '../../../shared/components/layout/MasterLayout';
@@ -31,10 +31,10 @@ const FINANZA_NAV_ITEMS = [
   { path: "/finanza/flujo", label: "Gestión de Flujo", icon: ArrowRightLeft },
   { path: "/finanza/seguimiento", label: "Seguimiento Diario", icon: Receipt },
   { path: "/finanza/patrimonio", label: "Patrimonio Global", icon: Wallet },
-  { path: "/finanza/mercado", label: "Mercado", icon: TrendingUp },
-  { path: "/finanza/banca", label: "Sistema Bancario", icon: Landmark },
-  { path: "/finanza/ahorros", label: "Metas de Ahorro", icon: Target },
-  { path: "/finanza/proyecciones", label: "Proyección 2026", icon: LineChart },
+  { path: "/finanza/mercado", label: "Radar de Mercados", icon: Radar },
+  { path: "/finanza/banca", label: "Análisis Bancario", icon: Landmark },
+  { path: "/finanza/ahorros", label: "Planificación Patrimonial", icon: Target },
+  { path: "/finanza/proyecciones", label: "Laboratorio Financiero", icon: FlaskConical },
 ];
 
 interface NavLinkProps {
@@ -43,9 +43,10 @@ interface NavLinkProps {
   label: string;
   isActive: boolean;
   badge?: string;
+  title?: string;
 }
 
-const NavLink: React.FC<NavLinkProps> = ({ to, icon: Icon, label, isActive, badge }) => (
+const NavLink: React.FC<NavLinkProps> = ({ to, icon: Icon, label, isActive, badge, title }) => (
   <motion.div
     whileHover={{ x: isActive ? 0 : 3 }}
     whileTap={{ scale: 0.98 }}
@@ -53,7 +54,9 @@ const NavLink: React.FC<NavLinkProps> = ({ to, icon: Icon, label, isActive, badg
   >
     <Link
       to={to}
-      className={`group relative flex items-center justify-between px-3.5 py-3 rounded-xl transition-all duration-200 select-none ${isActive
+      title={title || label}
+      aria-label={badge ? `${label} (${badge})` : label}
+      className={`group relative flex items-center justify-between gap-2 px-3 py-2.5 rounded-xl transition-all duration-200 select-none ${isActive
         ? "text-blue-600 dark:text-blue-400 font-bold"
         : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
         }`}
@@ -77,25 +80,26 @@ const NavLink: React.FC<NavLinkProps> = ({ to, icon: Icon, label, isActive, badg
       )}
 
       {/* Item Content */}
-      <div className="relative z-10 flex items-center gap-3">
-        <div className="flex items-center justify-center">
+      <div className="relative z-10 flex items-center gap-2.5 min-w-0 flex-1">
+        <div className="flex items-center justify-center flex-shrink-0">
           <Icon
-            size={19}
+            size={18}
             className={`${isActive
               ? "text-blue-600 dark:text-blue-400 drop-shadow-[0_0_8px_rgba(59,130,246,0.6)]"
               : "group-hover:text-blue-500 transition-colors duration-200"
               } transition-transform duration-300 group-hover:scale-110 group-hover:-rotate-3`}
+            aria-hidden="true"
           />
         </div>
-        <span className="text-sm tracking-wide transition-colors duration-200">
+        <span className="text-sm tracking-tight transition-colors duration-200 leading-snug break-words">
           {label}
         </span>
       </div>
 
       {/* Status Badge */}
       {badge && (
-        <span className="relative z-10 flex items-center gap-1.5 text-[9px] font-semibold tracking-wider uppercase px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 shadow-sm">
-          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+        <span className="relative z-10 flex-shrink-0 flex items-center gap-1 text-[8.5px] font-semibold tracking-wider uppercase px-1.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 shadow-sm whitespace-nowrap">
+          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse flex-shrink-0" />
           {badge}
         </span>
       )}
@@ -165,7 +169,7 @@ const Sidebar = ({ isDark, toggleTheme }: any) => {
         </div>
 
         {/* Navigation List */}
-        <nav className="flex-1 px-3 space-y-1.5 mt-5 overflow-y-auto custom-scrollbar">
+        <nav className="flex-1 px-3 space-y-1.5 mt-5 overflow-y-auto custom-scrollbar" aria-label="Navegación principal de Magnus Capital">
           <NavLink
             to="/finanza"
             icon={LayoutDashboard}
@@ -192,28 +196,32 @@ const Sidebar = ({ isDark, toggleTheme }: any) => {
           />
           <NavLink
             to="/finanza/mercado"
-            icon={TrendingUp}
-            label="Mercado"
-            badge="En Vivo"
+            icon={Radar}
+            label="Radar de Mercados"
+            badge="EN VIVO"
+            title="Radar de Mercados — Vigilancia económica y cotizaciones en vivo"
             isActive={location.pathname.includes("/finanza/mercado")}
           />
           <NavLink
             to="/finanza/banca"
             icon={Landmark}
-            label="Sistema Bancario"
-            badge="SB v2"
+            label="Análisis Bancario"
+            badge="SB V2"
+            title="Análisis Bancario — Estadísticas del sistema financiero dominicano"
             isActive={location.pathname.includes("/finanza/banca") || location.pathname.includes("/finanza/sistema-bancario")}
           />
           <NavLink
             to="/finanza/ahorros"
             icon={Target}
-            label="Metas de Ahorro"
+            label="Planificación Patrimonial"
+            title="Planificación Patrimonial — Objetivos de ahorro y planes financieros"
             isActive={location.pathname.includes("/finanza/ahorros")}
           />
           <NavLink
             to="/finanza/proyecciones"
-            icon={LineChart}
-            label="Proyección 2026"
+            icon={FlaskConical}
+            label="Laboratorio Financiero"
+            title="Laboratorio Financiero — Modelos cuantitativos, convergencia MECE y simulaciones"
             isActive={location.pathname.includes("/finanza/proyecciones")}
           />
         </nav>
