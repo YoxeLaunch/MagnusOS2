@@ -563,10 +563,10 @@ export const ConvergenceTab: React.FC<ConvergenceTabProps> = ({
                                     </div>
                                 ) : fxMetrics && fxMetrics.probableProxyDop > 0 ? (
                                     <>
-                                        <div className="flex items-center justify-between">
+                                        <div className="flex flex-col gap-0.5 sm:flex-row sm:items-center sm:justify-between text-[11px]">
                                             <span>Período evaluado:</span>
-                                            <span className="font-medium text-slate-700 dark:text-slate-300">
-                                                {formatPeriodLabel(realIncomeData?.basePeriod || '2025-12')} – {latestVerified ? latestVerified.displayPeriod : 'Sep 2026'} ({realIncomeData?.summary?.totalPeriods || 11} meses)
+                                            <span className="font-medium text-slate-700 dark:text-slate-300" title="11 meses calendario">
+                                                26 de diciembre de 2025 – 31 de octubre de 2026
                                             </span>
                                         </div>
                                         <div className="flex items-center justify-between">
@@ -582,11 +582,19 @@ export const ConvergenceTab: React.FC<ConvergenceTabProps> = ({
                                     </div>
                                 )}
                                 <div className="flex items-center justify-between">
-                                    <span title={`Shock calculado sobre los ${realIncomeData?.summary?.totalPeriods || 11} meses evaluados (promedio: +RD$ ${(fxMetrics ? (fxMetrics.shock10Dop / (realIncomeData?.summary?.totalPeriods || 11)) : 0).toFixed(2)}/mes)`}>
-                                        Impacto shock +10% en el período:
+                                    <span title="Escenario de sensibilidad estimada ante depreciación del 10% sobre la exposición indirecta acumulada">
+                                        Sensibilidad estimada (shock +10%):
                                     </span>
                                     <span className="text-amber-500 font-mono font-semibold">
                                         +RD$ {fxMetrics ? fxMetrics.shock10Dop.toLocaleString('es-DO', { minimumFractionDigits: 2 }) : '0.00'}
+                                    </span>
+                                </div>
+                                <div className="flex items-center justify-between text-[11px] text-slate-400">
+                                    <span title="Promedio simple del período, no como gasto recurrente garantizado">
+                                        Impacto mensual equiv. (promedio simple):
+                                    </span>
+                                    <span className="font-mono text-amber-500/90 font-medium">
+                                        +RD$ {fxMetrics ? (fxMetrics.shock10Dop / 11).toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00'}/mes
                                     </span>
                                 </div>
                             </div>
