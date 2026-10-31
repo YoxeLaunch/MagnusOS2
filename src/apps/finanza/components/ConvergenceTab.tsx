@@ -260,10 +260,16 @@ export const ConvergenceTab: React.FC<ConvergenceTabProps> = ({
         return parsedSeries.find(p => p.rawPeriod === (realIncomeData?.basePeriod || '2025-12')) || parsedSeries[0] || null;
     }, [parsedSeries, realIncomeData]);
 
-    // Cumulative change from base
+    // Cumulative change from base (Variación acumulada del ingreso real)
     const cumulativeChangePct = useMemo(() => {
         if (!latestVerified?.ipa) return null;
         return (latestVerified.ipa - 100).toFixed(2);
+    }, [latestVerified]);
+
+    // Pérdida atribuible exclusivamente a la inflación oficial BCRD
+    const cpiInflationLossPct = useMemo(() => {
+        if (!latestVerified?.deflator) return null;
+        return ((latestVerified.deflator - 1) * 100).toFixed(2);
     }, [latestVerified]);
 
     // Min and Max for Chart Y-Axis
@@ -502,14 +508,22 @@ export const ConvergenceTab: React.FC<ConvergenceTabProps> = ({
                                     <span className="text-sm font-normal text-slate-400">pts</span>
                                 </div>
                             </div>
-                            <div className="text-xs text-slate-500 dark:text-slate-400 mt-3 pt-3 border-t border-slate-100 dark:border-white/5 space-y-1">
+                            <div className="text-xs text-slate-500 dark:text-slate-400 mt-3 pt-3 border-t border-slate-100 dark:border-white/5 space-y-1.5">
                                 <div className="flex items-center justify-between">
-                                    <span>Erosión acumulada:</span>
-                                    <span className="text-rose-500 font-semibold">
-                                        ▼ {cumulativeChangePct ?? '0.00'}%
+                                    <span>Variación acumulada del ingreso real:</span>
+                                    <span className="text-rose-500 font-semibold font-mono">
+                                        {cumulativeChangePct && Number(cumulativeChangePct) < 0 ? '▼ ' : ''}{cumulativeChangePct ?? '0.00'}%
                                     </span>
                                 </div>
-                                <div className="flex items-center justify-between text-[11px] text-slate-400">
+                                <div className="flex items-center justify-between">
+                                    <span title="Erosión del poder de compra atribuible exclusivamente a la inflación medida por el IPC BCRD (deflactor 0.9715)">
+                                        Pérdida por inflación BCRD:
+                                    </span>
+                                    <span className="text-amber-500 dark:text-amber-400 font-semibold font-mono">
+                                        {cpiInflationLossPct && Number(cpiInflationLossPct) < 0 ? '▼ ' : ''}{cpiInflationLossPct ?? '0.00'}%
+                                    </span>
+                                </div>
+                                <div className="flex items-center justify-between text-[11px] text-slate-400 pt-0.5">
                                     <span>Frente a base {formatPeriodLabel(realIncomeData?.basePeriod || '2025-12')}</span>
                                     <span className="text-emerald-500 font-medium">Oficial</span>
                                 </div>
@@ -521,7 +535,7 @@ export const ConvergenceTab: React.FC<ConvergenceTabProps> = ({
                             <div>
                                 <div className="flex items-center justify-between text-slate-400 mb-2">
                                     <span className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                                        Gasto en Divisa (USD)
+                                        {fxMetrics?.hasDirectUsd ? 'Gasto en Divisa (USD Contractual)' : 'Exposición cambiaria indirecta estimada'}
                                     </span>
                                     <Globe className="w-4 h-4 text-amber-500 flex-shrink-0" />
                                 </div>
@@ -539,7 +553,7 @@ export const ConvergenceTab: React.FC<ConvergenceTabProps> = ({
                                     </div>
                                 )}
                             </div>
-                            <div className="text-xs text-slate-500 dark:text-slate-400 mt-3 pt-3 border-t border-slate-100 dark:border-white/5 space-y-1">
+                            <div className="text-xs text-slate-500 dark:text-slate-400 mt-3 pt-3 border-t border-slate-100 dark:border-white/5 space-y-1.5">
                                 {fxMetrics?.hasDirectUsd ? (
                                     <div className="flex items-center justify-between">
                                         <span>Facturado en DOP:</span>
@@ -548,19 +562,29 @@ export const ConvergenceTab: React.FC<ConvergenceTabProps> = ({
                                         </span>
                                     </div>
                                 ) : fxMetrics && fxMetrics.probableProxyDop > 0 ? (
-                                    <div className="flex items-center justify-between">
-                                        <span>Proxy heurístico:</span>
-                                        <span className="text-amber-500 font-semibold">
-                                            {fxMetrics.probableFxPct}% del egreso
-                                        </span>
-                                    </div>
+                                    <>
+                                        <div className="flex items-center justify-between">
+                                            <span>Período evaluado:</span>
+                                            <span className="font-medium text-slate-700 dark:text-slate-300">
+                                                {formatPeriodLabel(realIncomeData?.basePeriod || '2025-12')} – {latestVerified ? latestVerified.displayPeriod : 'Sep 2026'} ({realIncomeData?.summary?.totalPeriods || 11} meses)
+                                            </span>
+                                        </div>
+                                        <div className="flex items-center justify-between">
+                                            <span>Proxy heurístico:</span>
+                                            <span className="text-amber-500 font-semibold">
+                                                {fxMetrics.probableFxPct}% del egreso acumulado
+                                            </span>
+                                        </div>
+                                    </>
                                 ) : (
                                     <div className="text-[11px] text-slate-400">
                                         Sin facturas directas en divisa
                                     </div>
                                 )}
                                 <div className="flex items-center justify-between">
-                                    <span>Shock cambiario +10%:</span>
+                                    <span title={`Shock calculado sobre los ${realIncomeData?.summary?.totalPeriods || 11} meses evaluados (promedio: +RD$ ${(fxMetrics ? (fxMetrics.shock10Dop / (realIncomeData?.summary?.totalPeriods || 11)) : 0).toFixed(2)}/mes)`}>
+                                        Impacto shock +10% en el período:
+                                    </span>
                                     <span className="text-amber-500 font-mono font-semibold">
                                         +RD$ {fxMetrics ? fxMetrics.shock10Dop.toLocaleString('es-DO', { minimumFractionDigits: 2 }) : '0.00'}
                                     </span>
