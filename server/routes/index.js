@@ -14,6 +14,7 @@ import { macroRoutes, notificationRoutes } from './macro.routes.js';
 import energyRoutes from './energy.routes.js';
 import bankingRoutes from './sbBanking.routes.js';
 import adminRoutes from './admin.routes.js';
+import meceRoutes from './mece.routes.js';
 
 const router = Router();
 
@@ -36,5 +37,6 @@ router.use('/ai', aiRoutes);
 router.use('/centro-comando', centroComandoRoutes);
 router.use('/econometrics', econometricsRoutes);
 router.use('/admin', adminRoutes);
+router.use('/mece', meceRoutes);
 
 export default router;
