@@ -249,7 +249,7 @@ class MeceController {
      * Calculates real deflated income stream using official BCRD CPI.
      * Protected endpoint.
      */
-    handleGetRealIncome(req, res, { rawLedgerTransactions = [], analyticalAdjustments = [] } = {}) {
+    async handleGetRealIncome(req, res, { rawLedgerTransactions = null, analyticalAdjustments = [] } = {}) {
         this._checkFeatureFlag();
 
         const targetUser = req.query?.userId || req.body?.userId || null;
@@ -258,11 +258,31 @@ class MeceController {
         const basePeriod = req.query?.basePeriod || '2025-12';
         const cutoffDate = req.query?.cutoffDate || null;
 
+        let transactions = rawLedgerTransactions;
+        if (transactions === null) {
+            try {
+                const { LedgerTransaction, TransactionLine, Category } = await import('../models/index.js');
+                transactions = await LedgerTransaction.findAll({
+                    where: { userId: effectiveUserId },
+                    include: [
+                        {
+                            model: TransactionLine,
+                            as: 'lines',
+                            include: [{ model: Category, as: 'category' }]
+                        }
+                    ],
+                    order: [['date', 'ASC']]
+                });
+            } catch (err) {
+                transactions = [];
+            }
+        }
+
         const result = this._withCache(effectiveUserId, 'real-income', { basePeriod, cutoffDate }, () => {
             // Process ledger income for this specific user
             const processed = this.ledgerAdapter.processLedgerDataset({
                 userId: effectiveUserId,
-                ledgerTransactions: rawLedgerTransactions,
+                ledgerTransactions: transactions,
                 analyticalAdjustments
             });
 
@@ -328,16 +348,36 @@ class MeceController {
      * Calculates personal FX and Energy exposure based on Ledger expenses.
      * Protected endpoint.
      */
-    handleGetExposure(req, res, { rawLedgerTransactions = [] } = {}) {
+    async handleGetExposure(req, res, { rawLedgerTransactions = null } = {}) {
         this._checkFeatureFlag();
 
         const targetUser = req.query?.userId || req.body?.userId || null;
         const effectiveUserId = this.resolveEffectiveUserId(req, targetUser);
 
+        let transactions = rawLedgerTransactions;
+        if (transactions === null) {
+            try {
+                const { LedgerTransaction, TransactionLine, Category } = await import('../models/index.js');
+                transactions = await LedgerTransaction.findAll({
+                    where: { userId: effectiveUserId },
+                    include: [
+                        {
+                            model: TransactionLine,
+                            as: 'lines',
+                            include: [{ model: Category, as: 'category' }]
+                        }
+                    ],
+                    order: [['date', 'ASC']]
+                });
+            } catch (err) {
+                transactions = [];
+            }
+        }
+
         const result = this._withCache(effectiveUserId, 'exposure', {}, () => {
             const processed = this.ledgerAdapter.processLedgerDataset({
                 userId: effectiveUserId,
-                ledgerTransactions: rawLedgerTransactions
+                ledgerTransactions: transactions
             });
 
             const fxReport = this.fxAdapter.evaluatePortfolioExposure(processed.expenseRecords);
@@ -371,10 +411,25 @@ class MeceController {
             this._validateSessionContext(req);
         }
 
-        this.macroAdapter.loadDataset();
-        const totalCpiPeriods = this.macroAdapter.observations.size;
-        const latestPeriod = Array.from(this.macroAdapter.observations.keys()).sort().pop();
-        const latestObs = this.macroAdapter.getCpiObservation(latestPeriod);
+        let totalCpiPeriods = 0;
+        let latestPeriod = null;
+        let latestObs = {};
+        let cpiStatus = 'ONLINE_VERIFIED';
+        let cpiMessage = null;
+
+        try {
+            this.macroAdapter.loadDataset();
+            totalCpiPeriods = this.macroAdapter.observations.size;
+            latestPeriod = Array.from(this.macroAdapter.observations.keys()).sort().pop();
+            latestObs = this.macroAdapter.getCpiObservation(latestPeriod) || {};
+            if (totalCpiPeriods === 0) {
+                cpiStatus = 'OFFLINE_PENDING_SYNC';
+                cpiMessage = 'No se encontraron observaciones del IPC en el dataset de staging.';
+            }
+        } catch (err) {
+            cpiStatus = 'OFFLINE_PENDING_SYNC';
+            cpiMessage = err.message;
+        }
 
         return {
             status: 200,
@@ -387,8 +442,8 @@ class MeceController {
                         totalObservations: totalCpiPeriods,
                         latestAvailablePeriod: latestPeriod,
                         latestPublishedAt: latestObs.published_at || 'OFFICIAL_BULLETIN',
-                        status: 'ONLINE_VERIFIED',
-                        datasetHash: latestObs.source_hash
+                        status: cpiStatus,
+                        ...(cpiMessage ? { message: cpiMessage } : { datasetHash: latestObs.source_hash })
                     },
                     energy_micm: {
                         source: 'MICM',

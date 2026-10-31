@@ -44,7 +44,9 @@ class MeceMacroAdapter {
      * @param {Array<Object>} [options.cpiDataset] - In-memory dataset
      */
     constructor(options = {}) {
-        this.datasetPath = options.cpiDatasetPath || path.resolve(__dirname, '../../fixtures/cpi_bcrd_monthly_staging.json');
+        const defaultCandidate1 = path.resolve(__dirname, '../../data/cpi_bcrd_monthly_staging.json');
+        const defaultCandidate2 = path.resolve(__dirname, '../../fixtures/cpi_bcrd_monthly_staging.json');
+        this.datasetPath = options.cpiDatasetPath || (fs.existsSync(defaultCandidate1) ? defaultCandidate1 : defaultCandidate2);
         this.observations = new Map(); // key: period (YYYY-MM) -> observation
         this.loaded = false;
 

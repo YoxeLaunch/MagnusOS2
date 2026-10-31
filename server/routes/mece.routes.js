@@ -29,18 +29,18 @@ router.get('/catalog', (req, res) => {
 });
 
 // 2. Protected Financial Endpoints (Requires valid JWT session)
-router.get('/real-income', verifyJWT, (req, res) => {
+router.get('/real-income', verifyJWT, async (req, res) => {
     try {
-        const result = meceController.handleGetRealIncome(req, res);
+        const result = await meceController.handleGetRealIncome(req, res);
         return res.status(result.status).json(result.body);
     } catch (err) {
         return res.status(err.statusCode || 500).json({ error: err.message });
     }
 });
 
-router.get('/exposure', verifyJWT, (req, res) => {
+router.get('/exposure', verifyJWT, async (req, res) => {
     try {
-        const result = meceController.handleGetExposure(req, res);
+        const result = await meceController.handleGetExposure(req, res);
         return res.status(result.status).json(result.body);
     } catch (err) {
         return res.status(err.statusCode || 500).json({ error: err.message });
