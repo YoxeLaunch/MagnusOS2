@@ -574,11 +574,11 @@ export const Projections: React.FC = () => {
                     cashRunway={cashRunway}
                     financialDiscipline={financialDiscipline}
                 />
+            </div>
 
-                {/* MECE Economic Convergence Engine (Dynamic backend discovery) */}
-                <div className="mt-8">
-                    <ConvergenceTab userId={user?.username} />
-                </div>
+            {/* MECE Economic Convergence Engine (Full Width Layout) */}
+            <div className="w-full mt-8">
+                <ConvergenceTab userId={user?.username} />
             </div>
         </div>
     );
