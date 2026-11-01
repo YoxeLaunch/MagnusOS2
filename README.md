@@ -557,11 +557,17 @@ MagnusOS2/
 │   ├── reconcile-ledger.js         # Auditor de integridad de saldos en tiempo real
 │   ├── migrate.js                  # CLI de migraciones y baselines
 │   └── restore-drill.js            # Simulacro de restauración de backups en sandbox
-├── docs/                           # Documentación de ingeniería y gobernanza
-│   ├── audits/
+├── docs/                           # Documentación de ingeniería, guías y gobernanza
+│   ├── DOCS.md                     # Documentación técnica integral histórica
+│   ├── GUIA_COMANDOS.md            # Guía operativa de comandos y túneles seguros
+│   ├── audits/                     # Auditorías técnicas dinámicas (SB v2, etc.)
 │   │   └── BANKING_DYNAMIC_PERIOD_AUDIT.md # Auditoría de períodos dinámicos SB v2
-│   ├── audit/
-│   │   └── PHASE2_FINAL_REMEDIATION_REPORT.md # Informe de remediación y hardening
+│   ├── audit/                      # Informes de auditoría y certificación (Fase II, Stress Test)
+│   │   ├── PHASE2_FINAL_REMEDIATION_REPORT.md # Informe de remediación y hardening
+│   │   └── INFORME_STRESS_TEST_2026-10-24.md  # Resultados de stress test de concurrencia
+│   ├── FX_SERVICE.md               # Especificación del servicio Providence FX
+│   ├── ENERGY_RD.md                # Monitor de combustibles y mercado energético MICM
+│   ├── MACRO_RD.md                 # Contexto macroeconómico y series del BCRD
 │   ├── PHASE2_FINAL_SOURCE_OF_TRUTH_MAP.md # Matriz de fuentes de verdad
 │   └── PHASE2_FINAL_PRODUCTION_RUNBOOK.md  # Runbook paso a paso para despliegues
 ├── docker-compose.yml              # Orquestación de servicios en red soberana
