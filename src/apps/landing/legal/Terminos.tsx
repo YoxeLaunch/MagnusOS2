@@ -12,7 +12,7 @@ const Terminos: React.FC = () => {
 
       <LegalSection title="1. Aceptación">
         <p>
-          Al crear una cuenta en Magnus Services usted acepta estos términos. Si no está de acuerdo, no debe
+          Al crear una cuenta en Magnus Financial Systems usted acepta estos términos. Si no está de acuerdo, no debe
           registrarse ni utilizar la plataforma.
         </p>
       </LegalSection>

@@ -113,7 +113,9 @@ export const MASTER_FUELS = [
 const MONTH_NAMES = {
     enero: '01', febrero: '02', marzo: '03', abril: '04',
     mayo: '05', junio: '06', julio: '07', agosto: '08',
-    septiembre: '09', setiembre: '09', octubre: '10', noviembre: '11', diciembre: '12'
+    septiembre: '09', setiembre: '09', octubre: '10', noviembre: '11', diciembre: '12',
+    ene: '01', feb: '02', mar: '03', abr: '04', may: '05', jun: '06',
+    jul: '07', ago: '08', sep: '09', set: '09', oct: '10', nov: '11', dic: '12'
 };
 
 export class MicmFuelProvider {
@@ -135,7 +137,7 @@ export class MicmFuelProvider {
     /**
      * Ingesta o actualiza la semana de combustible a partir de los boletines oficiales
      */
-    async fetchLatestWeeklyBulletin() {
+    async fetchLatestWeeklyBulletin(specificPdfUrl = null) {
         const startTime = Date.now();
         let httpStatus = 200;
 
@@ -144,7 +146,7 @@ export class MicmFuelProvider {
             await this.ensureMasterCatalog();
 
             // 1. Descubrir los enlaces de PDFs más recientes en el sitio web de MICM
-            const pdfUrl = await this.#discoverLatestBulletinPdf(this.bulletinListUrl);
+            const pdfUrl = specificPdfUrl || await this.#discoverLatestBulletinPdf(this.bulletinListUrl);
             const gnPdfUrl = await this.#discoverLatestBulletinPdf(this.gnBulletinListUrl);
 
             if (!pdfUrl) {
@@ -299,21 +301,78 @@ export class MicmFuelProvider {
      * Extrae vigencia, fecha de publicación y tasa de cambio del texto del aviso oficial
      */
     #extractPeriodMetadata(text, sourceUrl) {
-        // "sábado tres (03) al día viernes nueve (09) de octubre de dos mil veintiséis (2026)"
-        const vigMatch = text.match(/s[áa]bado\s+[^()]*\((\d{1,2})\)\s+al\s+(?:d[íi]a\s+)?viernes\s+[^()]*\((\d{1,2})\)\s+de\s+([a-zA-ZáéíóúÁÉÍÓÚ]+)\s+de\s+(?:dos\s+mil\s+[^(]*\()?(\d{4})/i);
+        let validFrom = null;
+        let validTo = null;
 
-        let validFrom = '2026-10-03';
-        let validTo = '2026-10-09';
+        // Formato 1: Cross-month (ej: "sábado treinta y uno (31) de octubre al día viernes séis (06) de noviembre de dos mil veintiséis (2026)")
+        const crossMonthRegex = /s[áa]bado\s+[^()]*\(?(\d{1,2})\)?\s+de\s+([a-zA-ZáéíóúÁÉÍÓÚ]+)(?:\s+de\s+(?:dos\s+mil\s+[^(]*\()?(\d{4})\)?)?\s+al\s+(?:d[íi]a\s+)?viernes\s+[^()]*\(?(\d{1,2})\)?\s+de\s+([a-zA-ZáéíóúÁÉÍÓÚ]+)\s+de\s+(?:dos\s+mil\s+[^(]*\()?(\d{4})/i;
+        // Formato 2: Same-month (ej: "sábado tres (03) al día viernes nueve (09) de octubre de dos mil veintiséis (2026)")
+        const sameMonthRegex = /s[áa]bado\s+[^()]*\(?(\d{1,2})\)?\s+al\s+(?:d[íi]a\s+)?viernes\s+[^()]*\(?(\d{1,2})\)?\s+de\s+([a-zA-ZáéíóúÁÉÍÓÚ]+)\s+de\s+(?:dos\s+mil\s+[^(]*\()?(\d{4})/i;
 
-        if (vigMatch) {
-            const fromDay = vigMatch[1].padStart(2, '0');
-            const toDay = vigMatch[2].padStart(2, '0');
-            const monthStr = vigMatch[3].toLowerCase();
-            const yearStr = vigMatch[4];
-            const monthNum = MONTH_NAMES[monthStr] || '10';
+        const mCross = text.match(crossMonthRegex);
+        if (mCross) {
+            const fromDay = mCross[1].padStart(2, '0');
+            const fromMonth = MONTH_NAMES[mCross[2].toLowerCase()] || '10';
+            const toDay = mCross[4].padStart(2, '0');
+            const toMonth = MONTH_NAMES[mCross[5].toLowerCase()] || '10';
+            let toYear = parseInt(mCross[6]);
+            let fromYear = mCross[3] ? parseInt(mCross[3]) : toYear;
+            // Si el periodo cruza de diciembre a enero y solo se especificó el año final
+            if (fromMonth === '12' && toMonth === '01' && fromYear === toYear) {
+                fromYear = toYear - 1;
+            }
+            validFrom = `${fromYear}-${fromMonth}-${fromDay}`;
+            validTo = `${toYear}-${toMonth}-${toDay}`;
+        } else {
+            const mSame = text.match(sameMonthRegex);
+            if (mSame) {
+                const fromDay = mSame[1].padStart(2, '0');
+                const toDay = mSame[2].padStart(2, '0');
+                const monthNum = MONTH_NAMES[mSame[3].toLowerCase()] || '10';
+                const yearStr = mSame[4];
+                validFrom = `${yearStr}-${monthNum}-${fromDay}`;
+                validTo = `${yearStr}-${monthNum}-${toDay}`;
+            }
+        }
 
-            validFrom = `${yearStr}-${monthNum}-${fromDay}`;
-            validTo = `${yearStr}-${monthNum}-${toDay}`;
+        // Fallback por URL / nombre de archivo oficial de MICM
+        if (!validFrom && sourceUrl) {
+            const urlMatchCross = sourceUrl.match(/CORTE-(\d{1,2})-([A-Z]+)-(\d{1,2})-([A-Z]+)-DE-(\d{4})/i);
+            const urlMatchSame = sourceUrl.match(/CORTE-(\d{1,2})-(\d{1,2})-([A-Z]+)-DE-(\d{4})/i);
+            if (urlMatchCross) {
+                const fromDay = urlMatchCross[1].padStart(2, '0');
+                const fromMonth = MONTH_NAMES[urlMatchCross[2].toLowerCase()] || '10';
+                const toDay = urlMatchCross[3].padStart(2, '0');
+                const toMonth = MONTH_NAMES[urlMatchCross[4].toLowerCase()] || '11';
+                let toYear = parseInt(urlMatchCross[5]);
+                let fromYear = toYear;
+                if (fromMonth === '12' && toMonth === '01') {
+                    fromYear = toYear - 1;
+                }
+                validFrom = `${fromYear}-${fromMonth}-${fromDay}`;
+                validTo = `${toYear}-${toMonth}-${toDay}`;
+            } else if (urlMatchSame) {
+                const fromDay = urlMatchSame[1].padStart(2, '0');
+                const toDay = urlMatchSame[2].padStart(2, '0');
+                const month = MONTH_NAMES[urlMatchSame[3].toLowerCase()] || '10';
+                const year = urlMatchSame[4];
+                validFrom = `${year}-${month}-${fromDay}`;
+                validTo = `${year}-${month}-${toDay}`;
+            }
+        }
+
+        if (!validFrom || !validTo) {
+            throw new Error(`No se pudo determinar el periodo de vigencia del aviso oficial (${sourceUrl})`);
+        }
+
+        // Invariante de ciclo semanal de combustibles: En República Dominicana, las resoluciones oficiales
+        // van de sábado a viernes (exactamente 6 días de diferencia, 7 días inclusive).
+        // Forzamos validTo a partir de validFrom para asegurar consistencia ante cambios de mes, bisiestos y fin de año.
+        const dFrom = new Date(`${validFrom}T00:00:00Z`);
+        if (!isNaN(dFrom.getTime())) {
+            const dToExpected = new Date(dFrom);
+            dToExpected.setUTCDate(dToExpected.getUTCDate() + 6);
+            validTo = dToExpected.toISOString().split('T')[0];
         }
 
         // Tasa de cambio de referencia
@@ -339,7 +398,12 @@ export class MicmFuelProvider {
         const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
 
         const parseNumbersUnderLabel = (label) => {
-            const idx = lines.findIndex(l => l.toLowerCase().startsWith(label.toLowerCase()));
+            const idx = lines.findIndex(l => {
+                const lower = l.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+                const target = label.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+                if (target === 'avtur') return lower === 'avtur';
+                return lower === target || lower.startsWith(target);
+            });
             if (idx === -1) return null;
             const nums = [];
             for (let i = idx + 1; i < idx + 15; i++) {

@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { MagnusChessLogo } from './Logos';
 
 interface NavbarProps {
   onNavigate: (view: string) => void;
@@ -23,13 +24,13 @@ const Navbar: React.FC<NavbarProps> = ({ onNavigate, currentView, onLogin, onReg
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between h-20 items-center">
           {/* Logo */}
-          <div className="flex items-center gap-3 cursor-pointer" onClick={() => handleNav('home')}>
-            <div className="bg-gradient-to-br from-theme-gold to-yellow-200 w-10 h-10 rounded-lg flex items-center justify-center shadow-lg shadow-theme-gold/20">
-              <span className="material-symbols-outlined text-black">pie_chart</span>
+          <div className="flex items-center gap-3 cursor-pointer select-none" onClick={() => handleNav('home')}>
+            <div className="w-11 h-11 rounded-xl overflow-hidden shadow-lg shadow-theme-gold/20 border border-theme-gold/30 hover:border-theme-gold transition-colors">
+              <MagnusChessLogo className="w-full h-full" size={44} />
             </div>
             <div className="flex flex-col">
-              <span className="font-display font-bold text-xl tracking-wide text-gray-900 dark:text-white uppercase">Magnus</span>
-              <span className="text-[0.65rem] tracking-[0.2em] font-medium text-theme-gold uppercase">Services</span>
+              <span className="font-display font-bold text-xl tracking-wider text-gray-900 dark:text-white uppercase leading-none">Magnus</span>
+              <span className="text-[0.62rem] tracking-[0.22em] font-semibold text-theme-gold uppercase mt-1">Financial Systems</span>
             </div>
           </div>
 

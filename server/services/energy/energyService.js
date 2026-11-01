@@ -78,7 +78,7 @@ export class EnergyService {
     /**
      * Sincroniza la publicación semanal oficial con la base de datos
      */
-    async syncWeeklyEnergyData() {
+    async syncWeeklyEnergyData(specificPdfUrl = null) {
         if (this.isSyncing) {
             console.log('[ENERGY_SERVICE] Sincronización en curso, omitiendo ejecución redundante.');
             return;
@@ -89,7 +89,7 @@ export class EnergyService {
             await micmFuelProvider.ensureMasterCatalog();
 
             // 1. Obtener la última publicación oficial desde el proveedor MICM
-            const bulletinData = await micmFuelProvider.fetchLatestWeeklyBulletin();
+            const bulletinData = await micmFuelProvider.fetchLatestWeeklyBulletin(specificPdfUrl);
             if (!bulletinData || !bulletinData.observations || bulletinData.observations.length === 0) {
                 throw new Error('El proveedor MICM no retornó observaciones válidas.');
             }
