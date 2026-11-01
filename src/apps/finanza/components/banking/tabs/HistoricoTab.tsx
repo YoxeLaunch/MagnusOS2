@@ -143,15 +143,15 @@ export const HistoricoTab: React.FC = () => {
                                 <button
                                     key={rng}
                                     onClick={() => setSelectedRange(rng)}
-                                    disabled={!isAvailable && rng !== 'MAX'}
+                                    disabled={!isAvailable}
                                     className={`px-2.5 py-1 rounded text-[11px] font-mono transition-colors ${
                                         selectedRange === rng
                                             ? 'bg-indigo-950 text-indigo-300 border border-indigo-800/50 font-bold'
-                                            : isAvailable || rng === 'MAX'
+                                            : isAvailable
                                             ? 'text-slate-400 hover:text-slate-200'
                                             : 'text-slate-400 cursor-not-allowed'
                                     }`}
-                                    title={!isAvailable && rng !== 'MAX' ? `Requiere más de ${rng} de datos cargados` : `Ver últimos ${rng}`}
+                                    title={!isAvailable ? `Requiere más de ${rng} de datos cargados` : `Ver últimos ${rng}`}
                                 >
                                     {rng}
                                 </button>

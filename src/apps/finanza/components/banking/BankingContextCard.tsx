@@ -12,7 +12,6 @@ import {
   TrendingUp,
   TrendingDown,
   Minus,
-  ShieldCheck,
   Calendar
 } from 'lucide-react';
 import { apiFetch } from '../../../../shared/utils/apiFetch';
@@ -61,14 +60,16 @@ export const BankingContextCard: React.FC<BankingContextCardProps> = ({ onNaviga
 
   if (!summaryData) return null;
 
-  // Extraer datos calculados
-  const dsi = summaryData.dollarizationIndex?.dsiPct || 29.7;
+  // Extraer datos calculados (sin sustituciones silenciosas)
+  const dsi = summaryData.dollarizationIndex?.dsiPct ?? null;
   const timeSeries = trendData?.timeSeries || [];
-  const curPoint = timeSeries[timeSeries.length - 1];
+  const curPoint = timeSeries.length > 0 ? timeSeries[timeSeries.length - 1] : null;
   const prevPoint = timeSeries.length > 1 ? timeSeries[timeSeries.length - 2] : null;
 
   // Variación mensual DSI (puntos porcentuales)
-  const dsiDiff = prevPoint ? (curPoint?.dsiPct - prevPoint?.dsiPct) : null;
+  const dsiDiff = (curPoint?.dsiPct != null && prevPoint?.dsiPct != null)
+    ? Number((curPoint.dsiPct - prevPoint.dsiPct).toFixed(2))
+    : null;
   const isDsiUp = dsiDiff !== null && dsiDiff > 0;
   const isDsiDown = dsiDiff !== null && dsiDiff < 0;
 
@@ -78,9 +79,11 @@ export const BankingContextCard: React.FC<BankingContextCardProps> = ({ onNaviga
     usdGrowthMoM = Number((((curPoint.totalUsd - prevPoint.totalUsd) / prevPoint.totalUsd) * 100).toFixed(2));
   }
 
-  const usdYield = summaryData.currencies?.USD?.weightedYieldPct || curPoint?.usdYieldPct || 1.76;
-  const dopYield = summaryData.currencies?.DOP?.weightedYieldPct || curPoint?.dopYieldPct || 4.09;
-  const periodLabel = formatPeriodLong(summaryData.periodo);
+  const usdYield = summaryData.currencies?.USD?.weightedYieldPct ?? curPoint?.usdYieldPct ?? null;
+  const dopYield = summaryData.currencies?.DOP?.weightedYieldPct ?? curPoint?.dopYieldPct ?? null;
+  const refPeriod = summaryData.meta?.referencePeriod || summaryData.periodo;
+  const periodLabel = refPeriod ? formatPeriodLong(refPeriod) : 'Dato no disponible';
+  const freshness = summaryData.meta?.freshness || 'CURRENT';
 
   return (
     <div className="border-t border-slate-100 dark:border-white/5 bg-gradient-to-r from-slate-50/90 via-blue-50/20 to-slate-50/90 dark:from-white/[0.01] dark:via-blue-950/10 dark:to-white/[0.01] px-5 py-3.5 transition-all">
@@ -97,6 +100,17 @@ export const BankingContextCard: React.FC<BankingContextCardProps> = ({ onNaviga
               </span>
               <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300 font-semibold border border-blue-500/20">
                 SB RD
+              </span>
+              <span className={`inline-flex items-center gap-1 text-[9px] font-mono px-1.5 py-0.2 rounded font-semibold ${
+                freshness === 'CURRENT'
+                  ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-500/20'
+                  : freshness === 'PARTIAL'
+                  ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-500/20'
+                  : freshness === 'STALE'
+                  ? 'bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-500/20'
+                  : 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border border-slate-500/20'
+              }`}>
+                {freshness === 'CURRENT' ? 'Vigente' : freshness === 'PARTIAL' ? 'Parcial' : freshness === 'STALE' ? 'Desactualizado' : 'N/D'}
               </span>
             </div>
             <div className="flex items-center gap-1.5 text-[11px] text-slate-500 dark:text-slate-400">
@@ -117,7 +131,7 @@ export const BankingContextCard: React.FC<BankingContextCardProps> = ({ onNaviga
             </span>
             <div className="flex items-baseline gap-1 mt-0.5">
               <span className="text-sm font-bold font-mono text-slate-900 dark:text-white">
-                {formatPercent(dsi)}
+                {dsi !== null ? formatPercent(dsi) : <span className="text-xs font-normal text-slate-400">Dato no disponible</span>}
               </span>
               {dsiDiff !== null && (
                 <span className={`text-[10px] font-mono font-semibold flex items-center ${isDsiUp ? 'text-amber-600 dark:text-amber-400' : isDsiDown ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400'}`}>
@@ -135,7 +149,9 @@ export const BankingContextCard: React.FC<BankingContextCardProps> = ({ onNaviga
             </span>
             <div className="flex items-baseline gap-1 mt-0.5">
               <span className="text-sm font-bold font-mono text-slate-900 dark:text-white">
-                {formatMoneyCompact(summaryData.dollarizationIndex?.usdDepositsEquivDop)}
+                {summaryData.dollarizationIndex?.usdDepositsEquivDop != null
+                  ? formatMoneyCompact(summaryData.dollarizationIndex.usdDepositsEquivDop)
+                  : <span className="text-xs font-normal text-slate-400">Dato no disponible</span>}
               </span>
               {usdGrowthMoM !== null && (
                 <span className={`text-[10px] font-mono font-semibold ${usdGrowthMoM >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
@@ -151,7 +167,7 @@ export const BankingContextCard: React.FC<BankingContextCardProps> = ({ onNaviga
               Tasa Pasiva USD
             </span>
             <span className="text-sm font-bold font-mono text-slate-800 dark:text-slate-200 block mt-0.5">
-              {formatPercent(usdYield)}
+              {usdYield !== null ? formatPercent(usdYield) : <span className="text-xs font-normal text-slate-400">Dato no disponible</span>}
             </span>
           </div>
 
@@ -161,7 +177,7 @@ export const BankingContextCard: React.FC<BankingContextCardProps> = ({ onNaviga
               Tasa Pasiva DOP
             </span>
             <span className="text-sm font-bold font-mono text-slate-800 dark:text-slate-200 block mt-0.5">
-              {formatPercent(dopYield)}
+              {dopYield !== null ? formatPercent(dopYield) : <span className="text-xs font-normal text-slate-400">Dato no disponible</span>}
             </span>
           </div>
         </div>

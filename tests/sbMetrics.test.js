@@ -4,7 +4,9 @@ import {
     assessSbVolumeAnomalies,
     calculateHhi,
     classifyHhi,
-    getSbOperationalStatus
+    getSbOperationalStatus,
+    determineSbFreshness,
+    buildSbTemporalMeta
 } from '../server/services/sb/sbMetrics.js';
 
 test('SB HHI uses percentage shares on the 0-10000 scale', () => {
@@ -28,4 +30,69 @@ test('SB volume monitoring warns without blocking an entity or record decline', 
         current: { entityCount: 40, recordCount: 1900 },
         previous: { entityCount: 40, recordCount: 2184 }
     })[0].code, 'RECORD_COUNT_DROP');
+});
+
+test('SB freshness evaluates temporal boundaries correctly', () => {
+    const fixedNow = new Date('2026-11-01T00:00:00Z');
+
+    // Septiembre 2026 terminó el 2026-09-30 (32 días al 1 de nov -> CURRENT)
+    assert.equal(determineSbFreshness({
+        referencePeriod: '2026-09',
+        recordCount: 2202,
+        entityCount: 40,
+        now: fixedNow
+    }), 'CURRENT');
+
+    // Agosto 2026 terminó el 2026-08-31 (62 días al 1 de nov -> CURRENT dentro del rezago regulatorio <= 75 días)
+    assert.equal(determineSbFreshness({
+        referencePeriod: '2026-08',
+        recordCount: 2136,
+        entityCount: 39,
+        now: fixedNow
+    }), 'CURRENT');
+
+    // Mayo 2026 terminó el 2026-05-31 (>150 días -> STALE)
+    assert.equal(determineSbFreshness({
+        referencePeriod: '2026-05',
+        recordCount: 2182,
+        entityCount: 40,
+        now: fixedNow
+    }), 'STALE');
+
+    // Entidades incompletas (<30) -> PARTIAL
+    assert.equal(determineSbFreshness({
+        referencePeriod: '2026-09',
+        recordCount: 500,
+        entityCount: 15,
+        now: fixedNow
+    }), 'PARTIAL');
+
+    // Sin datos -> UNAVAILABLE
+    assert.equal(determineSbFreshness({
+        referencePeriod: null,
+        recordCount: 0,
+        entityCount: 0,
+        now: fixedNow
+    }), 'UNAVAILABLE');
+});
+
+test('buildSbTemporalMeta formats canonical contract matching specification', () => {
+    const meta = buildSbTemporalMeta({
+        referencePeriod: '2026-09',
+        syncRun: {
+            id: 10,
+            executed_at: '2026-10-19T20:56:40.698Z',
+            metadata: { completedAt: '2026-10-19T20:56:40.698Z' }
+        },
+        recordCount: 2202,
+        entityCount: 40,
+        now: new Date('2026-11-01T00:00:00Z')
+    });
+
+    assert.equal(meta.source, 'SB v2 API');
+    assert.equal(meta.referencePeriod, '2026-09');
+    assert.equal(meta.publishedAt, '2026-10-19T20:56:40.698Z');
+    assert.equal(meta.syncedAt, '2026-10-19T20:56:40.698Z');
+    assert.equal(meta.freshness, 'CURRENT');
+    assert.equal(meta.snapshotId, 10);
 });

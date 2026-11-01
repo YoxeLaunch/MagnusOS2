@@ -8,7 +8,7 @@
 import { sequelize, SbBankingMetric, SbSyncRun } from '../models/index.js';
 import { sbStatisticsService } from '../services/sb/sbStatisticsService.js';
 import { Op } from 'sequelize';
-import { calculateHhi, classifyHhi } from '../services/sb/sbMetrics.js';
+import { calculateHhi, classifyHhi, buildSbTemporalMeta, determineSbFreshness } from '../services/sb/sbMetrics.js';
 
 // In-Memory SWR Cache for fast reads
 const memoryCache = new Map();
@@ -38,6 +38,23 @@ async function getLatestPeriod() {
 }
 
 /**
+ * Helper: Obtiene el registro de sincronización oficial para un período
+ */
+async function getLatestSyncRun(periodo) {
+    if (!periodo) return null;
+    try {
+        if (!SbSyncRun) return null;
+        const run = await SbSyncRun.findOne({
+            where: { periodo, status: 'SUCCESS' },
+            order: [['executed_at', 'DESC']]
+        });
+        return run;
+    } catch (_) {
+        return null;
+    }
+}
+
+/**
  * 1. Resumen General del Sistema Financiero
  * GET /api/markets/banking/summary
  */
@@ -45,8 +62,10 @@ export const getBankingSummary = async (req, res) => {
     try {
         const targetPeriod = req.query.period || await getLatestPeriod();
         if (!targetPeriod) {
+            const emptyMeta = buildSbTemporalMeta({ referencePeriod: null, recordCount: 0, entityCount: 0 });
             return res.json({
                 success: true,
+                meta: emptyMeta,
                 message: 'No hay datos bancarios registrados aún. Se requiere sincronización inicial.',
                 data: null
             });
@@ -55,7 +74,7 @@ export const getBankingSummary = async (req, res) => {
         const cacheKey = `summary_${targetPeriod}`;
         const cached = getCached(cacheKey);
         if (cached && req.query.refresh !== 'true') {
-            return res.json({ success: true, cached: true, data: cached });
+            return res.json({ success: true, cached: true, meta: cached.meta, data: cached.payload });
         }
 
         // Obtener período anterior para cálculo de crecimiento MoM
@@ -141,6 +160,7 @@ export const getBankingSummary = async (req, res) => {
             GROUP BY entidad;
         `, { bind: [targetPeriod] });
         const hhiValue = calculateHhi(entityBalances.map(row => row.balance));
+        const institutionCount = entityBalances.length;
 
         // Distribución física vs jurídica
         const [holderDistribution] = await sequelize.query(`
@@ -154,18 +174,36 @@ export const getBankingSummary = async (req, res) => {
             GROUP BY persona;
         `, { bind: [totalSystemBalance > 0 ? totalSystemBalance : 1, targetPeriod] });
 
+        // Total de registros del corte para trazabilidad
+        const [[recordCountRow]] = await sequelize.query(`
+            SELECT COUNT(*) as total_records FROM public.sb_banking_metrics WHERE periodo = $1;
+        `, { bind: [targetPeriod] });
+        const recordCount = parseInt(recordCountRow?.total_records || '0', 10);
+
+        const syncRun = await getLatestSyncRun(targetPeriod);
+        const meta = buildSbTemporalMeta({
+            referencePeriod: targetPeriod,
+            syncRun,
+            recordCount,
+            entityCount: institutionCount
+        });
+
         // Índice de Dolarización (DSI): Depósitos USD (equivalente DOP) / Total Sistema
         const usdBalance = currencyMap['USD']?.totalBalance || 0;
         const dollarizationIndexPct = totalSystemBalance > 0
             ? Number(((usdBalance / totalSystemBalance) * 100).toFixed(2))
-            : 0;
+            : null;
 
         const payload = {
+            meta,
             periodo: targetPeriod,
+            referencePeriod: targetPeriod,
+            institutionCount,
+            totalInstitutions: institutionCount,
             previousPeriodo: prevPeriod,
             totalSystemBalanceDop: totalSystemBalance,
             totalInstruments,
-            systemWeightedYieldPct: totalSystemBalance > 0 ? Number((sumWeightedTotal / totalSystemBalance).toFixed(4)) : 0,
+            systemWeightedYieldPct: totalSystemBalance > 0 ? Number((sumWeightedTotal / totalSystemBalance).toFixed(4)) : null,
             momGrowthPct,
             dollarizationIndex: {
                 dsiPct: dollarizationIndexPct,
@@ -196,8 +234,8 @@ export const getBankingSummary = async (req, res) => {
             }))
         };
 
-        setCache(cacheKey, payload);
-        res.json({ success: true, cached: false, data: payload });
+        setCache(cacheKey, { payload, meta });
+        res.json({ success: true, cached: false, meta, data: payload });
 
     } catch (error) {
         console.error('[SB_CONTROLLER] Error en getBankingSummary:', error);
@@ -215,13 +253,21 @@ export const getBankingYields = async (req, res) => {
         const targetPeriod = req.query.period || await getLatestPeriod();
 
         if (!targetPeriod) {
-            return res.json({ success: true, data: [] });
+            const emptyMeta = buildSbTemporalMeta({ referencePeriod: null, recordCount: 0, entityCount: 0 });
+            return res.json({ success: true, meta: emptyMeta, periodo: null, currency, data: [] });
         }
 
         const cacheKey = `yields_${targetPeriod}_${currency}`;
         const cached = getCached(cacheKey);
         if (cached && req.query.refresh !== 'true') {
-            return res.json({ success: true, cached: true, data: cached });
+            return res.json({
+                success: true,
+                cached: true,
+                meta: cached.meta,
+                periodo: cached.periodo,
+                currency: cached.currency,
+                data: cached.data
+            });
         }
 
         const [rows] = await sequelize.query(`
@@ -254,8 +300,17 @@ export const getBankingYields = async (req, res) => {
             maxTasaPct: parseFloat(r.max_tasa)
         }));
 
-        setCache(cacheKey, results);
-        res.json({ success: true, cached: false, periodo: targetPeriod, currency, data: results });
+        const syncRun = await getLatestSyncRun(targetPeriod);
+        const meta = buildSbTemporalMeta({
+            referencePeriod: targetPeriod,
+            syncRun,
+            recordCount: rows.length,
+            entityCount: rows.length
+        });
+
+        const cacheData = { data: results, meta, periodo: targetPeriod, currency };
+        setCache(cacheKey, cacheData);
+        res.json({ success: true, cached: false, meta, periodo: targetPeriod, currency, data: results });
 
     } catch (error) {
         console.error('[SB_CONTROLLER] Error en getBankingYields:', error);
@@ -270,12 +325,21 @@ export const getBankingYields = async (req, res) => {
 export const getBankingDeposits = async (req, res) => {
     try {
         const targetPeriod = req.query.period || await getLatestPeriod();
-        if (!targetPeriod) return res.json({ success: true, data: [] });
+        if (!targetPeriod) {
+            const emptyMeta = buildSbTemporalMeta({ referencePeriod: null, recordCount: 0, entityCount: 0 });
+            return res.json({ success: true, meta: emptyMeta, periodo: null, data: [] });
+        }
 
         const cacheKey = `deposits_${targetPeriod}`;
         const cached = getCached(cacheKey);
         if (cached && req.query.refresh !== 'true') {
-            return res.json({ success: true, cached: true, data: cached });
+            return res.json({
+                success: true,
+                cached: true,
+                meta: cached.meta,
+                periodo: cached.periodo,
+                data: cached.data
+            });
         }
 
         const [rows] = await sequelize.query(`
@@ -310,8 +374,17 @@ export const getBankingDeposits = async (req, res) => {
             marketSharePct: parseFloat(r.market_share_pct)
         }));
 
-        setCache(cacheKey, results);
-        res.json({ success: true, cached: false, periodo: targetPeriod, data: results });
+        const syncRun = await getLatestSyncRun(targetPeriod);
+        const meta = buildSbTemporalMeta({
+            referencePeriod: targetPeriod,
+            syncRun,
+            recordCount: rows.length,
+            entityCount: rows.length
+        });
+
+        const cacheData = { data: results, meta, periodo: targetPeriod };
+        setCache(cacheKey, cacheData);
+        res.json({ success: true, cached: false, meta, periodo: targetPeriod, data: results });
 
     } catch (error) {
         console.error('[SB_CONTROLLER] Error en getBankingDeposits:', error);
@@ -328,7 +401,7 @@ export const getDollarizationTrend = async (req, res) => {
         const cacheKey = 'dollarization_trend';
         const cached = getCached(cacheKey);
         if (cached && req.query.refresh !== 'true') {
-            return res.json({ success: true, cached: true, data: cached });
+            return res.json({ success: true, cached: true, meta: cached.meta, data: cached.payload });
         }
 
         const [rows] = await sequelize.query(`
@@ -357,14 +430,25 @@ export const getDollarizationTrend = async (req, res) => {
             usdYieldPct: parseFloat(r.usd_yield_pct || '0')
         }));
 
+        const latestPeriod = trend.length > 0 ? trend[trend.length - 1].periodo : null;
+        const syncRun = await getLatestSyncRun(latestPeriod);
+        const meta = buildSbTemporalMeta({
+            referencePeriod: latestPeriod,
+            syncRun,
+            recordCount: trend.length,
+            entityCount: 40
+        });
+
         const responsePayload = {
+            meta,
+            referencePeriod: latestPeriod,
             methodology: 'SB_DOMINICAN_REPUBLIC_OFFICIAL_DOP_EQUIVALENT',
             explanation: 'La Superintendencia de Bancos publica los balances en moneda extranjera ya convertidos a pesos dominicanos (DOP) según su tasa contable oficial. El ratio DSI refleja la participación de los depósitos en USD sobre el ahorro bancario total.',
             timeSeries: trend
         };
 
-        setCache(cacheKey, responsePayload);
-        res.json({ success: true, cached: false, data: responsePayload });
+        setCache(cacheKey, { payload: responsePayload, meta });
+        res.json({ success: true, cached: false, meta, data: responsePayload });
 
     } catch (error) {
         console.error('[SB_CONTROLLER] Error en getDollarizationTrend:', error);
@@ -446,11 +530,20 @@ export const getBankingInstitution = async (req, res) => {
         `, { bind: [entityName, latestPeriod] });
 
         const latestRecord = historyRows[historyRows.length - 1];
+        const syncRun = await getLatestSyncRun(latestPeriod);
+        const meta = buildSbTemporalMeta({
+            referencePeriod: latestPeriod,
+            syncRun,
+            recordCount: historyRows.length,
+            entityCount: 1
+        });
 
         res.json({
             success: true,
+            meta,
             entidad: entityName,
             periodo: latestPeriod,
+            referencePeriod: latestPeriod,
             currentBalance: parseFloat(latestRecord.total_balance),
             currentInstruments: parseInt(latestRecord.total_instruments, 10),
             currentWeightedYieldPct: parseFloat(latestRecord.weighted_yield_pct),
@@ -507,8 +600,19 @@ export const getBankingHistory = async (req, res) => {
             ORDER BY periodo ASC;
         `);
 
+        const latestPeriod = rows.length > 0 ? rows[rows.length - 1].periodo : null;
+        const syncRun = await getLatestSyncRun(latestPeriod);
+        const meta = buildSbTemporalMeta({
+            referencePeriod: latestPeriod,
+            syncRun,
+            recordCount: rows.length,
+            entityCount: rows.length > 0 ? parseInt(rows[rows.length - 1].total_entities, 10) : 0
+        });
+
         res.json({
             success: true,
+            meta,
+            referencePeriod: latestPeriod,
             totalPeriods: rows.length,
             data: rows.map(r => ({
                 periodo: r.periodo,
@@ -533,12 +637,21 @@ export const getBankingHistory = async (req, res) => {
 export const getBankingProvinces = async (req, res) => {
     try {
         const targetPeriod = req.query.period || await getLatestPeriod();
-        if (!targetPeriod) return res.json({ success: true, data: [] });
+        if (!targetPeriod) {
+            const emptyMeta = buildSbTemporalMeta({ referencePeriod: null, recordCount: 0, entityCount: 0 });
+            return res.json({ success: true, meta: emptyMeta, periodo: null, data: [] });
+        }
 
         const cacheKey = `provinces_${targetPeriod}`;
         const cached = getCached(cacheKey);
         if (cached && req.query.refresh !== 'true') {
-            return res.json({ success: true, cached: true, data: cached });
+            return res.json({
+                success: true,
+                cached: true,
+                meta: cached.meta,
+                periodo: cached.periodo,
+                data: cached.data
+            });
         }
 
         const [rows] = await sequelize.query(`
@@ -587,8 +700,17 @@ export const getBankingProvinces = async (req, res) => {
             };
         });
 
-        setCache(cacheKey, results);
-        res.json({ success: true, cached: false, periodo: targetPeriod, data: results });
+        const syncRun = await getLatestSyncRun(targetPeriod);
+        const meta = buildSbTemporalMeta({
+            referencePeriod: targetPeriod,
+            syncRun,
+            recordCount: rows.length,
+            entityCount: rows.length
+        });
+
+        const cacheData = { data: results, meta, periodo: targetPeriod };
+        setCache(cacheKey, cacheData);
+        res.json({ success: true, cached: false, meta, periodo: targetPeriod, data: results });
 
     } catch (error) {
         console.error('[SB_CONTROLLER] Error en getBankingProvinces:', error);

@@ -130,9 +130,14 @@ export const ResumenTab: React.FC<ResumenTabProps> = ({
 
   // Calcular "Otras entidades" si la suma es menor a 100
   const topShareSum = topBanks.reduce((acc: number, b: any) => acc + (b.marketSharePct || 0), 0);
+  const totalCount = data.institutionCount ?? data.totalInstitutions ?? null;
+  const otherCount = totalCount !== null && totalCount > topBanks.length
+    ? totalCount - topBanks.length
+    : null;
+  const otherLabel = otherCount !== null ? `Otras (${otherCount})` : 'Otras';
   if (topShareSum < 100) {
     chartData.push({
-      name: 'Otras (35)',
+      name: otherLabel,
       share: Number((100 - topShareSum).toFixed(2)),
       balance: data.totalSystemBalanceDop * ((100 - topShareSum) / 100),
       color: '#64748b'
@@ -146,15 +151,17 @@ export const ResumenTab: React.FC<ResumenTabProps> = ({
       {/* ========================================================================= */}
       <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-7 gap-3">
         {/* KPI 1: Captaciones Totales */}
-        <div className="bg-[#0f172a] border border-slate-800 rounded-xl p-3.5 shadow-sm flex flex-col justify-between" title={formatMoneyFull(data.totalSystemBalanceDop)}>
+        <div className="bg-[#0f172a] border border-slate-800 rounded-xl p-3.5 shadow-sm flex flex-col justify-between" title={data.totalSystemBalanceDop != null ? formatMoneyFull(data.totalSystemBalanceDop) : undefined}>
           <div className="flex items-center justify-between text-slate-400 mb-1">
             <span className="text-[10px] uppercase font-bold tracking-wider font-mono">Captaciones Totales</span>
             <Wallet size={14} className="text-cyan-400" />
           </div>
           <div className="font-mono text-lg md:text-xl font-bold text-cyan-400">
-            {formatMoneyCompact(data.totalSystemBalanceDop)}
+            {data.totalSystemBalanceDop != null ? formatMoneyCompact(data.totalSystemBalanceDop) : 'Dato no disponible'}
           </div>
-          <span className="text-[10px] text-slate-400 mt-1 font-mono">Cierre {formatPeriodLong(data.periodo)}</span>
+          <span className="text-[10px] text-slate-400 mt-1 font-mono">
+            {data.periodo ? `Cierre ${formatPeriodLong(data.periodo)}` : 'Corte no disponible'}
+          </span>
         </div>
 
         {/* KPI 2: Crecimiento Mensual */}
@@ -179,7 +186,7 @@ export const ResumenTab: React.FC<ResumenTabProps> = ({
             <Coins size={14} className="text-emerald-400" />
           </div>
           <div className="font-mono text-lg md:text-xl font-bold text-emerald-400">
-            {formatPercent(data.dollarizationIndex?.dsiPct)}
+            {data.dollarizationIndex?.dsiPct != null ? formatPercent(data.dollarizationIndex.dsiPct) : 'Dato no disponible'}
           </div>
           <span className="text-[10px] text-slate-400 mt-1 font-mono">Depósitos USD en DOP</span>
         </div>
@@ -191,7 +198,7 @@ export const ResumenTab: React.FC<ResumenTabProps> = ({
             <Users size={14} className="text-indigo-400" />
           </div>
           <div className="font-mono text-lg md:text-xl font-bold text-slate-200">
-            {formatInstrumentsCompact(data.totalInstruments)}
+            {data.totalInstruments != null ? formatInstrumentsCompact(data.totalInstruments) : 'Dato no disponible'}
           </div>
           <span className="text-[10px] text-slate-400 mt-1 font-mono">Cuentas y certificados</span>
         </div>
@@ -206,7 +213,7 @@ export const ResumenTab: React.FC<ResumenTabProps> = ({
             <Percent size={14} className="text-amber-400" />
           </div>
           <div className="font-mono text-lg md:text-xl font-bold text-amber-400">
-            {formatPercent(data.systemWeightedYieldPct)}
+            {data.systemWeightedYieldPct != null ? formatPercent(data.systemWeightedYieldPct) : 'Dato no disponible'}
           </div>
           <span className="text-[10px] text-slate-400 mt-1 font-mono">Costo pasivo medio</span>
         </div>
@@ -221,7 +228,7 @@ export const ResumenTab: React.FC<ResumenTabProps> = ({
             <Building2 size={14} className="text-cyan-400" />
           </div>
           <div className="font-mono text-lg md:text-xl font-bold text-slate-100">
-            40
+            {data.institutionCount ?? data.totalInstitutions ?? (data.topBanks ? data.topBanks.length : 'N/D')}
           </div>
           <span className="text-[10px] text-slate-400 mt-1 font-mono">Entidades SB supervisadas</span>
         </div>

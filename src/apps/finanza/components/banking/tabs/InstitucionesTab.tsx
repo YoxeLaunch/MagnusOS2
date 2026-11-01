@@ -309,7 +309,7 @@ export const InstitucionesTab: React.FC<{ initialEntity?: string }> = ({ initial
                             <div className="flex items-center justify-between mb-3">
                                 <div>
                                     <h3 className="text-xs font-semibold text-slate-200 uppercase tracking-wider">
-                                        Evolución de Captaciones en 2026
+                                        Evolución de Captaciones {entityData?.periodo ? `(${entityData.periodo.split('-')[0]})` : ''}
                                     </h3>
                                     <p className="text-[11px] text-slate-400">
                                         Crecimiento mensual del balance consolidado y depósitos por moneda (en DOP equivalente)

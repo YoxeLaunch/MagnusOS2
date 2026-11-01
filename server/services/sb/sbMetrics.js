@@ -52,3 +52,55 @@ export const assessSbVolumeAnomalies = ({ current, previous, recordDropThreshold
 
     return warnings;
 };
+
+/**
+ * Evalúa el estado de frescura temporal de un corte oficial SB.
+ * Estados canónicos: 'CURRENT' | 'STALE' | 'PARTIAL' | 'UNAVAILABLE'
+ */
+export const determineSbFreshness = ({ referencePeriod, recordCount, entityCount, now = new Date() }) => {
+    if (!referencePeriod || !recordCount || recordCount <= 0) {
+        return 'UNAVAILABLE';
+    }
+    if (typeof entityCount === 'number' && entityCount < 30) {
+        return 'PARTIAL';
+    }
+
+    const [yearStr, monthStr] = referencePeriod.split('-');
+    const year = parseInt(yearStr, 10);
+    const month = parseInt(monthStr, 10);
+    if (Number.isNaN(year) || Number.isNaN(month) || month < 1 || month > 12) {
+        return 'UNAVAILABLE';
+    }
+
+    // El corte mensual oficial SB finaliza el último día del mes correspondiente
+    const periodEnd = new Date(Date.UTC(year, month, 0, 23, 59, 59));
+    const nowUtc = new Date(now.getTime());
+    const ageDays = (nowUtc.getTime() - periodEnd.getTime()) / (1000 * 60 * 60 * 24);
+
+    if (ageDays < 0) {
+        return 'PARTIAL';
+    }
+
+    // Rezago regulatorio habitual de la Superintendencia de Bancos: 30 a 75 días
+    if (ageDays <= 75) {
+        return 'CURRENT';
+    }
+
+    return 'STALE';
+};
+
+/**
+ * Construye el metadato temporal canónico para respuestas SB.
+ */
+export const buildSbTemporalMeta = ({ referencePeriod, syncRun = null, recordCount = 0, entityCount = 0, now = new Date() }) => {
+    const freshness = determineSbFreshness({ referencePeriod, recordCount, entityCount, now });
+    return {
+        source: 'SB v2 API',
+        referencePeriod: referencePeriod || null,
+        publishedAt: syncRun?.metadata?.completedAt || null,
+        syncedAt: syncRun?.executed_at ? new Date(syncRun.executed_at).toISOString() : null,
+        freshness,
+        snapshotId: syncRun?.id ?? null
+    };
+};
+

@@ -47,7 +47,7 @@ interface ProvinceItem {
 
 export const GeografiaTab: React.FC = () => {
     const [provinces, setProvinces] = useState<ProvinceItem[]>([]);
-    const [periodo, setPeriodo] = useState<string>('2026-08');
+    const [periodo, setPeriodo] = useState<string | null>(null);
     const [searchTerm, setSearchTerm] = useState<string>('');
     const [selectedRegion, setSelectedRegion] = useState<string>('ALL');
     const [sortBy, setSortBy] = useState<'balance' | 'instruments' | 'share'>('balance');
@@ -63,7 +63,8 @@ export const GeografiaTab: React.FC = () => {
             const json = await res.json();
             if (json.success && Array.isArray(json.data)) {
                 setProvinces(json.data);
-                if (json.periodo) setPeriodo(json.periodo);
+                const ref = json.periodo || json.meta?.referencePeriod;
+                if (ref) setPeriodo(ref);
             }
         } catch (err: any) {
             setError(err.message || 'Error de conexión');
@@ -188,7 +189,7 @@ export const GeografiaTab: React.FC = () => {
                         {formatDOPCompact(aggregateTotals.totalBal)}
                     </div>
                     <span className="text-[10px] text-slate-400 font-mono block mt-1">
-                        Cierre {formatPeriodLabel(periodo)}
+                        Cierre {periodo ? formatPeriodLabel(periodo) : 'no disponible'}
                     </span>
                 </div>
 

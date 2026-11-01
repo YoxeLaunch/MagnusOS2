@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
     Building2,
     TrendingUp,
@@ -8,10 +8,9 @@ import {
     Landmark,
     ShieldCheck,
     Calendar,
-    Info,
-    RefreshCw,
-    ExternalLink
+    Info
 } from 'lucide-react';
+import { formatPeriodOfficial } from '../../utils/bankingFormatters';
 import { ResumenTab } from './tabs/ResumenTab';
 import { RendimientosTab } from './tabs/RendimientosTab';
 import { InstitucionesTab } from './tabs/InstitucionesTab';
@@ -38,12 +37,40 @@ export const BankingSection: React.FC<BankingSectionProps> = ({
 }) => {
     const [activeTab, setActiveTab] = useState<BankingSubTab>(defaultTab);
     const [selectedEntityForDetail, setSelectedEntityForDetail] = useState<string>(initialEntity);
+    const [metaData, setMetaData] = useState<any>(null);
+    const [summaryData, setSummaryData] = useState<any>(null);
+    const [isLoadingMeta, setIsLoadingMeta] = useState<boolean>(true);
+
+    useEffect(() => {
+        let isMounted = true;
+        const fetchSummaryMeta = async () => {
+            try {
+                setIsLoadingMeta(true);
+                const res = await fetch('/api/markets/banking/summary');
+                if (!res.ok) throw new Error('Error al consultar metadatos SB');
+                const json = await res.json();
+                if (isMounted && json.success) {
+                    setMetaData(json.meta || json.data?.meta || null);
+                    setSummaryData(json.data || null);
+                }
+            } catch (err) {
+                console.warn('[BankingSection] Error cargando metadatos oficiales SB:', err);
+            } finally {
+                if (isMounted) setIsLoadingMeta(false);
+            }
+        };
+        fetchSummaryMeta();
+        return () => { isMounted = false; };
+    }, []);
 
     // Navegar directamente a la ficha de una entidad desde cualquier subpestaña
     const handleSelectEntity = (entityName: string) => {
         setSelectedEntityForDetail(entityName);
         setActiveTab('INSTITUCIONES');
     };
+
+    const referencePeriod = metaData?.referencePeriod || summaryData?.periodo;
+    const periodDisplay = referencePeriod ? formatPeriodOfficial(referencePeriod) : 'Corte no disponible';
 
     const tabsConfig = [
         { id: 'RESUMEN', label: 'Resumen', icon: Building2 },
@@ -82,7 +109,7 @@ export const BankingSection: React.FC<BankingSectionProps> = ({
                         </div>
                     </div>
 
-                    {/* Temporal Distinction & Source Metadata (FASE 3) */}
+                    {/* Temporal Distinction & Source Metadata */}
                     <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
                         <div className="px-3 py-2 rounded-lg bg-slate-900/90 border border-slate-800 text-right">
                             <div className="flex items-center gap-1.5 text-[10px] font-mono text-slate-400 uppercase tracking-wider justify-end">
@@ -90,7 +117,11 @@ export const BankingSection: React.FC<BankingSectionProps> = ({
                                 <span>Período Estadístico Oficial</span>
                             </div>
                             <div className="text-xs font-bold text-cyan-300 font-mono mt-0.5">
-                                Cierre Agosto 2026 (SB)
+                                {isLoadingMeta ? (
+                                    <span className="text-slate-500 animate-pulse">Consultando corte SB...</span>
+                                ) : (
+                                    `${periodDisplay} (SB)`
+                                )}
                             </div>
                         </div>
 
@@ -98,9 +129,21 @@ export const BankingSection: React.FC<BankingSectionProps> = ({
                             <div className="text-[10px] font-mono text-slate-400 uppercase tracking-wider">
                                 Régimen de Actualización
                             </div>
-                            <div className="text-xs font-mono text-amber-300 mt-0.5 flex items-center gap-1">
-                                <span className="w-1.5 h-1.5 rounded-full bg-amber-400"></span>
-                                Regulatorio Mensual
+                            <div className="text-xs font-mono mt-0.5 flex items-center gap-1.5">
+                                <span className={`w-1.5 h-1.5 rounded-full ${
+                                    metaData?.freshness === 'CURRENT' ? 'bg-emerald-400' :
+                                    metaData?.freshness === 'PARTIAL' ? 'bg-amber-400' :
+                                    metaData?.freshness === 'STALE' ? 'bg-rose-400' : 'bg-slate-400'
+                                }`} />
+                                <span className={
+                                    metaData?.freshness === 'CURRENT' ? 'text-emerald-300' :
+                                    metaData?.freshness === 'PARTIAL' ? 'text-amber-300' :
+                                    metaData?.freshness === 'STALE' ? 'text-rose-300' : 'text-slate-300'
+                                }>
+                                    {metaData?.freshness === 'CURRENT' ? 'Oficial Vigente' :
+                                     metaData?.freshness === 'PARTIAL' ? 'Corte Parcial' :
+                                     metaData?.freshness === 'STALE' ? 'Corte Desactualizado' : 'Regulatorio Mensual'}
+                                </span>
                             </div>
                         </div>
                     </div>
@@ -114,9 +157,15 @@ export const BankingSection: React.FC<BankingSectionProps> = ({
                             Distinción: Los datos cambiarios de <strong>Providence FX</strong> se actualizan de forma intradía/diaria, mientras que los saldos y tasas de la <strong>Superintendencia de Bancos (SB)</strong> reflejan cortes contables mensuales consolidados.
                         </span>
                     </div>
-                    <span className="text-slate-400 text-[10px]">
-                        Fuente: SB RD v2 API
-                    </span>
+                    <div className="flex items-center gap-2 text-slate-400 text-[10px]">
+                        <span>Fuente: {metaData?.source || 'SB RD v2 API'}</span>
+                        {metaData?.syncedAt && (
+                            <>
+                                <span>•</span>
+                                <span>Sincronizado: {new Date(metaData.syncedAt).toLocaleDateString('es-DO', { year: 'numeric', month: 'short', day: 'numeric' })}</span>
+                            </>
+                        )}
+                    </div>
                 </div>
             </div>
 
@@ -146,6 +195,7 @@ export const BankingSection: React.FC<BankingSectionProps> = ({
             <div className="min-h-[500px]">
                 {activeTab === 'RESUMEN' && (
                     <ResumenTab
+                        data={summaryData}
                         onSelectInstitution={handleSelectEntity}
                         onSelectTab={(tabId) => setActiveTab(tabId as BankingSubTab)}
                     />

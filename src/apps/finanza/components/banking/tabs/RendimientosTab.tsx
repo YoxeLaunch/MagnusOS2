@@ -35,17 +35,19 @@ import {
   formatPeriodLong
 } from '../../../utils/bankingFormatters';
 
-interface RendimientosTabProps {
+export interface RendimientosTabProps {
   onSelectBank?: (bank: string) => void;
+  onSelectInstitution?: (bank: string) => void;
 }
 
-export const RendimientosTab: React.FC<RendimientosTabProps> = ({ onSelectBank }) => {
+export const RendimientosTab: React.FC<RendimientosTabProps> = ({ onSelectBank, onSelectInstitution }) => {
+  const handleSelect = onSelectInstitution || onSelectBank;
   const [currency, setCurrency] = useState<'DOP' | 'USD' | 'EUR'>('DOP');
   const [yields, setYields] = useState<any[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [filterType, setFilterType] = useState<string>('ALL');
   const [searchTerm, setSearchTerm] = useState<string>('');
-  const [period, setPeriod] = useState<string>('');
+  const [period, setPeriod] = useState<string | null>(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -55,7 +57,8 @@ export const RendimientosTab: React.FC<RendimientosTabProps> = ({ onSelectBank }
         const res = await apiFetch(`/api/markets/banking/yields?currency=${currency}`).then(r => r.json());
         if (isMounted && res?.success) {
           setYields(res.data || []);
-          if (res.periodo) setPeriod(res.periodo);
+          const ref = res.periodo || res.meta?.referencePeriod;
+          if (ref) setPeriod(ref);
         }
       } catch (err) {
         console.warn('[RendimientosTab] Error al cargar rendimientos:', err);
@@ -223,7 +226,7 @@ export const RendimientosTab: React.FC<RendimientosTabProps> = ({ onSelectBank }
               {filtered.map((item: any) => (
                 <tr
                   key={item.entidad}
-                  onClick={() => onSelectBank && onSelectBank(item.entidad)}
+                  onClick={() => handleSelect && handleSelect(item.entidad)}
                   className="hover:bg-slate-50 dark:hover:bg-white/[0.02] cursor-pointer group transition-colors"
                 >
                   <td className="py-3 px-3 font-mono font-bold text-slate-400">
