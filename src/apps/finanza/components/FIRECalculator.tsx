@@ -353,17 +353,18 @@ export const FIRECalculator: React.FC<FIRECalculatorProps> = ({
                     </div>
                     <div>
                         <label className="text-xs font-medium text-slate-500 dark:text-slate-400 block mb-1">
-                            Retorno Esperado (%)
+                            Retorno Real Anual (% neto de inflación)
                         </label>
                         <input
                             type="number"
                             value={expectedReturn * 100}
                             onChange={(e) => setExpectedReturn(Number(e.target.value) / 100)}
-                            className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-black/20 text-slate-900 dark:text-white"
+                            className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-black/20 text-slate-900 dark:text-white font-mono"
                             min={0}
                             max={30}
                             step={0.5}
                         />
+                        <p className="text-[10px] text-slate-400 mt-0.5">Tasa real para no duplicar descuento inflacionario (ej. 7% S&P 500)</p>
                     </div>
                     <div>
                         <label className="text-xs font-medium text-slate-500 dark:text-slate-400 block mb-1">

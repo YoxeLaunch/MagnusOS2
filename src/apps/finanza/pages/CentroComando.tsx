@@ -3,11 +3,12 @@ import { CentroComandoHeader } from '../components/CentroComando/CentroComandoHe
 import { KPIRowAnual, KPIRowMensual } from '../components/CentroComando/KPICards';
 import { PatrimonioBarChart } from '../components/CentroComando/PatrimonioBarChart';
 import { MarketPulseBar } from '../components/CentroComando/MarketPulseBar';
+import { SpendingHeatmap } from '../components/SpendingHeatmap';
 import { useCentroComandoData, CentroComandoMode } from '../hooks/useCentroComandoData';
 import { DashboardSkeleton } from '../../../shared/components/Skeleton';
 import { formatCurrency } from '../utils/calculations';
 import { PrintOptionsModal, PrintOptions } from '../components/PrintOptionsModal';
-import { PieChart as PieChartIcon, PiggyBank, ArrowDownRight, Wallet, Target } from 'lucide-react';
+import { PieChart as PieChartIcon, PiggyBank, ArrowDownRight, Wallet, Target, Calendar, ChevronDown, ChevronUp } from 'lucide-react';
 import {
   BarChart,
   Bar,
@@ -37,6 +38,7 @@ export const CentroComando: React.FC = () => {
     const [mode, setMode] = useState<CentroComandoMode>('anual');
     const [cicloActivo, setCicloActivo] = useState<string>('');
     const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
+    const [showHeatmap, setShowHeatmap] = useState(false);
 
     const { ciclosDisponibles, anualData, mensualData, isLoading } = useCentroComandoData(mode, cicloActivo);
 
@@ -118,28 +120,26 @@ export const CentroComando: React.FC = () => {
                     </div>
 
                     {/* Fila 4: SECCIÓN ACOPLADA Y EQUILIBRADA (INVERSIÓN + EVOLUCIÓN TASA DE AHORRO) */}
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mt-8 items-stretch">
+                    <div className={`grid grid-cols-1 ${totalInversionAnual > 0 ? 'lg:grid-cols-2' : 'lg:grid-cols-1'} gap-8 mt-8 items-stretch`}>
                         
-                        {/* WIDGET 1: Inversión por Categoría (Mini Donut + Desglose) */}
-                        <div className="bg-white/80 dark:bg-neutral-900/60 backdrop-blur-xl border border-slate-200 dark:border-white/10 rounded-2xl p-6 shadow-xl flex flex-col justify-between">
-                            <div className="flex items-center justify-between mb-4 pb-3 border-b border-slate-200/80 dark:border-white/5">
-                                <div className="flex items-center gap-2.5">
-                                    <div className="p-2 rounded-lg bg-blue-500/10 border border-blue-500/20 text-blue-400">
-                                        <PieChartIcon size={18} />
+                        {/* WIDGET 1: Inversión por Categoría (Mini Donut + Desglose) — solo si tiene datos significativos */}
+                        {totalInversionAnual > 0 && (
+                            <div className="bg-white/80 dark:bg-neutral-900/60 backdrop-blur-xl border border-slate-200 dark:border-white/10 rounded-2xl p-6 shadow-xl flex flex-col justify-between">
+                                <div className="flex items-center justify-between mb-4 pb-3 border-b border-slate-200/80 dark:border-white/5">
+                                    <div className="flex items-center gap-2.5">
+                                        <div className="p-2 rounded-lg bg-blue-500/10 border border-blue-500/20 text-blue-400">
+                                            <PieChartIcon size={18} />
+                                        </div>
+                                        <div>
+                                            <h3 className="text-slate-900 dark:text-white font-serif font-bold text-base">Inversión por Categoría</h3>
+                                            <p className="text-xs text-slate-500 dark:text-slate-400 font-mono">Composición del portafolio patrimonial</p>
+                                        </div>
                                     </div>
-                                    <div>
-                                        <h3 className="text-slate-900 dark:text-white font-serif font-bold text-base">Inversión por Categoría</h3>
-                                        <p className="text-xs text-slate-500 dark:text-slate-400 font-mono">Composición del portafolio patrimonial</p>
-                                    </div>
-                                </div>
-                                {totalInversionAnual > 0 && (
                                     <span className="font-mono text-xs font-bold text-blue-400 bg-blue-500/10 px-2.5 py-1 rounded-lg border border-blue-500/20">
                                         Total: {formatCurrency(totalInversionAnual)}
                                     </span>
-                                )}
-                            </div>
+                                </div>
 
-                            {totalInversionAnual > 0 ? (
                                 <div className="grid grid-cols-1 sm:grid-cols-12 gap-4 items-center my-auto">
                                     {/* Mini Donut Chart */}
                                     <div className="sm:col-span-5 h-44 w-full relative flex items-center justify-center">
@@ -206,10 +206,8 @@ export const CentroComando: React.FC = () => {
                                         })}
                                     </div>
                                 </div>
-                            ) : (
-                                <p className="text-slate-500 text-sm font-mono py-8 text-center my-auto">No hay inversiones registradas este año.</p>
-                            )}
-                        </div>
+                            </div>
+                        )}
 
                         {/* WIDGET 2: Evolución: Tasa de Ahorro (Gráfico Interactivo con Meta) */}
                         <div className="bg-white/80 dark:bg-neutral-900/60 backdrop-blur-xl border border-slate-200 dark:border-white/10 rounded-2xl p-6 shadow-xl flex flex-col justify-between">
@@ -287,7 +285,7 @@ export const CentroComando: React.FC = () => {
                                     <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-cyan-500"></span> 0 - 20%</span>
                                     <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-rose-500"></span> Déficit</span>
                                 </div>
-                                <span className="text-slate-500">10 Ciclos YTD</span>
+                                <span className="text-slate-500">{anualData.tasaAhorroPorCiclo?.length || 0} Ciclos YTD</span>
                             </div>
                         </div>
                     </div>
@@ -366,6 +364,38 @@ export const CentroComando: React.FC = () => {
                     </div>
                 </>
             ) : null}
+
+            {/* ========================================================================= */}
+            {/* MÓDULO SECUNDARIO DESPLEGABLE: MAPA DE CALOR FINANCIERO                    */}
+            {/* ========================================================================= */}
+            <div className="pt-2">
+                <button
+                    onClick={() => setShowHeatmap(prev => !prev)}
+                    className="w-full flex items-center justify-between p-4 rounded-2xl border border-slate-200 dark:border-white/10 bg-white/70 dark:bg-neutral-900/50 hover:bg-white dark:hover:bg-neutral-900 transition-all text-xs font-mono text-slate-600 dark:text-slate-300 shadow-sm"
+                >
+                    <span className="flex items-center gap-2.5">
+                        <Calendar size={16} className="text-blue-500" />
+                        <span className="font-semibold text-slate-800 dark:text-white">
+                            {showHeatmap ? 'Ocultar Mapa de Calor Financiero' : 'Ver Mapa de Calor de Actividad Financiera (Anual)'}
+                        </span>
+                        <span className="hidden sm:inline text-[11px] bg-slate-100 dark:bg-white/5 px-2 py-0.5 rounded text-slate-400">
+                            Intensidad diaria de transacciones
+                        </span>
+                    </span>
+                    <span className="flex items-center gap-1 text-xs font-semibold text-blue-500 dark:text-blue-400">
+                        {showHeatmap ? (
+                            <>Plegar <ChevronUp size={14} /></>
+                        ) : (
+                            <>Desplegar <ChevronDown size={14} /></>
+                        )}
+                    </span>
+                </button>
+                {showHeatmap && (
+                    <div className="mt-4 animate-in fade-in duration-300">
+                        <SpendingHeatmap />
+                    </div>
+                )}
+            </div>
         </div>
     );
 };

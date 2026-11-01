@@ -247,7 +247,7 @@ export const HealthRadar: React.FC<HealthRadarProps> = ({
                             Radar de Salud Financiera
                         </h3>
                         <p className="text-xs text-slate-500 dark:text-slate-400">
-                            5 dimensiones normalizadas
+                            Evaluación contra metas prudentes (Ahorro 20%, Runway 6m, Estabilidad 80, Disciplina 70, Inv. 15%)
                         </p>
                     </div>
                 </div>
