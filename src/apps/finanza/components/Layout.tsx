@@ -1,12 +1,19 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
-  LayoutDashboard,
+  LayoutGrid,
+  ArrowLeftRight,
+  CalendarDays,
+  Wallet,
+  TrendingUp,
+  Landmark,
+  Target,
+  ActivitySquare,
+  Radio,
   Receipt,
   PiggyBank,
   CircleDollarSign,
   ArrowLeft,
-  Wallet,
   Home,
   Brain,
   Sun,
@@ -14,27 +21,22 @@ import {
   Banknote,
   Check,
   X as XIcon,
-  ArrowRightLeft,
   ShieldCheck,
-  PieChart,
-  Target,
-  Landmark,
-  Radar,
-  FlaskConical
+  PieChart
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { MasterLayout } from '../../../shared/components/layout/MasterLayout';
 import { useData } from '../context/DataContext';
 
 const FINANZA_NAV_ITEMS = [
-  { path: "/finanza", label: "Centro de Comando", icon: LayoutDashboard },
-  { path: "/finanza/flujo", label: "Gestión de Flujo", icon: ArrowRightLeft },
-  { path: "/finanza/seguimiento", label: "Seguimiento Diario", icon: Receipt },
+  { path: "/finanza", label: "Centro de Comando", icon: LayoutGrid },
+  { path: "/finanza/flujo", label: "Gestión de Flujo", icon: ArrowLeftRight },
+  { path: "/finanza/seguimiento", label: "Seguimiento Diario", icon: CalendarDays },
   { path: "/finanza/patrimonio", label: "Patrimonio Global", icon: Wallet },
-  { path: "/finanza/mercado", label: "Radar de Mercados", icon: Radar },
+  { path: "/finanza/mercado", label: "Radar de Mercados", icon: TrendingUp },
   { path: "/finanza/banca", label: "Análisis Bancario", icon: Landmark },
   { path: "/finanza/ahorros", label: "Planificación Patrimonial", icon: Target },
-  { path: "/finanza/proyecciones", label: "Laboratorio Financiero", icon: FlaskConical },
+  { path: "/finanza/proyecciones", label: "Laboratorio Financiero", icon: ActivitySquare },
 ];
 
 interface NavLinkProps {
@@ -43,10 +45,11 @@ interface NavLinkProps {
   label: string;
   isActive: boolean;
   badge?: string;
+  rightElement?: React.ReactNode;
   title?: string;
 }
 
-const NavLink: React.FC<NavLinkProps> = ({ to, icon: Icon, label, isActive, badge, title }) => (
+const NavLink: React.FC<NavLinkProps> = ({ to, icon: Icon, label, isActive, badge, rightElement, title }) => (
   <motion.div
     whileHover={{ x: isActive ? 0 : 3 }}
     whileTap={{ scale: 0.98 }}
@@ -57,7 +60,7 @@ const NavLink: React.FC<NavLinkProps> = ({ to, icon: Icon, label, isActive, badg
       title={title || label}
       aria-label={badge ? `${label} (${badge})` : label}
       className={`group relative flex items-center justify-between gap-2 px-3 py-2.5 rounded-xl transition-all duration-200 select-none ${isActive
-        ? "text-blue-600 dark:text-blue-400 font-bold"
+        ? "text-sky-600 dark:text-sky-400 font-bold"
         : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
         }`}
     >
@@ -65,7 +68,7 @@ const NavLink: React.FC<NavLinkProps> = ({ to, icon: Icon, label, isActive, badg
       {isActive && (
         <motion.div
           layoutId="activeFinanzaNavPill"
-          className="absolute inset-0 bg-blue-500/10 dark:bg-blue-500/15 border border-blue-500/25 rounded-xl shadow-[0_0_20px_rgba(59,130,246,0.15)] pointer-events-none"
+          className="absolute inset-0 bg-sky-500/10 dark:bg-sky-500/15 border border-sky-500/30 dark:border-sky-500/35 rounded-xl shadow-[0_0_20px_rgba(14,165,233,0.15)] pointer-events-none"
           transition={{ type: "spring", stiffness: 380, damping: 30 }}
         />
       )}
@@ -74,7 +77,7 @@ const NavLink: React.FC<NavLinkProps> = ({ to, icon: Icon, label, isActive, badg
       {isActive && (
         <motion.div
           layoutId="activeFinanzaBar"
-          className="absolute left-0 top-2 bottom-2 w-1 bg-gradient-to-b from-blue-400 to-blue-600 rounded-r-full shadow-[0_0_10px_rgba(59,130,246,0.8)] pointer-events-none"
+          className="absolute left-0 top-2 bottom-2 w-1 bg-gradient-to-b from-sky-400 to-sky-600 rounded-r-full shadow-[0_0_10px_rgba(14,165,233,0.8)] pointer-events-none"
           transition={{ type: "spring", stiffness: 380, damping: 30 }}
         />
       )}
@@ -85,8 +88,8 @@ const NavLink: React.FC<NavLinkProps> = ({ to, icon: Icon, label, isActive, badg
           <Icon
             size={18}
             className={`${isActive
-              ? "text-blue-600 dark:text-blue-400 drop-shadow-[0_0_8px_rgba(59,130,246,0.6)]"
-              : "group-hover:text-blue-500 transition-colors duration-200"
+              ? "text-sky-600 dark:text-sky-400 drop-shadow-[0_0_8px_rgba(14,165,233,0.6)]"
+              : "group-hover:text-sky-500 dark:group-hover:text-sky-400 transition-colors duration-200"
               } transition-transform duration-300 group-hover:scale-110 group-hover:-rotate-3`}
             aria-hidden="true"
           />
@@ -96,13 +99,16 @@ const NavLink: React.FC<NavLinkProps> = ({ to, icon: Icon, label, isActive, badg
         </span>
       </div>
 
-      {/* Status Badge */}
-      {badge && (
-        <span className="relative z-10 flex-shrink-0 flex items-center gap-1 text-[8.5px] font-semibold tracking-wider uppercase px-1.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 shadow-sm whitespace-nowrap">
-          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse flex-shrink-0" />
+      {/* Right Element / Compact Badge */}
+      {rightElement ? (
+        <div className="relative z-10 flex-shrink-0 flex items-center justify-end">
+          {rightElement}
+        </div>
+      ) : badge ? (
+        <span className="relative z-10 flex-shrink-0 flex items-center text-[10px] font-mono font-bold text-emerald-600 dark:text-emerald-400 tracking-wider uppercase whitespace-nowrap">
           {badge}
         </span>
-      )}
+      ) : null}
 
       {/* Hover background for inactives */}
       {!isActive && (
@@ -110,6 +116,27 @@ const NavLink: React.FC<NavLinkProps> = ({ to, icon: Icon, label, isActive, badg
       )}
     </Link>
   </motion.div>
+);
+
+// Indicador animado de Radar en Vivo
+const MiniLiveRadar: React.FC = () => (
+  <div className="relative flex items-center justify-center p-0.5" title="Radar de Mercados — Vigilancia en vivo">
+    <span className="absolute w-2.5 h-2.5 rounded-full bg-emerald-400/40 animate-ping pointer-events-none" />
+    <Radio
+      size={14}
+      className="relative text-emerald-500 dark:text-emerald-400 animate-pulse drop-shadow-[0_0_6px_rgba(52,211,153,0.8)]"
+    />
+  </div>
+);
+
+// Insignia compacta para Análisis Bancario
+const CompactSbBadge: React.FC = () => (
+  <span
+    className="text-[10px] font-mono font-bold text-emerald-600 dark:text-emerald-400 tracking-wider select-none px-1"
+    title="Superintendencia de Bancos (v2)"
+  >
+    SB V2
+  </span>
 );
 
 // Internal Sidebar Component (Specific to Finanza)
@@ -169,22 +196,22 @@ const Sidebar = ({ isDark, toggleTheme }: any) => {
         </div>
 
         {/* Navigation List */}
-        <nav className="flex-1 px-3 space-y-1.5 mt-5 overflow-y-auto custom-scrollbar" aria-label="Navegación principal de Magnus Capital">
+        <nav className="flex-1 px-3 space-y-1 mt-5 overflow-y-auto custom-scrollbar" aria-label="Navegación principal de Magnus Capital">
           <NavLink
             to="/finanza"
-            icon={LayoutDashboard}
+            icon={LayoutGrid}
             label="Centro de Comando"
             isActive={location.pathname === "/finanza" || location.pathname === "/finanza/"}
           />
           <NavLink
             to="/finanza/flujo"
-            icon={ArrowRightLeft}
+            icon={ArrowLeftRight}
             label="Gestión de Flujo"
             isActive={location.pathname.includes("/finanza/flujo")}
           />
           <NavLink
             to="/finanza/seguimiento"
-            icon={Receipt}
+            icon={CalendarDays}
             label="Seguimiento Diario"
             isActive={location.pathname.includes("/finanza/seguimiento")}
           />
@@ -196,9 +223,9 @@ const Sidebar = ({ isDark, toggleTheme }: any) => {
           />
           <NavLink
             to="/finanza/mercado"
-            icon={Radar}
+            icon={TrendingUp}
             label="Radar de Mercados"
-            badge="EN VIVO"
+            rightElement={<MiniLiveRadar />}
             title="Radar de Mercados — Vigilancia económica y cotizaciones en vivo"
             isActive={location.pathname.includes("/finanza/mercado")}
           />
@@ -206,7 +233,7 @@ const Sidebar = ({ isDark, toggleTheme }: any) => {
             to="/finanza/banca"
             icon={Landmark}
             label="Análisis Bancario"
-            badge="SB V2"
+            rightElement={<CompactSbBadge />}
             title="Análisis Bancario — Estadísticas del sistema financiero dominicano"
             isActive={location.pathname.includes("/finanza/banca") || location.pathname.includes("/finanza/sistema-bancario")}
           />
@@ -219,7 +246,7 @@ const Sidebar = ({ isDark, toggleTheme }: any) => {
           />
           <NavLink
             to="/finanza/proyecciones"
-            icon={FlaskConical}
+            icon={ActivitySquare}
             label="Laboratorio Financiero"
             title="Laboratorio Financiero — Modelos cuantitativos, convergencia MECE y simulaciones"
             isActive={location.pathname.includes("/finanza/proyecciones")}
