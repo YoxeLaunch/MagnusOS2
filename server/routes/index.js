@@ -14,6 +14,7 @@ import { macroRoutes, notificationRoutes } from './macro.routes.js';
 import energyRoutes from './energy.routes.js';
 import bankingRoutes from './sbBanking.routes.js';
 import adminRoutes from './admin.routes.js';
+import meceRoutes from './mece.routes.js';
 
 const router = Router();
 
@@ -24,6 +25,7 @@ router.use('/markets/macro', macroRoutes);
 router.use('/notifications', notificationRoutes);
 router.use('/markets', marketRoutes);
 router.use('/telemetry/markets', marketRoutes);
+router.use('/mece', meceRoutes);
 router.use('/health', healthRoutes);
 router.use('/', healthRoutes);
 router.use('/', authRoutes);

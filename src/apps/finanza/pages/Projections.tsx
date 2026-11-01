@@ -18,6 +18,7 @@ import { SpendingHeatmap } from '../components/SpendingHeatmap';
 import { ManualEventInput, ManualEvent } from '../components/ManualEventInput';
 import { useAuth } from '../../../shared/context/AuthContext';
 import { apiFetch } from '../../../shared/utils/apiFetch';
+import { ConvergenceTab } from '../components/ConvergenceTab';
 
 interface ForecastPoint {
     date: string;
@@ -573,6 +574,11 @@ export const Projections: React.FC = () => {
                     cashRunway={cashRunway}
                     financialDiscipline={financialDiscipline}
                 />
+            </div>
+
+            {/* MECE Economic Convergence Engine (Full Width Layout) */}
+            <div className="w-full mt-8">
+                <ConvergenceTab userId={user?.username} />
             </div>
         </div>
     );
