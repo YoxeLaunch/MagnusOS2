@@ -243,11 +243,16 @@ export const HealthRadar: React.FC<HealthRadarProps> = ({
                         <Activity className="w-5 h-5 text-white" />
                     </div>
                     <div>
-                        <h3 className="font-semibold text-slate-900 dark:text-white">
-                            Radar de Salud Financiera
-                        </h3>
+                        <div className="flex items-center gap-2">
+                            <h3 className="font-semibold text-slate-900 dark:text-white">
+                                Radar de Salud Financiera
+                            </h3>
+                            <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-slate-100 dark:bg-white/10 text-slate-400">
+                                Heurística Referencial
+                            </span>
+                        </div>
                         <p className="text-xs text-slate-500 dark:text-slate-400">
-                            Evaluación contra metas prudentes (Ahorro 20%, Runway 6m, Estabilidad 80, Disciplina 70, Inv. 15%)
+                            Puntuación heurística de referencia basada en metas normativas convencionales. No constituye un diagnóstico objetivo universal ni asesoría profesional.
                         </p>
                     </div>
                 </div>
@@ -352,6 +357,11 @@ export const HealthRadar: React.FC<HealthRadarProps> = ({
                         <span>No hay datos de inversión registrados</span>
                     </div>
                 )}
+            </div>
+
+            {/* Nota Metodológica de Alcance */}
+            <div className="px-6 pb-4 pt-2 border-t border-slate-100 dark:border-white/5 text-[10px] text-slate-400 font-mono text-center">
+                Metodología: Umbrales normativos de finanzas personales (Metas: Ahorro 20%, Runway 6m, Estabilidad 80, Disciplina 70, Inv. 15%). Puntuación orientativa no vinculante sujeta al perfil y contexto patrimonial individual.
             </div>
         </div>
     );

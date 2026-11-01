@@ -380,7 +380,7 @@ export const Projections: React.FC = () => {
                                         Previsión de Liquidez a 30 Días
                                     </h3>
                                     <p className="text-xs text-slate-400 font-mono mt-0.5">
-                                        Descomposición estacional aditiva con bandas de confianza al 95%
+                                        Estimación condicional al modelo estacional aditivo con intervalos teóricos al 95%
                                     </p>
                                 </div>
                                 {forecastSummary && (
@@ -389,7 +389,7 @@ export const Projections: React.FC = () => {
                                         : forecastSummary.confidence === 'medium' ? 'bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400'
                                         : 'bg-slate-100 text-slate-500 dark:bg-white/10 dark:text-slate-400'
                                     }`}>
-                                        Confianza: {forecastSummary.confidence === 'high' ? 'Alta' : forecastSummary.confidence === 'medium' ? 'Media' : 'Baja'}
+                                        Confianza Modelo: {forecastSummary.confidence === 'high' ? 'Alta' : forecastSummary.confidence === 'medium' ? 'Media' : 'Baja'}
                                     </span>
                                 )}
                             </div>
@@ -417,8 +417,8 @@ export const Projections: React.FC = () => {
                                                 contentStyle={{ backgroundColor: 'rgba(17, 24, 39, 0.95)', borderColor: 'rgba(255,255,255,0.1)', borderRadius: '12px' }}
                                                 formatter={(value: number, name: string) => [
                                                     `RD$${value.toLocaleString()}`,
-                                                    name === 'upperBound' ? 'Límite Superior (95%)'
-                                                    : name === 'lowerBound' ? 'Límite Inferior (95%)'
+                                                    name === 'upperBound' ? 'Límite Superior Teórico (Modelo)'
+                                                    : name === 'lowerBound' ? 'Límite Inferior Teórico (Modelo)'
                                                     : 'Balance Proyectado'
                                                 ]}
                                                 labelFormatter={(label) => new Date(label + 'T12:00:00').toLocaleDateString('es-DO', { weekday: 'long', day: 'numeric', month: 'long' })}
@@ -437,8 +437,8 @@ export const Projections: React.FC = () => {
                             )}
 
                             <div className="mt-4 pt-3 border-t border-slate-100 dark:border-white/5 flex flex-col sm:flex-row sm:items-center justify-between text-[11px] text-slate-400 font-mono gap-2">
-                                <span>Supuesto: flujo(t+h) = tendencia + estacionalidad(día_semana) ± 1.96·σ·√h</span>
-                                <span>Proyección probabilística no vinculante</span>
+                                <span>Supuesto: estimaciones condicionadas al modelo teórico (balance ± 1.96·σ·√h). No constituye cobertura estadística empíricamente calibrada.</span>
+                                <span>Proyección exploratoria</span>
                             </div>
                         </div>
 
@@ -447,10 +447,17 @@ export const Projections: React.FC = () => {
                             <div>
                                 <div className="flex items-center justify-between mb-4 pb-3 border-b border-slate-100 dark:border-white/5">
                                     <div>
-                                        <h3 className="text-lg font-serif font-bold text-slate-800 dark:text-white flex items-center gap-2">
-                                            <Gauge className="text-purple-500" size={20} />
-                                            Propensión Marginal (PMC)
-                                        </h3>
+                                        <div className="flex items-center gap-2">
+                                            <h3 className="text-lg font-serif font-bold text-slate-800 dark:text-white flex items-center gap-2">
+                                                <Gauge className="text-purple-500" size={20} />
+                                                Propensión Marginal (BPMC)
+                                            </h3>
+                                            {mpcDataPoints >= 3 && mpcDataPoints < 12 && (
+                                                <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                                                    Estimación Exploratoria
+                                                </span>
+                                            )}
+                                        </div>
                                         <p className="text-xs text-slate-400 font-mono mt-0.5">
                                             Coeficiente β (Regresión MCO: C = α + β·Y)
                                         </p>
@@ -521,7 +528,7 @@ export const Projections: React.FC = () => {
                             </div>
 
                             <div className="pt-3 border-t border-slate-100 dark:border-white/5 text-[10px] text-slate-400 text-center font-mono">
-                                Metodología: Mínimos Cuadrados Ordinarios (MCO)
+                                Metodología: Regresión MCO • Estimación exploratoria preliminar (sin fiabilidad estadística demostrada con muestras reducidas)
                             </div>
                         </div>
                     </div>
@@ -636,12 +643,12 @@ export const Projections: React.FC = () => {
                                     </div>
                                 </div>
 
-                                {/* Capital Accumulation (Cumulative Trajectory) */}
+                                {/* Ahorro Proyectado Acumulado */}
                                 <div className="bg-white/80 dark:bg-neutral-900/60 backdrop-blur-xl p-6 rounded-2xl border border-slate-200 dark:border-white/10 shadow-sm">
                                     <h3 className="text-base font-serif font-bold text-slate-800 dark:text-white mb-2">
-                                        Acumulación de Capital (Ahorro Proyectado)
+                                        Ahorro Proyectado Acumulado
                                     </h3>
-                                    <p className="text-[11px] text-slate-400 font-mono mb-4">Suma acumulativa de excedentes netos proyectados</p>
+                                    <p className="text-[11px] text-slate-400 font-mono mb-4">Suma acumulativa de excedentes netos proyectados (diferenciada del patrimonio neto)</p>
                                     <div className="h-[180px]">
                                         <ResponsiveContainer width="100%" height="100%">
                                             <BarChart data={projectionData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
@@ -649,10 +656,10 @@ export const Projections: React.FC = () => {
                                                 <XAxis dataKey="name" fontSize={10} stroke="#9CA3AF" tickLine={false} />
                                                 <YAxis fontSize={10} stroke="#9CA3AF" tickFormatter={(v) => `$${(v/1000).toFixed(0)}k`} />
                                                 <Tooltip
-                                                    formatter={(v: number) => [formatCurrency(v), 'Ahorro Acumulado']}
+                                                    formatter={(v: number) => [formatCurrency(v), 'Ahorro Proyectado Acumulado']}
                                                     contentStyle={{ backgroundColor: 'rgba(17, 24, 39, 0.95)', borderColor: 'rgba(255,255,255,0.1)', borderRadius: '12px' }}
                                                 />
-                                                <Bar dataKey="ahorroAcumulado" name="Capital Acumulado" fill="#10B981" radius={[4, 4, 0, 0]} />
+                                                <Bar dataKey="ahorroAcumulado" name="Ahorro Proyectado Acumulado" fill="#10B981" radius={[4, 4, 0, 0]} />
                                             </BarChart>
                                         </ResponsiveContainer>
                                     </div>
