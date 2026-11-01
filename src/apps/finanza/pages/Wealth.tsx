@@ -4,6 +4,7 @@ import { useData } from '../context/DataContext';
 import { getPortfolioSnapshot, formatCurrency } from '../utils/calculations';
 import { cashFlowApi, NetWorthResponse, CashFlowResponse } from '../api/finanzaApi';
 import { minorToSafeNumber, parseDecimalToSafeNumber } from '../utils/moneySafety';
+import { formatPeriodLong } from '../utils/bankingFormatters';
 import { Building2, TrendingUp, PiggyBank, DollarSign, Wallet, ArrowUpRight, ArrowDownRight, RefreshCw, X, Scale } from 'lucide-react';
 
 export const Wealth: React.FC = () => {
@@ -132,9 +133,16 @@ export const Wealth: React.FC = () => {
                     </div>
                     {realNetWorth?.realNetWorth !== null && realNetWorth?.realNetWorth !== undefined && (
                         <div className="mt-4 pt-3 border-t border-slate-700/60 flex items-center justify-between text-xs text-slate-300">
-                            <span className="text-slate-400">Poder real:</span>
+                            <span className="text-slate-400">
+                                {realNetWorth.status === 'PROVISIONAL_PENDING_CPI' ? 'Poder real prov.:' : 'Poder real:'}
+                            </span>
                             <span className="font-semibold text-emerald-300">
-                                {formatCurrency(realNetWorth.realNetWorth)} <span className="text-[10px] text-slate-400 font-normal">({realNetWorth.basePeriod})</span>
+                                {formatCurrency(realNetWorth.realNetWorth)}{' '}
+                                <span className="text-[10px] text-slate-400 font-normal">
+                                    {realNetWorth.status === 'PROVISIONAL_PENDING_CPI'
+                                        ? `(IPC ${realNetWorth.cpiPeriodUsed ? formatPeriodLong(realNetWorth.cpiPeriodUsed).toLowerCase() : ''})`
+                                        : `(Base ${realNetWorth.basePeriod})`}
+                                </span>
                             </span>
                         </div>
                     )}
@@ -340,18 +348,27 @@ const RealNetWorthCard = ({ realData }: { realData?: NetWorthResponse['realNetWo
 
     const isProvisional = realData.status === 'PROVISIONAL_PENDING_CPI';
     const isOfficial = realData.status === 'OFFICIAL_VERIFIED' || realData.status === 'HISTORICAL_SERIES';
+    const cpiMonthYear = realData.cpiPeriodUsed ? formatPeriodLong(realData.cpiPeriodUsed).toLowerCase() : 'no disponible';
+    const balanceMonthYear = realData.referencePeriod ? formatPeriodLong(realData.referencePeriod) : 'no disponible';
 
     return (
         <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl shadow-sm border border-gray-200 dark:border-white/10 hover:border-emerald-500/30 transition-all duration-300 group flex flex-col justify-between">
             <div>
                 <div className="flex justify-between items-start mb-2">
                     <div>
-                        <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Patrimonio Real (MECE)</p>
+                        <p className="text-sm font-medium text-slate-500 dark:text-slate-400">
+                            {isProvisional ? 'Patrimonio real provisional' : 'Patrimonio Real (MECE)'}
+                        </p>
+                        {isProvisional && (
+                            <p className="text-[11px] font-medium text-amber-600 dark:text-amber-400 mt-0.5">
+                                Último IPC oficial disponible: {cpiMonthYear}
+                            </p>
+                        )}
                         <h3 className="text-2xl font-bold text-slate-900 dark:text-white mt-1">
                             {realData.realNetWorth !== null ? formatCurrency(realData.realNetWorth) : 'Dato no disponible'}
                         </h3>
                     </div>
-                    <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400 group-hover:scale-110 transition-transform">
+                    <div className={`p-3 rounded-xl ${isProvisional ? 'bg-amber-50 dark:bg-amber-950/30 text-amber-600 dark:text-amber-400' : 'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400'} group-hover:scale-110 transition-transform`}>
                         <Scale size={22} />
                     </div>
                 </div>
@@ -367,9 +384,9 @@ const RealNetWorthCard = ({ realData }: { realData?: NetWorthResponse['realNetWo
                 )}
             </div>
 
-            <div className="mt-4 pt-3 border-t border-gray-100 dark:border-white/5 space-y-1">
+            <div className="mt-4 pt-3 border-t border-gray-100 dark:border-white/5 space-y-1.5">
                 <div className="flex items-center justify-between text-[11px]">
-                    <span className="text-slate-400">Base: <strong className="text-slate-600 dark:text-slate-300">{realData.basePeriod}</strong></span>
+                    <span className="text-slate-400">Saldo: <strong className="text-slate-700 dark:text-slate-300">{balanceMonthYear}</strong></span>
                     <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${
                         isOfficial
                             ? 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300'
@@ -377,12 +394,12 @@ const RealNetWorthCard = ({ realData }: { realData?: NetWorthResponse['realNetWo
                             ? 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300'
                             : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
                     }`}>
-                        {isOfficial ? 'Oficial BCRD' : isProvisional ? `Prov. (${realData.cpiPeriodUsed})` : 'Pendiente BCRD'}
+                        {isOfficial ? 'Oficial BCRD' : isProvisional ? `Prov. (IPC ${cpiMonthYear})` : 'Pendiente BCRD'}
                     </span>
                 </div>
                 <div className="flex items-center justify-between text-[10px] text-slate-400">
-                    <span>IPC: {realData.cpiUsed ?? 'N/D'}</span>
-                    <span>Fuente: {realData.source}</span>
+                    <span>Base: {realData.basePeriod}</span>
+                    <span>IPC: {realData.cpiUsed ?? 'N/D'} ({realData.source})</span>
                 </div>
             </div>
         </div>

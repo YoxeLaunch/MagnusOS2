@@ -449,6 +449,8 @@ test('LEDGER READ SERVICE: 10. getNetWorth calculates MECE Real Net Worth (Patri
     assert.equal(nwOct.realNetWorth.referencePeriod, '2026-10');
     assert.equal(nwOct.realNetWorth.cpiPeriodUsed, '2026-09');
     assert.equal(nwOct.realNetWorth.cpiUsed, 141.2217);
+    assert.ok(nwOct.realNetWorth.message.includes('Patrimonio real provisional'));
+    assert.ok(nwOct.realNetWorth.message.includes('último IPC oficial disponible: 2026-09'));
     assert.ok(nwOct.realNetWorth.message.includes('pendiente'));
 
     // 4. Non-DOP currency returns CURRENCY_NOT_SUPPORTED without throwing

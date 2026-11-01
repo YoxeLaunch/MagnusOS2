@@ -618,7 +618,7 @@ export class LedgerReadService {
                                 cpiPeriodUsed: latestPeriod,
                                 source: 'BCRD',
                                 sourceUrl: latestObs.source_url || 'https://cdn.bancentral.gov.do/documents/estadisticas/precios/documents/ipc_base_2019-2020.xls',
-                                message: `El IPC oficial para ${evalPeriod} se encuentra pendiente de publicación oficial por el BCRD. Estimación deflactada provisionalmente con el último IPC oficial disponible (${latestPeriod}: ${latestObs.value}).`
+                                message: `Patrimonio real provisional — último IPC oficial disponible: ${latestPeriod}. El IPC oficial para ${evalPeriod} aún se encuentra pendiente de publicación oficial por el BCRD.`
                             };
                         } else {
                             realNetWorthMeta = {
