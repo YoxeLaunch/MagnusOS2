@@ -409,3 +409,49 @@ test('LEDGER READ SERVICE: 9. compareLegacyVsLedger detects EXACT_MATCH when ide
     assert.equal(comp.difference.expenseDiff, 0);
     assert.equal(comp.difference.netDiff, 0);
 });
+
+test('LEDGER READ SERVICE: 10. getNetWorth calculates MECE Real Net Worth (Patrimonio Real) with BCRD CPI', async () => {
+    const userId = 'user_real_nw_' + uuidv4().slice(0, 8);
+
+    const checkingAcc = await Account.create({
+        id: uuidv4(),
+        userId,
+        name: 'Banco Reserva',
+        type: 'checking',
+        currency: 'DOP',
+        openingBalanceMinor: 10000000 // 100,000 DOP
+    });
+
+    // 1. Base period identity: 2025-12
+    const nwBase = await LedgerReadService.getNetWorth({ userId, asOfDate: '2025-12-31', currency: 'DOP' });
+    assert.equal(nwBase.netWorth, 100000);
+    assert.ok(nwBase.realNetWorth, 'realNetWorth metadata must be present');
+    assert.equal(nwBase.realNetWorth.basePeriod, '2025-12');
+    assert.equal(nwBase.realNetWorth.baseCpi, 137.1955);
+    assert.equal(nwBase.realNetWorth.realNetWorth, 100000);
+    assert.equal(nwBase.realNetWorth.inflationErosion, 0);
+    assert.equal(nwBase.realNetWorth.inflationErosionPct, 0);
+    assert.equal(nwBase.realNetWorth.source, 'BCRD');
+
+    // 2. Deflated period: 2026-09 (Official BCRD CPI = 141.2217)
+    // 100,000 DOP * (137.1955 / 141.2217) = 97,149.02 DOP
+    const nwSep = await LedgerReadService.getNetWorth({ userId, asOfDate: '2026-09-30', currency: 'DOP' });
+    assert.equal(nwSep.netWorth, 100000);
+    assert.equal(nwSep.realNetWorth.referencePeriod, '2026-09');
+    assert.equal(nwSep.realNetWorth.cpiUsed, 141.2217);
+    assert.equal(nwSep.realNetWorth.realNetWorth, 97149.02);
+    assert.equal(nwSep.realNetWorth.inflationErosion, 2850.98);
+    assert.equal(nwSep.realNetWorth.inflationErosionPct, 2.85);
+
+    // 3. Pending period: 2026-10 (BCRD unreleased) -> PROVISIONAL_PENDING_CPI
+    const nwOct = await LedgerReadService.getNetWorth({ userId, asOfDate: '2026-10-31', currency: 'DOP' });
+    assert.equal(nwOct.realNetWorth.status, 'PROVISIONAL_PENDING_CPI');
+    assert.equal(nwOct.realNetWorth.referencePeriod, '2026-10');
+    assert.equal(nwOct.realNetWorth.cpiPeriodUsed, '2026-09');
+    assert.equal(nwOct.realNetWorth.cpiUsed, 141.2217);
+    assert.ok(nwOct.realNetWorth.message.includes('pendiente'));
+
+    // 4. Non-DOP currency returns CURRENCY_NOT_SUPPORTED without throwing
+    const nwUsd = await LedgerReadService.getNetWorth({ userId, asOfDate: '2026-09-30', currency: 'USD' });
+    assert.equal(nwUsd.realNetWorth.status, 'CURRENCY_NOT_SUPPORTED');
+});

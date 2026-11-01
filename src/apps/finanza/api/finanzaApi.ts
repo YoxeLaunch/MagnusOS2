@@ -247,6 +247,23 @@ export interface SavingsRateResponse {
     totalGoalContributions: number;
 }
 
+export interface RealNetWorthMeta {
+    status: 'OFFICIAL_VERIFIED' | 'PROVISIONAL_PENDING_CPI' | 'PENDING_CPI_RELEASE' | 'HISTORICAL_SERIES' | 'UNAVAILABLE' | 'CURRENCY_NOT_SUPPORTED';
+    realNetWorth: number | null;
+    realNetWorthMinor: string | null;
+    nominalNetWorth: number;
+    inflationErosion: number | null;
+    inflationErosionPct: number | null;
+    basePeriod: string;
+    baseCpi: number;
+    referencePeriod: string;
+    cpiUsed: number | null;
+    cpiPeriodUsed: string | null;
+    source: string;
+    sourceUrl?: string;
+    message?: string | null;
+}
+
 export interface NetWorthResponse {
     asOfDate: string;
     currency: string;
@@ -256,6 +273,7 @@ export interface NetWorthResponse {
     assets: number | string;
     liabilities: number | string;
     netWorth: number | string;
+    realNetWorth?: RealNetWorthMeta | null;
     accountsCount: number;
     accounts: Array<{
         id: string;
@@ -292,10 +310,11 @@ export const cashFlowApi = {
         if (!res.ok) throw new Error('Failed to fetch savings rate');
         return res.json();
     },
-    getNetWorth: async (params?: { asOfDate?: string; currency?: string }): Promise<NetWorthResponse> => {
+    getNetWorth: async (params?: { asOfDate?: string; currency?: string; basePeriod?: string }): Promise<NetWorthResponse> => {
         const search = new URLSearchParams();
         if (params?.asOfDate) search.set('asOfDate', params.asOfDate);
         if (params?.currency) search.set('currency', params.currency);
+        if (params?.basePeriod) search.set('basePeriod', params.basePeriod);
         const res = await apiFetch(`${API_BASE}/wealth/net-worth?${search.toString()}`);
         if (!res.ok) throw new Error('Failed to fetch net worth');
         return res.json();

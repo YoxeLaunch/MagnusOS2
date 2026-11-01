@@ -12,6 +12,16 @@ import {
     minorToDecimalString,
     sequelize
 } from '../models/index.js';
+import { MeceMacroAdapter } from '../adapters/mece/meceMacroAdapter.js';
+import { deflateMinorUnits, round } from './mece/meceMathUtils.js';
+
+let macroAdapterInstance = null;
+function getMacroAdapter() {
+    if (!macroAdapterInstance) {
+        macroAdapterInstance = new MeceMacroAdapter();
+    }
+    return macroAdapterInstance;
+}
 
 /**
  * ============================================================================
@@ -510,8 +520,9 @@ export class LedgerReadService {
 
     /**
      * Get Net Worth (Assets minus Liabilities as of a given date)
+     * Incorporates MECE Real Net Worth (Patrimonio Real) adjusted for inflation against official BCRD CPI.
      */
-    static async getNetWorth({ userId, asOfDate, currency = 'DOP' }) {
+    static async getNetWorth({ userId, asOfDate, currency = 'DOP', basePeriod = '2025-12' }) {
         if (!userId) throw new Error('[LedgerReadService] userId is required');
 
         const balances = await this.getBalances({ userId, currency, isArchived: false, asOfDate });
@@ -538,6 +549,110 @@ export class LedgerReadService {
 
         const netWorthMinor = assetsMinor - liabilitiesMinor;
 
+        // MECE Real Net Worth Deflation (Official BCRD CPI)
+        let realNetWorthMeta = null;
+
+        if (currency === 'DOP') {
+            try {
+                const adapter = getMacroAdapter();
+                adapter.loadDataset();
+
+                const effectiveDateStr = asOfDate || new Date().toISOString().split('T')[0];
+                const evalPeriod = effectiveDateStr.substring(0, 7);
+
+                const baseObs = adapter.getCpiObservation(basePeriod);
+                const currentObs = adapter.getCpiObservation(evalPeriod);
+
+                if (baseObs && baseObs.value) {
+                    if (currentObs && currentObs.value) {
+                        const realMinor = deflateMinorUnits(netWorthMinor, currentObs.value, baseObs.value);
+                        const nominalDec = fromMinorUnits(netWorthMinor);
+                        const realDec = fromMinorUnits(realMinor);
+                        const erosion = round(nominalDec - realDec, 2);
+                        const erosionPct = nominalDec > 0 ? round((erosion / nominalDec) * 100, 2) : 0;
+
+                        realNetWorthMeta = {
+                            status: currentObs.quality_status || 'OFFICIAL_VERIFIED',
+                            realNetWorth: realDec,
+                            realNetWorthMinor: realMinor.toString(),
+                            nominalNetWorth: nominalDec,
+                            inflationErosion: erosion,
+                            inflationErosionPct: erosionPct,
+                            basePeriod,
+                            baseCpi: baseObs.value,
+                            referencePeriod: evalPeriod,
+                            cpiUsed: currentObs.value,
+                            cpiPeriodUsed: evalPeriod,
+                            source: 'BCRD',
+                            sourceUrl: currentObs.source_url || 'https://cdn.bancentral.gov.do/documents/estadisticas/precios/documents/ipc_base_2019-2020.xls',
+                            message: null
+                        };
+                    } else {
+                        // Current period CPI pending release: use latest published official CPI
+                        const allPeriods = Array.from(adapter.observations.keys()).sort();
+                        const publishedPeriods = allPeriods.filter(p => {
+                            const obs = adapter.observations.get(p);
+                            return obs && obs.value !== null && obs.value !== undefined;
+                        });
+                        const latestPeriod = publishedPeriods.length > 0 ? publishedPeriods[publishedPeriods.length - 1] : null;
+                        const latestObs = latestPeriod ? adapter.observations.get(latestPeriod) : null;
+
+                        if (latestObs && latestObs.value) {
+                            const realMinor = deflateMinorUnits(netWorthMinor, latestObs.value, baseObs.value);
+                            const nominalDec = fromMinorUnits(netWorthMinor);
+                            const realDec = fromMinorUnits(realMinor);
+                            const erosion = round(nominalDec - realDec, 2);
+                            const erosionPct = nominalDec > 0 ? round((erosion / nominalDec) * 100, 2) : 0;
+
+                            realNetWorthMeta = {
+                                status: 'PROVISIONAL_PENDING_CPI',
+                                realNetWorth: realDec,
+                                realNetWorthMinor: realMinor.toString(),
+                                nominalNetWorth: nominalDec,
+                                inflationErosion: erosion,
+                                inflationErosionPct: erosionPct,
+                                basePeriod,
+                                baseCpi: baseObs.value,
+                                referencePeriod: evalPeriod,
+                                cpiUsed: latestObs.value,
+                                cpiPeriodUsed: latestPeriod,
+                                source: 'BCRD',
+                                sourceUrl: latestObs.source_url || 'https://cdn.bancentral.gov.do/documents/estadisticas/precios/documents/ipc_base_2019-2020.xls',
+                                message: `El IPC oficial para ${evalPeriod} se encuentra pendiente de publicación oficial por el BCRD. Estimación deflactada provisionalmente con el último IPC oficial disponible (${latestPeriod}: ${latestObs.value}).`
+                            };
+                        } else {
+                            realNetWorthMeta = {
+                                status: 'PENDING_CPI_RELEASE',
+                                realNetWorth: null,
+                                realNetWorthMinor: null,
+                                nominalNetWorth: fromMinorUnits(netWorthMinor),
+                                inflationErosion: null,
+                                inflationErosionPct: null,
+                                basePeriod,
+                                baseCpi: baseObs.value,
+                                referencePeriod: evalPeriod,
+                                cpiUsed: null,
+                                cpiPeriodUsed: null,
+                                source: 'BCRD',
+                                message: `IPC del período ${evalPeriod} no publicado por el BCRD.`
+                            };
+                        }
+                    }
+                }
+            } catch (err) {
+                console.warn('[LedgerReadService] Error calculating real net worth:', err.message);
+                realNetWorthMeta = {
+                    status: 'UNAVAILABLE',
+                    message: 'No fue posible calcular el patrimonio real MECE: ' + err.message
+                };
+            }
+        } else {
+            realNetWorthMeta = {
+                status: 'CURRENCY_NOT_SUPPORTED',
+                message: `El ajuste por inflación MECE BCRD aplica a saldos en Pesos Dominicanos (DOP). Moneda actual: ${currency}.`
+            };
+        }
+
         return {
             asOfDate: asOfDate || new Date().toISOString().split('T')[0],
             currency,
@@ -547,6 +662,7 @@ export class LedgerReadService {
             assets: fromMinorUnits(assetsMinor),
             liabilities: fromMinorUnits(liabilitiesMinor),
             netWorth: fromMinorUnits(netWorthMinor),
+            realNetWorth: realNetWorthMeta,
             accountsCount: balances.count,
             accounts: balances.accounts.map(account => ({
                 id: account.id,

@@ -6,12 +6,13 @@ import { Op } from 'sequelize';
 export const getNetWorth = async (req, res) => {
     try {
         const userId = getEffectiveUserId(req, req.query.userId);
-        const { asOfDate, currency = 'DOP' } = req.query;
+        const { asOfDate, currency = 'DOP', basePeriod } = req.query;
 
         const netWorthData = await LedgerReadService.getNetWorth({
             userId,
             asOfDate,
-            currency
+            currency,
+            basePeriod
         });
 
         res.json(netWorthData);

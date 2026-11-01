@@ -4,7 +4,7 @@ import { useData } from '../context/DataContext';
 import { getPortfolioSnapshot, formatCurrency } from '../utils/calculations';
 import { cashFlowApi, NetWorthResponse, CashFlowResponse } from '../api/finanzaApi';
 import { minorToSafeNumber, parseDecimalToSafeNumber } from '../utils/moneySafety';
-import { Building2, TrendingUp, PiggyBank, DollarSign, Wallet, ArrowUpRight, ArrowDownRight, RefreshCw, X } from 'lucide-react';
+import { Building2, TrendingUp, PiggyBank, DollarSign, Wallet, ArrowUpRight, ArrowDownRight, RefreshCw, X, Scale } from 'lucide-react';
 
 export const Wealth: React.FC = () => {
     const { data, dailyTransactions, currencies } = useData();
@@ -81,6 +81,8 @@ export const Wealth: React.FC = () => {
         };
     })();
 
+    const realNetWorth = ledgerNetWorth?.realNetWorth;
+
     return (
         <div className="max-w-[1600px] mx-auto p-6 md:p-8 space-y-8 pb-32">
 
@@ -111,22 +113,35 @@ export const Wealth: React.FC = () => {
             </div>
 
             {/* SECTION 1: HIGH LEVEL METRICS */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6">
 
                 {/* Net Worth Card (Hero) */}
-                <div className="bg-gradient-to-br from-slate-900 to-slate-800 text-white p-6 rounded-2xl shadow-xl relative overflow-hidden group">
-                    <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
-                        <Building2 size={64} />
+                <div className="bg-gradient-to-br from-slate-900 to-slate-800 text-white p-6 rounded-2xl shadow-xl relative overflow-hidden group flex flex-col justify-between">
+                    <div>
+                        <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                            <Building2 size={64} />
+                        </div>
+                        <p className="text-sm text-slate-400 font-medium mb-1">Patrimonio Neto Total</p>
+                        <h2 className="text-3xl font-bold tracking-tight mb-3">
+                            {formatCurrency(netWorth)}
+                        </h2>
+                        <div className="flex items-center gap-2 text-emerald-400 text-sm font-medium">
+                            <ArrowUpRight size={16} />
+                            <span>+2.4% este mes</span>
+                        </div>
                     </div>
-                    <p className="text-sm text-slate-400 font-medium mb-1">Patrimonio Neto Total</p>
-                    <h2 className="text-4xl font-bold tracking-tight mb-4">
-                        {formatCurrency(netWorth)}
-                    </h2>
-                    <div className="flex items-center gap-2 text-emerald-400 text-sm font-medium">
-                        <ArrowUpRight size={16} />
-                        <span>+2.4% este mes</span>
-                    </div>
+                    {realNetWorth?.realNetWorth !== null && realNetWorth?.realNetWorth !== undefined && (
+                        <div className="mt-4 pt-3 border-t border-slate-700/60 flex items-center justify-between text-xs text-slate-300">
+                            <span className="text-slate-400">Poder real:</span>
+                            <span className="font-semibold text-emerald-300">
+                                {formatCurrency(realNetWorth.realNetWorth)} <span className="text-[10px] text-slate-400 font-normal">({realNetWorth.basePeriod})</span>
+                            </span>
+                        </div>
+                    )}
                 </div>
+
+                {/* Real Net Worth Card (MECE) */}
+                <RealNetWorthCard realData={realNetWorth} />
 
                 <KPICard
                     title="Flujo de Caja (Mes)"
@@ -304,3 +319,72 @@ const ProgressBar = ({ value, color }: { value: number, color: string }) => (
         <div className={`h-full ${color} transition-all duration-1000`} style={{ width: `${Math.min(100, Math.max(0, value))}%` }} />
     </div>
 );
+
+const RealNetWorthCard = ({ realData }: { realData?: NetWorthResponse['realNetWorth'] }) => {
+    if (!realData || realData.status === 'UNAVAILABLE' || realData.status === 'CURRENCY_NOT_SUPPORTED') {
+        return (
+            <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl shadow-sm border border-gray-200 dark:border-white/10 flex flex-col justify-between">
+                <div>
+                    <div className="flex justify-between items-start mb-2">
+                        <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Patrimonio Real (MECE)</p>
+                        <div className="p-2.5 rounded-xl bg-slate-100 dark:bg-white/5 text-slate-400">
+                            <Scale size={20} />
+                        </div>
+                    </div>
+                    <h3 className="text-xl font-bold text-slate-500 dark:text-slate-400 mt-2">Dato no disponible</h3>
+                    <p className="text-xs text-slate-400 mt-2">{realData?.message || 'Ajuste de inflación BCRD no disponible.'}</p>
+                </div>
+            </div>
+        );
+    }
+
+    const isProvisional = realData.status === 'PROVISIONAL_PENDING_CPI';
+    const isOfficial = realData.status === 'OFFICIAL_VERIFIED' || realData.status === 'HISTORICAL_SERIES';
+
+    return (
+        <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl shadow-sm border border-gray-200 dark:border-white/10 hover:border-emerald-500/30 transition-all duration-300 group flex flex-col justify-between">
+            <div>
+                <div className="flex justify-between items-start mb-2">
+                    <div>
+                        <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Patrimonio Real (MECE)</p>
+                        <h3 className="text-2xl font-bold text-slate-900 dark:text-white mt-1">
+                            {realData.realNetWorth !== null ? formatCurrency(realData.realNetWorth) : 'Dato no disponible'}
+                        </h3>
+                    </div>
+                    <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400 group-hover:scale-110 transition-transform">
+                        <Scale size={22} />
+                    </div>
+                </div>
+
+                {realData.inflationErosion !== null && realData.inflationErosion !== undefined && (
+                    <div className="mt-2 flex items-center gap-1.5 text-xs">
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md font-semibold text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/30">
+                            <ArrowDownRight size={13} />
+                            -RD$ {realData.inflationErosion.toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} (-{realData.inflationErosionPct}%)
+                        </span>
+                        <span className="text-slate-400 text-[11px]">Erosión IPC</span>
+                    </div>
+                )}
+            </div>
+
+            <div className="mt-4 pt-3 border-t border-gray-100 dark:border-white/5 space-y-1">
+                <div className="flex items-center justify-between text-[11px]">
+                    <span className="text-slate-400">Base: <strong className="text-slate-600 dark:text-slate-300">{realData.basePeriod}</strong></span>
+                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${
+                        isOfficial
+                            ? 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300'
+                            : isProvisional
+                            ? 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300'
+                            : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
+                    }`}>
+                        {isOfficial ? 'Oficial BCRD' : isProvisional ? `Prov. (${realData.cpiPeriodUsed})` : 'Pendiente BCRD'}
+                    </span>
+                </div>
+                <div className="flex items-center justify-between text-[10px] text-slate-400">
+                    <span>IPC: {realData.cpiUsed ?? 'N/D'}</span>
+                    <span>Fuente: {realData.source}</span>
+                </div>
+            </div>
+        </div>
+    );
+};
