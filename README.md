@@ -12,7 +12,8 @@
   <br />
   <img src="https://img.shields.io/badge/Technical_Health_Score-98%2F100-34D399?style=for-the-badge&logo=checkmarx&logoColor=white" alt="Technical Health Score" />
   <img src="https://img.shields.io/badge/Security_Level-Hardened_(Phase_II_Validated)-10B981?style=for-the-badge&logo=shield&logoColor=white" alt="Security Classification" />
-  <img src="https://img.shields.io/badge/Tests-159%2F159_Passing_(100%25_Green)-brightgreen?style=for-the-badge&logo=jest&logoColor=white" alt="Tests" />
+  <img src="https://img.shields.io/badge/MECE_Engine-Phase_1C_Active_(Merkle_Audit)-06B6D4?style=for-the-badge&logo=databricks&logoColor=white" alt="MECE Engine" />
+  <img src="https://img.shields.io/badge/Tests-83%2F83_Passing_(100%25_Green)-brightgreen?style=for-the-badge&logo=jest&logoColor=white" alt="Tests" />
   <img src="https://img.shields.io/badge/Schema_Drift-0%25_Discrepancies_(isSynced)-blue?style=for-the-badge&logo=git&logoColor=white" alt="Schema Drift" />
   <img src="https://img.shields.io/badge/Ledger-Double--Entry_(PostgreSQL_Triggers)-6366F1?style=for-the-badge&logo=postgresql&logoColor=white" alt="Ledger Invariant" />
   <img src="https://img.shields.io/badge/Durability-synchronous__commit=on-blue?style=for-the-badge&logo=databricks&logoColor=white" alt="Durability" />
@@ -71,6 +72,13 @@ graph TB
             Reconciler["ledgerReconciliationService.js (Zero Drift)"]
         end
 
+        subgraph MECE ["🌌 Motor MECE (Macro-Economic Convergence Engine)"]
+            RealIncome["realIncomeEngine.js (Poder Adquisitivo Real)"]
+            Exposure["exposureEngine.js (Sensibilidad FX & Inflación)"]
+            Governance["temporalGovernance.js & auditLogService.js (Merkle Log)"]
+            Adapters["meceAdapters (Ledger + Macro + FX + Energy)"]
+        end
+
         subgraph Resilience ["🛡️ Observabilidad y Jobs"]
             JobEngine["jobObservabilityService.js"]
             LeaseLock["Distributed Leases (job_leases)"]
@@ -80,6 +88,7 @@ graph TB
 
         Server --> Probes
         Server --> CoreEngine
+        Server --> MECE
         Server --> Resilience
     end
 
@@ -268,6 +277,73 @@ stateDiagram-v2
 
 ---
 
+## 🌌 MECE — Macro-Economic Convergence Engine (Fase 1C)
+
+**MECE** es el motor econométrico institucional que fusiona la microeconomía personal (registrada en el Ledger contable) con las fuerzas macroeconómicas reales de la República Dominicana (Banco Central de la República Dominicana - BCRD, MICM y Superintendencia de Bancos).
+
+```mermaid
+flowchart TD
+    subgraph Micro ["💰 Microeconomía (Ledger SOT)"]
+        L["ledgerReadService.js"]
+        Tx["Ingresos, Gastos y Flujo Operativo"]
+    end
+
+    subgraph Macro ["🏛️ Macroeconomía RD (BCRD / MICM / SB)"]
+        CPI["Serie Histórica IPC BCRD 1984-2026"]
+        FX["Providence FX - USD/DOP Histórico"]
+        Fuel["Precios Semanales Combustibles MICM"]
+    end
+
+    subgraph MECEEngine ["⚙️ Motores Analíticos MECE"]
+        RIE["realIncomeEngine.js<br/>Pérdida de Poder Adquisitivo Real"]
+        EE["exposureEngine.js<br/>Sensibilidad a Tipo de Cambio e Inflación"]
+        TG["temporalGovernance.js<br/>Ventana 26-Dic-2025 → 31-Oct-2026"]
+        AL["auditLogService.js<br/>Bitácora Criptográfica Tipo Merkle"]
+    end
+
+    subgraph UI ["💻 Frontend (ConvergenceTab.tsx)"]
+        KPIs["Métricas en Vivo: Tasa Real, Canasta Ponderada"]
+        Chart["Curva de Devaluación vs Crecimiento Patrimonial"]
+        Audit["Verificación de Integridad de Cadena Hash"]
+    end
+
+    Micro --> RIE
+    Macro --> RIE
+    Macro --> EE
+    RIE --> TG
+    EE --> TG
+    TG --> AL
+    AL --> UI
+```
+
+### Capacidades Nucleares de MECE
+
+1. **Ingesta y Staging de IPC Oficial BCRD (1984–2026):**
+   - Catálogo exhaustivo mensual extraído de series oficiales del BCRD (`CPI_NATIONAL_INDEX`), con validación de hash de fuente y gobernanza temporal.
+2. **Cálculo de Ingreso Real y Erosión Inflacionaria:**
+   - Descompone la variación nominal del patrimonio frente a la inflación acumulada, calculando el poder adquisitivo neto real y tasa real de retorno simple.
+3. **Exposición Cambiaria y Energética Multimes:**
+   - Análisis de sensibilidad que estima el impacto directo de variaciones en la tasa USD/DOP y la canasta de combustibles en el flujo operativo del usuario.
+4. **Bitácora de Auditoría Criptográfica (Merkle Chain):**
+   - Cada consulta o ejecución analítica genera un bloque con hash encadenado (`previous_hash`, `payload_hash`, `tamper_detection`), garantizando trazabilidad absoluta e inmutabilidad de los diagnósticos financieros.
+5. **Seguridad End-to-End Aislada:**
+   - Suite de 9 pruebas de seguridad E2E (`tests/meceExpressSecurityE2E.test.js`) que validan control de acceso basado en roles, feature flags dinámicos, aislamiento anti-IDOR y partición de caché entre usuarios.
+
+---
+
+## 🧭 Modernización de Navegación e Identidad Institucional
+
+- **Magnus Financial Systems:** Rediseño completo de la landing page pública y portal institucional con estética corporativa de alto calibre, copy soberano, tipografía monospace financiera y simbología dorada (King Chess Piece).
+- **Sidebar Reorganizado y Funcional:**
+  - **Radar de Mercados:** Monitor en tiempo real de divisas, energía y contexto macroeconómico con indicador pulsante en vivo.
+  - **Análisis Bancario:** Integración compacta con métricas e índices HHI de la Superintendencia de Bancos (SB V2).
+  - **Planificación Patrimonial:** Acceso unificado a proyecciones, Monte Carlo y la nueva pestaña de convergencia económica MECE.
+  - **Laboratorio Financiero:** Suite de simulación econométrica y experimentación de portafolio.
+- **Resiliencia en Ingesta de Combustibles (MICM):**
+  - Soporte nativo para boletines de precios semanales con rangos que cruzan meses (cross-month parsing, p.ej. 31 de octubre a 06 de noviembre), normalización fonética y deduplicación estricta en base de datos.
+
+---
+
 ## 🛡️ Matriz de Remediación y Hardening (Fase II)
 
 | Dimensión | Auditoría Inicial | Estado Final Producción | Garantía y Evidencia |
@@ -337,15 +413,19 @@ docker compose run --rm --no-deps magnus node scripts/reconcile-ledger.js
 ```
 MagnusOS2/
 ├── server/                         # Backend Institucional Node.js 20 LTS
+│   ├── adapters/                   # Adaptadores de integración y desacoplamiento
+│   │   └── mece/                   # Adaptadores MECE (Ledger, Macro, FX, Energy)
 │   ├── config/database.js          # Configuración de conexiones PostgreSQL / SQLite
-│   ├── controllers/                # Controladores de dominio (finanzas, auth, mercado)
+│   ├── controllers/                # Controladores de dominio (finanzas, auth, mece, mercado)
+│   ├── data/                       # Staging offline e histórico verificado (CPI BCRD, etc.)
 │   ├── middleware/                 # JWT estricto, rate limiting, security headers Helmet
-│   ├── migrations/                 # Migraciones relacionales ordenadas (000_ a 010_)
+│   ├── migrations/                 # Migraciones relacionales ordenadas (000_ a 015_)
 │   ├── models/                     # Modelos Sequelize 6 (Ledger, Cuentas, Mercados, Jobs)
-│   ├── routes/                     # Rutas modulares REST y health probes desacoplados
+│   ├── routes/                     # Rutas modulares REST (finanza, auth, mece, macro, energy)
 │   ├── services/                   # SOT Financiero, Observabilidad, Gobernanza y Reconciliador
 │   │   ├── ledgerReadService.js    # Lógica oficial de consulta del libro mayor
 │   │   ├── ledgerAnalyticsService.js # Agregación contable y métricas sin mezcla de divisas
+│   │   ├── mece/                   # Motores MECE (realIncome, exposure, temporal, auditLog)
 │   │   ├── jobObservabilityService.js# Leases distribuidos y ciclo de vida de jobs
 │   │   ├── migrationRunner.js      # Ejecutor transaccional con advisory locks
 │   │   └── schemaDriftService.js   # Verificador de paridad Sequelize vs PostgreSQL
@@ -353,8 +433,10 @@ MagnusOS2/
 ├── src/                            # Frontend React 18 + TypeScript + Vite
 │   ├── apps/
 │   │   ├── finanza/                # Módulo Financiero (Ledger, CashFlow, Providence FX)
+│   │   │   ├── components/         # ConvergenceTab (MECE), BankingContextCard, Layout
 │   │   │   ├── pages/              # Ledger, Cuentas, Ahorros, Patrimonio, Proyecciones
 │   │   │   └── utils/moneySafety.ts# Blindaje numérico BigInt contra errores de redondeo
+│   │   ├── landing/                # Magnus Financial Systems — Landing institucional y legal
 │   │   ├── magnus/                 # Sabiduría, Pensum, Lab IA y Centro de Comando
 │   │   └── server-admin/           # Torre de Control Soberana (HUD, Hardware, Logs)
 │   └── shared/                     # Componentes y contextos compartidos
